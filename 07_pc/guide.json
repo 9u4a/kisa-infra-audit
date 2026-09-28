@@ -28,9 +28,12 @@
       "cases": "l Windows 10, 11\n[계정별 비밀번호 기간 설정]\nStep 1) 시작 > 실행 > LUSRMGR.MSC\nStep 2) 사용자 > 계정별 속성 > “암호 사용 기간 제한 없음(P)”, “계정 사용 안함(B)” 적용 해제\n[ 계정별 비밀번호 정책 적용 ]\n\n\n[비밀번호 정책 설정]\nStep 1) 시작 > Windows 관리 도구 > 로컬 보안 정책 \nStep 2) 보안 설정 > 계정 정책 > 암호 정책 > “최대 암호 사용 기간” 속성을 “90일”, “최근 암호 기억”을 “24개”, \n“최소 암호 사용 기간”을 “1일”로 설정\n[ 비밀번호 정책 적용 확인 ]",
       "guide_page": 555,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -54,9 +57,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 시작 > Windows 관리 도구(Windows Tools ) > 로컬 보안 정책 \nStep 2) 보안 설정 > 계정 정책 > 암호 정책 > “최소 암호 길이” 속성을 “8문자(이상)”,\n“암호는 복잡성을 만족해야함”을 “사용함”으로 설정\n[ 암호 정책 적용 확인 ]\n\n\n[ 비밀번호 설정 기준 ]\n1. 영문, 숫자, 특수문자를 조합하여 계정명과 상이한 8자 이상의 비밀번호 설정\n※ 다음 각 항목의 문자 종류 중 2종류 이상을 조합하여 최소 10자리 이상 또는 3종류 이상을 조합하여 최소 8자\n리 이상의 길이로 구성\n(1) 영문 대문자(26개)\n(1) 영문 소문자(26개)\n(2) 숫자(10개)\n(3) 특수문자(32개)\n1. 비밀번호는 비인가자에 의한 추측이 어렵게 다음의 사항을 반영하여 설계\n(1) Null(공백) 비밀번호 사용 금지\n(1) 문자 또는 숫자만으로 구성 금지\n(2) 사용자 ID와 같거나 유사하지 않은 비밀번호 금지\n(3) 연속적인 문자나 숫자 사용 (예) 1111, 1234, abcd) 사용 금지\n(4) 주기성 비밀번호 재사용 금지\n(5) 전화번호, 생일과 같이 추측하기 쉬운 개인정보를 비밀번호로 사용 금지\n2. 아래와 같은 비밀번호 설정 지양\nNull, 계정과 같거나 유사한 스트링, 지역명, 부서명, 담당자명, 대표 업무명 “root”, “rootroot”, “root123”, \n“123root”, “admin”, “admin123”, “123admin”, “osadmin”, “adminos”",
       "guide_page": 557,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -80,9 +86,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 시작 > 모든 앱 > Windows Tools > 로컬 보안 정책 > 보안 설정 > 로컬 정책 > 보안 옵션\nStep 2) “복구 콘솔: 자동 관리 로그온 허용” 속성 “사용 안 함” 설정\n\n\n[ “복구 콘솔: 자동 관리 로그온 허용” “사용 안함” 설정 ]",
       "guide_page": 559,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -106,9 +115,12 @@
       "cases": "l Windows 10, Windows 11\n[기본 공유 폴더 설정]\nStep 1) 기본 공유 폴더 상태 확인 및 공유 중지\n시작 > 모든 앱> Windows Tools > 컴퓨터 관리 > 공유 폴더 > 공유\n(시작 > 실행 > “fsmgmt.msc” 입력 > 공유)\nStep 2) 불필요한 공유 폴더 확인 > 해당 공유 폴더 우클릭 > 공유 중지(S)\n\n\n[ 공유 폴더 “공유 중지” 설정 ]\nStep 3) 시작 > 모든 앱 > Windows Tools > 레지스트리 편집기\nStep 4) 레지스트리 경로로 이동\nHKLM\\SYSTEM\\CurrentControlSet\\Service\\LanmanServer\\Parameters\nStep 1) 설정값 입력\nValue name\nSecurityLevel\nData Type\nDword 값\nValue\n0(zero)\n[ “AutoShareWks” 레지스트리 값 0으로 설정 ]\n\n\nStep 5) 값이 없는 경우, 새로 만들기 > “AutoShareWks”를 추가하고 값을 “0”으로 입력\n아래 그림과 같이 “AutoShareWks”를 입력하며, 이때 값은 기본값인 “0”으로 유지\n또한, 방화벽과 라우터에서 135,139(TCP/UDP) Port를 차단하여 보안성을 높일 수 있음\n※ 기본 공유에 대한 조치 시 반드시 [기본 공유 삭제], [비활성화 레지스트리 값]을 모두 설정함\n[일반 공유 폴더 설정]\nStep 1) 일반 공유 폴더 확인 및 공유 중지\n시작 > 모든 앱 > Windows Tools > 컴퓨터 관리 > 공유 폴더 > 공유\n(시작 > 실행 > “fsmgmt.msc” 입력 > 공유)\nStep 2) 불필요한 공유 폴더 확인 > 해당 공유 폴더 우클릭 > 공유 중지\n[ 공유 중지 ]\nStep 3) 일반 공유 폴더 필요한 시 권한 설정\n시작 > 모든 앱 Windows Tools > 컴퓨터 관리 > 공유 폴더 > 공유\n\n\nStep 4) 사용할 공유 폴더 확인 선택 후 우클릭 > 속성 > [공유] 탭 > [공유 사용 권한] 탭 “Everyone”으로 된 \n공유를 제거하고, 접근이 필요한 계정에만 적절한 권한 추가\n[ 공유 사용 권한 “Everyone” 제거 ]\n[공유 폴더 접근 비밀번호 설정]\nStep 1) 시작 > 설정 > 네트워크 및 인터넷 > 고급 네트워크 설정 > 고급 공유 설정 > 모든 네트워크\nStep 2) “암호로 보호된 `공유” 켬 설정\nStep 3) 공유 폴더 접근 가능 여부 확인\n시작 > 모든 앱 > Windows Tools > 실행 > 공유 폴더 PC 계정명 또는, IP주소 입력 후 비밀번호 입력 \n팝업 확인\n[ 공유 폴더 접근 가능 여부 확인 ]\n\n\n[공유 폴더 설정 기준]\n1. C$, D$, Admin$ 등의 기본 공유 폴더 제거\n2. 기본 공유 폴더 제거 후 시스템 재부팅 시 “기본 공유 폴더가 자동으로 공유되는 것”을 방지하기 위해 해당 \n레지스트리의 “AutoShareWks” 값을 “0”으로 설정\n3. 일반 공유 폴더 사용 시 공유 폴더 접근 권한에 “Everyone” 제거\n4. 일반 공유 폴더 사용 시 접근이 필요한 계정에만 적절한 (읽기, 변경) 권한 설정\n5. 일반 공유 폴더 사용 시 공유 폴더 접근을 위한 비밀번호 설정",
       "guide_page": 561,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -132,9 +144,12 @@
       "cases": "l Windows 11\nStep 1) 시작 > 모든 앱 Windows Tools > 서비스 > 해당 서비스 선택 > 속성\n(시작 > 모든 앱 > Windows Tools > 실행 > “services.msc” 입력> 해당 서비스 선택> 속성에서도 설정 \n가능)\nStep 2) 불필요한 서비스 -> 중지 / 시작 유형 -> 사용 안 함\n\n\n[ 불필요한 서비스 선택 후 ‘사용 안 함’ 설정 ]\nStep 3) 서비스마다 옵션을 설정할 수 있음\n해당 서비스를 선택하고 더블 클릭하여 “시작 유형” 선택 및 “시작 시 로그온 계정” 별도 설정 가능. \n시스템 시작 시 자동으로 시작되게 하려면 [자동], 수동으로 서비스를 시작하려면 [수동], 서비스 자체를 \n사용하지 않으려면 [사용 안 함]을 선택한 후 [확인]을 클릭\n서비스 시작 유형\n설명\n사용 안 함\n설치되어 있으나 실행되지 않음\n수동\n다른 서비스나 응용 프로그램에서 해당 기능을 필요로 할 때만 시작됨\n자동\n부팅 시에 해당 장치 드라이버가 로드된 후에 운영체제에 의해 시작됨\n※ 꼭 필요한 서비스만 사용하고 나머지는 “사용 안 함”으로 설정\n※ 개인 방화벽 실행\n※ 백신 등에서 제공하는 방화벽 기능 활성화 사용\n※ 일반적으로 불필요한 서비스\n서비스명\n기능 및 설명\nAlerter \n네트워크상에서 사용자와 컴퓨터에 관리용 경고메시지를 전송하는 기능\nAutomatic Updates\n중요한 윈도우 업데이트를 다운로드하고 설치할 수 있도록 하는 애플리케이션. 수동패치를 \n적용하거나, MS패치 관리 서버로 패치를 일괄적으로 관리하는 경우 불필요한 서비스\n\n\n서비스명\n기능 및 설명\nClipbook \n서버 내 Clipbook을 다른 클라이언트와 공유\nComputer Browser\n네트워크에 있는 모든 컴퓨터의 목록을 업데이트하고 관리하는 기능\nCryptographic Services \n윈도우 파일의 서명을 확인하는 카탈로그 데이터베이스 서비스를 총괄\nDHCP Client\nIP주소와 DNS 이름을 DHCP 서버에 등록하거나 DHCP 서버로부터 동적으로 IP주소를 \n가져오는 기능을 수행. 단독으로 시스템을 수행하며 고정IP를 사용하는 경우 불필요한 \n서비스\nDistributed Link Tracking \nClient, Server\n네트워크 도메인의 여러 컴퓨터나 일반 컴퓨터에서 NTFS 파일간의 연결을 관리하는 도구. \nActive Directory가 구성되어 있지 않은 서버에서는 불필요한 서비스\nDNS Client\n컴퓨터에 대한 도메인 이름 시스템(DNS) 이름을 확인하고 캐시에 보관하는 기능. \nDNS서버가 아닌 시스템에서는 유명무실하나, IPSEC을 사용하는 경우 필요한 경우 있음\nError reporting\nService\n프로그램 오류가 발생 시 응용프로그램의 오류를 MS에 보고한다는 내용을 표시하는 기능\nHuman Interface\nDevice Access\n키보드 또는 기타 멀티미디어 장치에 사전 정의된 버튼들을 사용하는 HID 장치들을 위한 \n서비스\nIMAPI CD-Burning\nCOM Service\n서버에 CD-RW 또는 DVD-RW가 장착되어 보조백업장치 역할을 하기 위해서 자체 \n레코딩 백업을 할 수 있음\nInfrared Monitor \n사용자 적외선 연결을 통해 파일 및 이미지를 공유할 수 있도록 함\nMessenger\n클라이언트와 서버 사이에 netsend 및 경고서비스 메시지를 전송하는 기능\nNetMeeting Remote\nDesktop Sharing\n윈도우9X 운영체제부터 인증된 사용자가 넷미팅을 사용해서 원격으로 컴퓨터에 접근할 수 \n있도록 하는 기능\nPortable Media Serial \nNumber\n컴퓨터에 연결된 이동성 미디어의 등록번호를 가져오는 기능\nPrint Spooler\n인쇄 과정에 있는 스풀링을 관리하는 서비스. 프린터가 있는 경우 필수 서비스이나, \n프린터가 연결되지 않은 시스템에서는 불필요함\nRemote Registry \n원격 사용자가 컴퓨터에서 레지스트리 설정을 수정할 수 있도록 설정하는 응용 프로그램\nSimple TCP/IP\nServices \nEcho, Discard, Character Generator, Daytime, Quote of the Day 지원\nUniversal Plug and \nPlay Device Host\n네트워크 장치에 대해 피어-투-피어 UPnP(범용 플러그 앤 플레이) 기능을 지원\nWireless Zero\nConfiguration \n802.11 어댑터에 대해 자동 구성을 공급하는 기본적인 도구\n\n\n※ 운영 중인 시스템에서 필수 서비스를 정의하는 것은 매우 복잡한 과정으로 서비스 사용 여부는 시스템의 \n영향성을 고려하여 신중하게 평가되어야 하므로 Microsoft에서 권고하는 가이드에 따라 전략적으로 \n적용해야 함\n※ https://technet.microsoft.com/ko-kr/library/dd547941.aspx (서비스 및 서비스 계정 보안 계획 가이드) 참고\n※ 윈도우 시스템 설치 시 기본적으로 설치되는 서비스에 대한 상세 설명은 아래 주소 참조\n※ https://technet.microsoft.com/ko-kr/library/dd547949.aspx",
       "guide_page": 566,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -158,9 +173,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 시작 > 모든 앱 > Windows Tools > 실행 > “gpedit.msc”입력 > 컴퓨터 구성 > 관리 템플릿 > Windows \n구성 요소 > Windows Messenger\nStep 2) “Windows Messenger를 실행 허용 안 함” 설정을 “사용”으로 설정\n[ “Windows Messenger 실행 안 함” “사용”으로 설정 ]",
       "guide_page": 570,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -184,9 +202,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 디스크 볼륨의 파일 시스템이 “NTFS”인지 확인\n시작 > 모든 앱 > Windows Tools > 컴퓨터 관리 > 저장소 > 디스크 관리\n시작 > 모든 앱 > Windows Tools > 실행 > “diskmgmt.msc” 입력 > 디스크 관리\nStep 2) 모든 디스크 볼륨의 파일 시스템이 “NTFS”가 아닌 경우 취약점이 존재하므로, 모든 디스크 볼륨에 대해 \n파일 시스템을 “NTFS”로 변경\n\n\n[ 디스크 파일 볼륨의 파일 시스템 확인 ]\nStep 3) NTFS 변경 후 폴더 및 파일에 적합한 ACL 적용\n1. 폴더나 파일을 마우스 오른쪽 버튼 클릭 후 단축메뉴에서 [속성] 선택\n2. [속성] 대화상자에서 [보안] 탭을 선택\n3. 편집을 눌러 그룹이나 계정에 맞는 권한으로 변경\n[ 폴더 및 파일 권한 편집 ]\n※ 최근 OS에서는 convert.exe 기능은 기본적으로 제공하나 FAT32 파일 시스템을 지원하지 않고 exFAT 파일 \n시스템을 지원함",
       "guide_page": 571,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -210,9 +231,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) PC 내 설치된 운영체제 확인\n시작 > 모든 앱 > Windows Tools > 제어판 > 시스템 및 보안 > 시스템 > 고급 시스템 설정 > 시작 및 복구 \n> 설정(T)\n(시작 > 모든 앱 > Windows Tools > 실행 > “msconfig” 입력 > 시스템 구성 [부팅] 탭에서도 확인 가능)\nStep 2) “기본 운영체제” 드롭다운 메뉴에서 2개 이상의 OS가 표시되면 취약점 존재\n\n\n[ 멀티 부팅 여부 확인 ]\nStep 3) 시스템 구성 [부팅] 탭 > 사용하지 않는 OS를 선택 후 [삭제]를 클릭",
       "guide_page": 573,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -314,9 +338,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 레지스트리 값 확인\n시작 > Windows 관리 도구(Windows Tools) > 레지스트리 편집기 > HKEY_LOCAL_MACHINE\\SOFT\nWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon > AutoAdminLogon 확인\n※ 별도의 Windows 자동 로그인 설정을 하지 않았다면 AutoAdminLogon 레지스트리가 존재하지 않음\n※ 별도의 Windows 자동 로그인 설정을 하지 않았다면 Windows 자동 로그인이 비활성화되어 있으므로 양호함\n\n\nStep 1) 레지스트리가 존재하지 않으면 “AutoAdminLogon” 문자열 값 생성함\n우클릭 > 새로 만들기 > 문자열 값 클릭 > “AutoAdminLogon” 입력 > “AutoAdminLogon” 값 데이터 0 \n입력 > 확인\n[ “AutoAdminLogon” 레지스트리 확인 ]\nStep 2) 레지스트리가 존재하지 않으면 “AutoAdminLogon” 문자열 값 생성함\n우클릭 > 새로 만들기 > 문자열 값 클릭 > “AutoAdminLogon” 입력 > “AutoAdminLogon” 값 데이터 0 \n입력 > 확인\n[ “AutoAdminLogon” 설정값 0으로 설정 ]",
       "guide_page": 580,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -340,9 +367,12 @@
       "cases": "l Windows 10, Windows 11 (Windows Defender 사용 예시)\nStep 1) 시작 > 설정 > 개인 정보 및 보안 > Windows 보안 > 바이러스 및 위협 방지 > 바이러스 및 위협 방지 \n설정 > 보호 업데이트 > 업데이트 확인\n\n\n[ Windows Defender 업데이트 확인 ]\n※ 상용 백신도 동일하게 최신 업데이트 확인",
       "guide_page": 582,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -366,9 +396,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 실시간 보호 기능 활성화\n시작 > 모든 앱 > Windows 보안 > 바이러스 및 위협 방지 > 설정 관리 > 실시간 보호 기능 활성화\n[ 실시간 보호 기능 활성화 ]\n※ 상용 백신도 동일하게 실시간 보호 기능 활성화 적용",
       "guide_page": 584,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -392,9 +425,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 제어판으로 설정\n시작 > 모든 앱 > Windows Tools > 제어판 > 시스템 및 보안 > Windows Defender 방화벽 > Windows \n방화벽 설정 또는 해제\n시작 > 모든 앱 > Windows Tools > 실행 > “firewall.cpl” 입력으로도 설정 가능\nStep 2) Windows Defender 방화벽 “사용” 설정\n\n\n[ 방화벽 설정 화면 메뉴 ]\n[ 방화벽 설정 화면 ]",
       "guide_page": 585,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -418,9 +454,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 시작 > 설정 > 개인설정 > 잠금화면 > 화면보호기\n바탕화면 > 마우스 우클릭 > 개인설정 > 잠금화면 > 화면보호기로도 설정 가능\n\n\n[ 화면보호기 시간 및 비밀번호 설정 ]",
       "guide_page": 587,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -444,9 +483,12 @@
       "cases": "l Windows 10, Windows 11\n조치 방법 1. 로컬 그룹 정책 편집기 \nStep 1) 시작 > 파일 탐색기 > 내 PC > 로컬 디스크 (C:) > Windows > System32 > gpedit > 컴퓨터 구성 > 관리 \n템플릿 > Windows 구성 요소 > 자동 실행 정책\nStep 2) “자동 실행 끄기” 정책을 “사용 모든 드라이브”로 설정\n\n\n[ 자동 실행 끄기 “사용” 설정 ]\n조치 방법 2. 제어판에서 자동 실행 기능 설정 \n※ 시작 > 모든 앱 > Windows Tools > 제어판 > 하드웨어 및 소리 > 자동 실행 > “모든 미디어 및 장치에 자동 \n실행 사용(U)” 체크 해제 > 저장(S)\n[ “모든 미디어 및 장치에 자동 실행 사용” 체크 해제 ]",
       "guide_page": 589,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -470,9 +512,12 @@
       "cases": "l Windows 10, Windows 11\nStep 1) 원격 지원 설정\n시작 > 파일 탐색기 > 내 PC > 로컬 디스크 (C:) > Windows > System32 > gpedit > 컴퓨터 구성 > 관리 \n템플릿 > 시스템 > 원격 지원 제공 구성\n[ “원격 지원 제공 구성” 확인 ]\n\n\nStep 1) “원격 지원 제공”을 “사용 안 함”으로 설정\n[ 원격 지원 제공 구성을 “사용 안 함” 설정 ]",
       "guide_page": 591,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "win10",
+        "win11"
+      ],
       "deviation": null
     }
   ]
