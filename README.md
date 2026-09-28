@@ -39,10 +39,10 @@ sh 01_unix/run.sh -g 1            # 특정 하위분류만 (1=계정 관리 ... 
 
 ### Windows Server
 ```powershell
-.\02_windows\run.ps1 -ListOnly              # 항목 목록 확인
+.\02_windows\run.ps1 -l                     # 항목 목록 확인
 .\02_windows\run.ps1                        # 전체 진단 (관리자 권한 권장)
-.\02_windows\run.ps1 -Items W-01,W-04       # 특정 항목만
-.\02_windows\run.ps1 -Group 1               # 특정 하위분류만 (1=계정 관리 ... 5=보안 관리)
+.\02_windows\run.ps1 -i W-01,W-04           # 특정 항목만
+.\02_windows\run.ps1 -g 1                   # 특정 하위분류만 (1=계정 관리 ... 5=보안 관리)
 ```
 
 두 언어 모두 결과는 `output/<host>_<카테고리번호>_<시각>/` 아래 동일한 구조로 생성됩니다:

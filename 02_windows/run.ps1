@@ -1,21 +1,35 @@
 ﻿# 02_windows/run.ps1 — Windows 서버 진단 진입점 (PowerShell 5.1 호환)
 #
+# 옵션 문자는 카테고리 전체(01_unix run.sh 등)와 통일한다: -l(목록) -i(항목) -g(분류) -o(출력)
+# -h(도움말). PowerShell 관례상 서술형 이름을 기본으로 하되 위 단축 별칭을 항상 함께 제공한다.
+#
 # 사용법:
-#   .\run.ps1                        전체 항목 일괄 진단, 환경 자동 감지
-#   .\run.ps1 -Items W-01,W-05       개별(복수) 항목만 진단
-#   .\run.ps1 -Group 1               하위분류 단위(1=계정 관리 등) 진단
-#   .\run.ps1 -ListOnly              항목 목록만 출력
-#   .\run.ps1 -OutBase <dir>         결과 출력 경로 지정 (기본: ..\output)
+#   .\run.ps1                  전체 항목 일괄 진단, 환경 자동 감지
+#   .\run.ps1 -i W-01,W-05     개별(복수) 항목만 진단
+#   .\run.ps1 -g 1             하위분류 단위(1=계정 관리 등) 진단
+#   .\run.ps1 -l               항목 목록만 출력
+#   .\run.ps1 -o <dir>         결과 출력 경로 지정 (기본: ..\output)
 #
 # 이 스크립트는 대상 시스템 설정을 변경하지 않는다 (진단 전용). 조치는 fix.ps1 참고.
 
 [CmdletBinding()]
 param(
-    [string]$Items = "",
-    [string]$Group = "",
-    [switch]$ListOnly,
-    [string]$OutBase = ""
+    [Alias("i")][string]$Items = "",
+    [Alias("g")][string]$Group = "",
+    [Alias("l")][switch]$ListOnly,
+    [Alias("o")][string]$OutBase = "",
+    [Alias("h")][switch]$Help
 )
+
+if ($Help) {
+    Write-Host "사용법:"
+    Write-Host "  .\run.ps1                  전체 항목 일괄 진단, 환경 자동 감지"
+    Write-Host "  .\run.ps1 -i W-01,W-05     개별(복수) 항목만 진단"
+    Write-Host "  .\run.ps1 -g 1             하위분류 단위(1=계정 관리 등) 진단"
+    Write-Host "  .\run.ps1 -l               항목 목록만 출력"
+    Write-Host "  .\run.ps1 -o <dir>         결과 출력 경로 지정 (기본: ..\output)"
+    exit 0
+}
 
 $ErrorActionPreference = "Continue"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
