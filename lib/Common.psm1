@@ -1,9 +1,12 @@
-# lib/Common.psm1 — Windows 계열(02_windows, 03_web(IIS), 07_pc, 08_dbms(MSSQL)) 공용 모듈
+﻿# lib/Common.psm1 — Windows 계열(02_windows, 03_web(IIS), 07_pc, 08_dbms(MSSQL)) 공용 모듈
 #
 # PowerShell 5.1 호환. 대상 호스트에는 이 파일 + 카테고리 run.ps1/checks/*.ps1 만 배치하면 된다.
 # 사용: 카테고리 run.ps1 에서 "Import-Module $PSScriptRoot\..\lib\Common.psm1 -Force"
 
-$Script:ToolVersion = "0.1.0"
+# VERSION 파일이 버전의 단일 소스다 (루트 CLAUDE.md 버전 규칙 참고). $PSScriptRoot 는 이
+# 모듈 파일(lib/Common.psm1)의 위치를 가리키므로 그 상위 디렉터리에서 VERSION 을 읽는다.
+$_versionFile = Join-Path $PSScriptRoot "..\VERSION"
+$Script:ToolVersion = if (Test-Path $_versionFile) { (Get-Content -Raw $_versionFile).Trim() } else { "0.0.0-unknown" }
 $Script:GuideVersion = "2026"
 
 $StatusLabelKo = @{
@@ -123,4 +126,77 @@ function New-ReportHtml {
     Set-Content -Path $OutHtml -Value $content -Encoding utf8 -NoNewline
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml -Variable ToolVersion, GuideVersion
+# ---- 레지스트리 값 조회 (부재 시 예외 없이 $null) --------------------------------
+function Test-RegistryValue {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Name)
+    try {
+        $item = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
+        return $item.$Name
+    } catch {
+        return $null
+    }
+}
+
+# ---- secedit 기반 로컬 보안 정책 조회 ---------------------------------------------
+# secedit /export 결과([System Access], [Privilege Rights] 등)를 1회만 내보내 캐시한다.
+# 비밀번호/계정 잠금 정책, 사용자 권한 할당(User Rights Assignment)처럼 단순 레지스트리 값이
+# 아닌 정책은 이 방법으로만 조회 가능하다 (SAM/LSA 정책 객체이기 때문).
+function Get-SecEditExport {
+    if ($Script:SecEditCache) { return $Script:SecEditCache }
+
+    $tmp = Join-Path $env:TEMP "kisa-secedit-$PID.inf"
+    $sections = @{}
+    try {
+        secedit /export /cfg $tmp /quiet | Out-Null
+        if (Test-Path $tmp) {
+            $current = $null
+            foreach ($line in Get-Content -Path $tmp -Encoding Unicode) {
+                $t = $line.Trim()
+                if ($t -match '^\[(.+)\]$') {
+                    $current = $Matches[1]
+                    $sections[$current] = @{}
+                } elseif ($current -and $t -match '^([^=]+?)\s*=\s*(.*)$') {
+                    $sections[$current][$Matches[1].Trim()] = $Matches[2].Trim()
+                }
+            }
+        }
+    } catch {
+        Write-Log "secedit /export 실행 실패: $_" "WARN"
+    } finally {
+        Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
+    }
+    $Script:SecEditCache = $sections
+    return $sections
+}
+
+function Get-SecPolicyValue {
+    <# [System Access] 등 단순 key=value 섹션에서 값을 조회. 없으면 $null #>
+    param([Parameter(Mandatory)][string]$Section, [Parameter(Mandatory)][string]$Name)
+    $exp = Get-SecEditExport
+    if ($exp.ContainsKey($Section) -and $exp[$Section].ContainsKey($Name)) {
+        return $exp[$Section][$Name]
+    }
+    return $null
+}
+
+function ConvertFrom-Sid {
+    <# "*S-1-5-32-544" 형태의 SID 문자열을 계정/그룹 이름으로 변환. 실패 시 원본 SID 반환 #>
+    param([Parameter(Mandatory)][string]$SidToken)
+    $sid = $SidToken.TrimStart('*')
+    try {
+        $account = (New-Object System.Security.Principal.SecurityIdentifier($sid)).Translate([System.Security.Principal.NTAccount])
+        return $account.Value
+    } catch {
+        return $sid
+    }
+}
+
+function Get-SecPrivilegeAccounts {
+    <# [Privilege Rights] 의 SeXxxPrivilege 값을 계정/그룹 이름 배열로 반환 (없으면 빈 배열) #>
+    param([Parameter(Mandatory)][string]$Right)
+    $raw = Get-SecPolicyValue -Section "Privilege Rights" -Name $Right
+    if (-not $raw) { return @() }
+    return $raw -split ',' | Where-Object { $_ } | ForEach-Object { ConvertFrom-Sid $_.Trim() }
+}
+
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts -Variable ToolVersion, GuideVersion

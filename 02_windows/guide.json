@@ -28,9 +28,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 ＞ 제어판 > 관리 도구 > 관리 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “계정: Administrator 계정 이름 바꾸기”를 유추하기 어려운 계정 이름으로 변경\n[ Administrator 계정 이름 변경 ]",
       "guide_page": 177,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -54,9 +61,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 프로그램 > 관리 도구 > 도메인 사용자 관리 > Guest 계정 선택 > 등록정보\nStep 2) “계정 사용 안 함” 설정\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션 > 계정: Guest 계정 상태\nStep 2) 계정 “사용 안 함” 설정\n[ Guest 계정 상태 사용 안 함 설정 ]",
       "guide_page": 178,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -106,9 +120,16 @@
       "cases": "l Window NT\nStep 1) 시작 > 프로그램 > 관리 도구 > 도메인 사용자 관리자 > 정책 > 계정 정책\nStep 2) “계정 잠금” 선택 후 “잠금”에 “5” 이하의 값 설정\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 계정 정책 > 계정 잠금 정책\nStep 2) “계정 잠금 임계값”을 “5” 이하의 값으로 설정\n[ 계정 잠금 임계값 설정 ]",
       "guide_page": 180,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -132,9 +153,16 @@
       "cases": "l Window NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 계정 정책 > 암호 정책\nStep 2) “해독 가능한 암호화를 사용하여 암호 저장”을 “사용 안 함”으로 설정\n[ 해독 가능한 암호화를 사용하여 암호 저장 정책 설정 ]",
       "guide_page": 181,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -158,9 +186,16 @@
       "cases": "l Window NT\nStep 1) 시작 > 프로그램 > 관리 도구 > 도메인 사용자 관리 > Administrators 그룹 > 등록 정보\nStep 2) Administrator 그룹에서 불필요한 계정 제거 후 그룹 변경\n\n\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 컴퓨터 관리 > 로컬 사용자 및 그룹 > 그룹 > Administrators > 속성\nStep 2) Administrators 그룹에서 불필요한 계정 제거 후 그룹 변경\n[ 관리자 계정 그룹 불필요한 계정 확인 ]",
       "guide_page": 182,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -184,9 +219,16 @@
       "cases": "l Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “Everyone 사용 권한을 익명 사용자에게 적용”을 “사용 안 함”으로 설정\n[ Everyone 사용 권한을 익명 사용자에게 적용 정책 설정 ]",
       "guide_page": 184,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -210,9 +252,16 @@
       "cases": "l Window NT\nStep 1) 시작 > 프로그램 > 관리 도구 > 도메인 사용자 관리자 > 정책 > 계정 정책\nStep 2) “횟수 다시 설정”을 “60분”으로 설정, “잠금 유지 기간”의 “시간제한”을 “60분”으로 설정\n\n\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 계정 정책 > 계정 잠금 정책\nStep 2) “계정 잠금 기간”, “다음 시간 후 계정 잠금 수를 원래대로 설정”에 대해 각각 “60분” 설정\n[ 계정 잠금 정책 설정 ]",
       "guide_page": 185,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -236,9 +285,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 프로그램 > 관리 도구 > 도메인 사용자 관리자 > 정책 > 계정\nStep 2) “최소 암호 길이”에 “최소”를 “8문자”로 설정\nStep 3) “최대 암호 사용 기간”의 “사용 기간”을 “90일”로 설정\nStep 4) “최소 암호 사용 기간”에서 “사용 기간”을 “1일”로 설정\nStep 5) “암호 유일성”에서 “기억”을 “4개”로 설정\nl Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 계정 정책 > 암호 정책\nStep 2) “암호는 복잡성을 만족해야 함”을 “사용”으로 설정\nStep 3) “최근 암호 기억”을 “4개 암호 기억됨”으로 설정\nStep 4) “최대 암호 사용 기간”의 다음 이후 암호 만료 기간을 “90일”로 설정\nStep 5) “최소 암호 길이”를 “8문자”로 설정\nStep 6) “최소 암호 사용 기간”을 “1일”로 설정\n\n\n[ 암호 정책 설정 ]\n※ 해당 정책 설정은 비밀번호를 변경하거나 새로운 비밀번호 생성 시 아래와 같은 일련의 규정을 만족하는지 \n결정함. 영문, 숫자, 특수문자 중 2종류 이상을 조합하여 최소 10자리 이상 또는 3종류 이상을 조합하여 최소 \n8자리 이상의 길이로 구성\n가. 영문 대문자(26개)\n나. 영문 소문자(26개)\n다. 숫자(10개)\n라. 특수문자(32개)",
       "guide_page": 187,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -262,9 +318,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 프로그램 > 관리 도구 > 시스템 정책 편집기 > 파일 > 레지스트리 열기 > 로컬 컴퓨터 > 편집 > 등\n록 정보 > Windows NT 시스템 > 로그온 > “마지막으로 로그온한 사용자 이름 표시 안 함”을 설정한 후 \n저장\nl Windows 2000\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “로그온 스크린에 마지막 사용자 이름 표시 안 함”을 “사용”으로 설정\n\n\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “대화형 로그온: 마지막 사용자 이름 표시 안 함”을 “사용”으로 설정\n[ 마지막 로그인 사용자 이름 표시 안 함 ]",
       "guide_page": 189,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -288,9 +351,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 사용자 권한 할당\nStep 2) “로컬 로그온 허용(또는, 로컬 로그온)” 정책에 “Adminstrators”, “IUSR_” 외 다른 계정 및 그룹 제거\n[ 로컬 로그온 허용 정책 설정 ]",
       "guide_page": 191,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -314,9 +384,16 @@
       "cases": "l Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “네트워크 액세스: 익명 SID/이름 변환 허용” 정책이 “사용 안 함”으로 설정\n[익명 SID/이름 변환 허용]\n※ Windows Server 2000 이하 버전 해당 사항 없음",
       "guide_page": 192,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -340,9 +417,16 @@
       "cases": "l Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “계정: 콘솔 로그온 시 로컬 계정에서 빈 암호 사용 제한” 정책을 “사용”으로 설정\n[ 콘솔 로그온 시 로컬 계정에서 빈 암호 사용 제한 설정 ]",
       "guide_page": 193,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -366,9 +450,16 @@
       "cases": "l Windows 2003\nStep 1) 제어판 > 사용자 계정 > 관리자 계정 이외의 계정 생성한 후\nStep 2) 제어판 > 시스템 > [원격] 탭 > [원격] 탭 메뉴에서 “사용자가 이 컴퓨터에 원격으로 연결할 수 있음”에 \n체크 > “원격 사용자 선택”에서 원격 사용자 지정 후 확인\nl Windows 2008\nStep 1) 제어판 > 사용자 계정 > 관리자 계정 이외의 계정 생성한 후\nStep 2) 제어판 > 시스템 > 원격 설정 > [원격] 탭 > [원격 데스크톱] 메뉴 > “모든 버전의 원격 데스크톱을 실행 \n중인 컴퓨터에서 연결 허용(보안 수준 낮음)” 또는 “네트워크 수준 인증을 사용하여 원격 데스크톱을 실\n행하는 컴퓨터에서만 연결 허용(보안 수준 높음)” 중 하나에 체크 > “사용자 선택”에서 원격 사용자 지정 \n후 확인\n\n\nl Windows 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 사용자 계정 > 계정 관리 > 관리자 계정 이외의 계정 생성\nStep 2) 시작 > 제어판 > 시스템 > 원격 설정 > [원격] 탭 > [원격 데스크톱] 메뉴 > “이 컴퓨터에 대한 원격 연결 \n허용” 에 체크 > “사용자 선택”에서 원격 사용자 지정 후 확인\n[ 원격 데스크톱 사용자 지정 설정 ]",
       "guide_page": 194,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -392,9 +483,16 @@
       "cases": "l Windows 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “시스템 암호화: 컴퓨터에 저장된 사용자 키에 대해 강력한 키 보호 사용” 정책을 “키를 사용할 때마다 \n암호를 매 번 입력해야 함”으로 적용\n[ 컴퓨터에 저장된 사용자 키에 대해 강력한 키 보호 사용 설정 ]",
       "guide_page": 196,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -418,9 +516,16 @@
       "cases": "l Windows NT\nStep 1) 프로그램 > 관리 도구 > 서버 관리자 > 컴퓨터 > 공유 디렉터리 > 등록 정보 > 사용 권한에서 Everyone \n으로 설정된 공유를 제거하고 접근이 필요한 계정에 적절한 권한 추가\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 실행 > FSMGMT.MSC > 공유\nStep 2) 사용 권한에서 Everyone으로 된 공유를 제거하고 접근이 필요한 계정의 적절한 권한 추가\n[ 공유 폴더 사용 권한 설정 ]",
       "guide_page": 197,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -444,9 +549,16 @@
       "cases": "l Windows NT\nStep 1) 프로그램 > 관리도구 > 서버 관리자 > 컴퓨터 > 공유 디렉터리 > 공유 > 공유 중지\n\n\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 실행 > FSMGMT.MSC > 공유 > 기본 공유(Default share) 선택 > 마우스 우클릭 > 공유 중지\n[ 기본 공유 폴더 중지 설정 ]\nStep 2) 시작 > 제어판 > 관리 도구 > 레지스트리 편집기\n아래 레지스트리 값을 0으로 수정(키 값이 없을 경우 새로 생성)\n“HKLM\\SYSTEM\\CurrentControlSet\\Services\\lanmanserver\\parameters\\”\nStep 3) AutoShareServer(Windows NT: AutoShareWks)을  “0”으로 수정 \n[ AutoShareServer 값 설정 ]\n※ 방화벽과 라우터에서 135~139(TCP/UDP) Port를 차단하여 외부로부터의 위험을 제거함으로써 보안성을 높\n일 수 있음",
       "guide_page": 198,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -470,9 +582,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 설정 > 제어판 > 서비스를 선택하여 불필요한 서비스를 중지하고, 시작 옵션에서 \"시작 유형\"을 \"\n사용 안 함\"으로 수정\nStep 2) 해당 서비스를 선택하고 오른쪽 메뉴에서 \"시작 옵션\"을 클릭하면 시스템이 시작할 때에 해당 서비스의 \n시작 유형을 선택할 수 있음. 만약, 시스템 시작 시 자동으로 시작되게 하려면 [자동], 수동으로 서비스를 \n시작하려면 [수동], 서비스 자체를 사용하지 않으려면 [사용 안 함]을 선택한 후 [확인]을 클릭함\n\n\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 서비스 > \"해당 서비스\" 선택 > 속성\nStep 2) 시작 유형 - > 사용 안 함\nStep 3) 서비스 상태 - > 중지 설정\n[ 불필요한 서비스 중지 설정 ]\n※ 특별한 목적을 위해 사용하는 서비스가 아니라면 시스템의 업무에 부합되는 서비스가 아닌 기타 기본 서비스\n를 사용하지 않는 것을 권고하며, 시스템 관리자는 대상 시스템의 용도를 정확히 파악해 불필요한 서비스를 \n제거해야 함\n서비스 시작 유형\n설명\n사용 안 함\n설치되어 있으나 실행되지 않음\n수동\n다른 서비스나 응용 프로그램에서 해당 기능을 필요로 할 때만 시작됨\n자동\n부팅 시에 해당 장치 드라이버가 로드된 후에 운영체제에 의해 시작됨\n※ 각 서비스마다 옵션을 설정할 수 있으며 해당 서비스의 시작 유형을 선택할 수 있으며 시작 시 로그온 계정을 \n별도로 설정할 수 있음. 만약, 시스템 시작 시 자동으로 시작되게 하려면 [자동], 수동으로 서비스를 시작하려\n면 [수동], 서비스 자체를 사용하지 않으려면 [사용 안 함]을 선택\n\n\n※ 일반적으로 불필요한 서비스\n서비스명\n기능 및 설명\nAlerter \n네트워크상에서 사용자와 컴퓨터에 관리용 경고 메시지를 전송하는 기능\nAutomatic Updates\n중요한 윈도우 업데이트를 다운로드하고 설치할 수 있도록 하는 응용프로그램. 수동 \n패치를 적용하거나, MS 패치 관리 서버로 패치를 일괄적으로 관리하는 경우 불필요한 \n서비스\nClipbook \n서버 내 Clipbook을 다른 클라이언트와 공유\nComputer Browser\n네트워크에 있는 모든 컴퓨터의 목록을 업데이트하고 관리하는 기능\nCryptographic Services \n윈도우 파일의 서명을 확인하는 카탈로그 데이터베이스 서비스를 총괄\nDHCP Client\nIP주소와 DNS 이름을 DHCP 서버에 등록하거나 DHCP 서버로부터 동적으로 IP주소를 \n가져오는 기능을 수행. 단독으로 시스템을 수행하며 고정 IP를 사용하는 경우 불필요한 \n서비스\nDistributed Link Tracking \nClient, Server\n네트워크 도메인의 여러 컴퓨터나 일반 컴퓨터에서 NTFS 파일간의 연결을 관리하는 도구. \nActive Directory가 구성되어 있지 않은 서버에서는 불필요한 서비스\nDNS Client\n컴퓨터에 대한 도메인 이름 시스템(DNS) 이름을 확인하고 캐시에 보관하는 기능. DNS \n서버가 아닌 시스템에서는 유명무실하나, IPSEC을 사용하는 경우에는 필요할 수 있음\nError reporting\nService\n프로그램 오류가 발생 시 응용프로그램의 오류를 MS에 보고한다는 내용을 표시하는 기능\nHuman Interface\nDevice Access\n키보드 또는 기타 멀티미디어 장치에 사전 정의된 버튼들을 사용하는 HID 장치들을 위한 \n서비스\nIMAPI CD-Burning\nCOM Service\n서버에 CD-RW 또는 DVD-RW가 장착되어 보조백업장치 역할을 하기 위해서 자체 \n레코딩 백업을 할 수 있음\nInfrared Monitor \n사용자 적외선 연결을 통해 파일 및 이미지를 공유할 수 있도록 함\nMessenger\n클라이언트와 서버 사이에 netsend 및 경고서비스 메시지를 전송하는 기능\nNetMeeting Remote\nDesktop Sharing\n윈도우9X 운영체제부터 인증된 사용자가 넷미팅을 사용해서 원격으로 컴퓨터에 접근할 수 \n있도록 하는 기능\nPortable Media Serial \nNumber\n컴퓨터에 연결된 이동성 음악 연주기(미디어기기)의 등록번호를 복원하는 기능\nPrint Spooler\n인쇄 과정에 있는 스풀링을 관리하는 서비스. 프린터가 있는 경우 필수 서비스이지만, \n프린터가 연결되지 않은 시스템에서는 불필요함\nRemote Registry \n원격 사용자가 이 컴퓨터에서 레지스트리 설정을 수정할 수 있도록 설정하는 응용프로그램\nSimple TCP/IP\nServices \nEcho, Discard, Character Generator, Daytime, Quote of the Day 지원\n\n\n※ 운영 중인 시스템에서 필수 서비스를 정의하는 것은 매우 복잡한 과정으로 서비스 사용 여부는 시스템의 영\n향성을 고려하여 신중하게 평가되어야 하므로 Microsoft에서 권고하는 가이드에 따라 전략적으로 적용해야 \n함\n※ https://technet.microsoft.com/ko-kr/library/dd547941.aspx (서비스 및 서비스 계정 보안 계획 가이드) 참고\n※ 윈도우 시스템 설치 시 기본적으로 설치되는 서비스에 대한 상세 설명은 아래 주소 참조\nhttps://technet.microsoft.com/ko-kr/library/dd547949.aspx\n서비스명\n기능 및 설명\nUniversal Plug and \nPlay Device Host\n네트워크 장치에 대해 피어-투-피어 UPnP(범용 플러그 앤 플레이) 기능을 지원\nWireless Zero\nConfiguration \n802.11 어댑터에 대해 자동 구성을 공급하는 기본적인 도구",
       "guide_page": 200,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -496,9 +615,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 서비스 > World Wide Web Publishing 서비스(IISADMIN) > 속성 > \"시작 유형\"을 \"사\n용 안 함\" 설정 후 중지\n※ IIS 미설치 시 SERVICES.MSC 에 출력되지 않음\n[ IIS 서비스 사용 안 함 설정 ]",
       "guide_page": 204,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -522,9 +648,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 네트워크 및 공유 센터 > 어댑터 설정 변경 > 로컬 영역 연결 > 속성 > TCP/IP > [일반] \n탭에서 [고급] 클릭\n\n\nStep 2) [WINS] 탭에서 TCP/IP에서 “NetBIOS 사용 안 함” 또는, “NetBIOS over TCP/IP 사용 안 함” 선택\n[ NetBIOS 사용 안 함 설정 ]",
       "guide_page": 205,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -548,9 +681,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 실행 > SERVICES.MSC > FTP Publishing Service(Windows 2012 이상 : Microsoft FTP Service) \n> 속성 > \nStep 2) 시작 유형을 “사용 안 함”으로 설정한 후, FTP 서비스 중지\n[ FTP 서비스 사용 안 함 설정 ]",
       "guide_page": 207,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -574,9 +714,16 @@
       "cases": "l Windows NT(IIS 4.0), 2000(IIS 5.0), 2003(IIS 6.0)\nStep 1) 인터넷 정보 서비스(IIS) 관리 > FTP 사이트 > 해당 FTP 사이트 > 속성 > [홈 디렉터리] 탭에서 FTP 홈 \n디렉터리 확인\nStep 2) 탐색기 > 홈 디렉터리 > 속성 > [보안] 탭에서 Everyone 권한 제거\n\n\nl Windows 2008(IIS 7.0), 2012(IIS 8.0), 2016, 2019, 2022(IIS 10.0)\nStep 1) 제어판 > 관리 도구 > 인터넷 정보 서비스(IIS) 관리 > 사이트 > 해당 FTP 사이트 > FTP 권한 부여 규칙 \n선택\nStep 2) 허용 권한 부여 규칙에서 “지정한 사용자” 지정\n[ FTP 권한 부여 규칙 ]\n[ 지정한 사용자 설정 ]",
       "guide_page": 208,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -600,9 +747,16 @@
       "cases": "l Windows NT(IIS 4.0), 2000(IIS 5.0), 2003(IIS 6.0)\nStep 1) 인터넷 정보 서비스(IIS) 관리 > FTP 사이트 > 속성 > [보안 계정] 탭에서 “익명 연결 허용” 체크박스 해\n제 (만약 개별 FTP 사이트에 적용할 경우 해당 사이트에만 설정이 적용되고, 기본 설정은 적용받지 않음)\n\n\nl Windows 2008(IIS 7.0), 2012(IIS 8.0), 2016, 2019, 2022(IIS 10.0)\nStep 1) 제어판 > 관리 도구 > 인터넷 정보 서비스(IIS) 관리 > 해당 FTP 사이트 > FTP 인증 선택\n[ FTP 인증 설정 ]\nStep 2) FTP 인증 화면에서 익명 인증 사용 안 함 설정\n[ 익명 인증 사용 안 함 설정 ]",
       "guide_page": 210,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -626,9 +780,16 @@
       "cases": "l Windows NT(IIS 4.0), 2000(IIS 5.0), 2003(IIS 6.0)\nStep 1) 인터넷 정보 서비스(IIS) 관리 > FTP 사이트 > 속성 > [디렉터리 보안] 탭에서 “액세스 거부” 선택 후 접\n근 가능 IP주소 추가 (만약 개별 FTP 사이트에 적용할 경우 해당 사이트에만 설정이 적용되고, 기본 설정\n은 적용받지 않음)\n※ 액세스 허가: 모든 액세스를 허용 후 액세스를 거부할 컴퓨터, 그룹, 도메인 추가\n액세스 거부: 모든 액세스를 거부 후 액세스를 허용할 컴퓨터, 그룹, 도메인 추가\n\n\nl Windows 2008(IIS 7.0), 2012(IIS 8.0), 2016, 2019, 2022(IIS 10.0)\nStep 1) 제어판 > 관리 도구 > 인터넷 정보 서비스(IIS) 관리 > 해당 FTP 사이트 > FTP IPv4 주소 및 도메인 제한\nStep 2) [작업]의 허용 항목 추가에서 FTP 접속을 허용할 IP 입력\nStep 3) [작업]의 기능 설정 편집에서 지정되지 않은 클라이언트에 대한 액세스를 거부 선택\n[ FTP IP주소 및 도메인 제한 설정 ]\n[ 허용 IP주소 설정 ]",
       "guide_page": 212,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -652,9 +813,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 프로그램 > 관리 도구 > DNS 관리자 > 각 조회 영역 > 해당 영역 > 등록 정보 >알림\nStep 2) “알림 목록에 있는 보조 영역에서만 액세스 허용” 선택 후 서버 IP 추가\n\n\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > DNS > 각 조회 영역 > 해당 영역 > 속성 > 영역 전송\nStep 2) “다음 서버로만” 선택 후 전송할 서버 IP 추가\n[ 영역 전송 IP주소 지정 ]\nStep 3) 불필요 시 해당 서비스 중지\n시작 > 실행 > SERVICES.MSC > DNS 서버 > 속성 [일반] 탭에서 “시작 유형”을 “사용 안 함”으로 설정\n한 후, DNS 서비스 중지\n[ DNS Server 사용 안 함 설정 ]",
       "guide_page": 214,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -678,9 +846,16 @@
       "cases": "l Windows NT, 2000, 2003\nStep 1) 시작 > 실행 > INETMGR > 웹 사이트 선택 후 디렉터리에서 msadc 제거\nStep 2) 다음의 레지스트리 키/디렉터리 제거\nHKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\W3SVC\\Parameters\\ADCLaunch\n1. RDSServer.DataFactory\n2. AdvancedDataFactory\n3. VbBusObj.VbBusObjCls",
       "guide_page": 216,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -730,9 +905,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 실행 > regedit\nStep 2) HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\\\nMinEncryptionLevel 값을 2(중간) 이상으로 설정\nl Windows 2000\nStep 1) 시작 > 실행 > TSCC.MSC > “해당 서비스” 선택 > 속성\nStep 2) 암호화 수준 → 중간(Windows 2000) 이상으로 설정\n\n\nl Windows 2003\nStep 1) Windows 2003: 시작 > 실행 > TSCC.MSC > “해당 서비스” 선택 > 속성\nStep 2) [일반] 탭에서 암호화 수준 설정 → 클라이언트 호환 가능\nl Windows 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 실행 > GPEDIT.MSC(로컬 그룹 정책 편집기)\nStep 2) 컴퓨터 구성 > 관리 템플릿 > 터미널 서비스 > 원격 데스크톱 세션 호스트 > 보안\nStep 3) [클라이언트 연결 암호화 수준 설정] > [암호화 수준]을 클라이언트 호환 가능으로 설정\n[ 암호화 수준 설정 ]\n※ 원격 데스크톱 서비스가 필요한 경우 추가 보완 대책\n1. 관리자 이외의 일반 사용자의 터미널 서비스 접속을 허용하지 않음\n2. 방화벽에서 원격 데스크톱 서비스 포트의 사용을 관리자 컴퓨터의 IP로 제한",
       "guide_page": 218,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -756,9 +938,16 @@
       "cases": "l Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 불필요 시 해당 서비스 중지\n시작 > 제어판 > 관리 도구 > 서비스 > SNMP Service(또는, SNMP 서비스) > 속성에서 “시작 유형”을 \n“사용 안 함”으로 설정한 후, SNMP 서비스 중지\n[ SNMP 서비스 사용 안 함 설정 ]",
       "guide_page": 220,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -782,9 +971,16 @@
       "cases": "l Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 서비스 > SNMP Service(또는, SNMP 서비스) > 속성 > 보안 > [인증 트랩 \n보내기] > [추가] \nStep 2) Community String을 읽기 전용으로 설정 후 public/private이 아닌 이름을 추가\nStep 3) 불필요 시 해당 서비스 중지\n시작 > 실행 > SERVICES.MSC > SNMP Service(또는, SNMP 서비스) > 속성 [일반] 탭에서 “시작 유형”\n을 “사용 안 함”으로 설정한 후, SNMP 서비스 중지\n[ SNMP Community String 설정 ]",
       "guide_page": 221,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -808,9 +1004,16 @@
       "cases": "l Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 서비스 > SNMP Service(또는, SNMP 서비스) > 속성 > 보안\nStep 2) “인증 트랩 보내기” 및 “다음 호스트로부터 SNMP 패킷 받아들이기” 선택\nStep 3) SNMP 호스트 등록\n[ SNMP 보안 설정 ]",
       "guide_page": 222,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -834,9 +1037,16 @@
       "cases": "l Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > DNS > 각 조회 영역 > 해당 영역 > 속성 > 일반\nStep 2) 동적 업데이트 → 없음 (또는 아니오) 선택\n[ 동적 업데이트 없음 설정 ]\n\n\nStep 3) 불필요 시 해당 서비스 중지\n시작 > 제어판 > 관리 도구 > 서비스 > DNS Server > 속성 [일반] 탭에서 \"시작 유형\"을 \"사용 안 함\"으로 \n설정한 후, DNS Server 서비스 중지\n[ DNS Server 사용 안 함 설정 ]",
       "guide_page": 223,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -860,9 +1070,16 @@
       "cases": "l HTTP\n[Server 헤더 제거]\nStep 1) Microsoft 다운로드 센터에서 URL Rewrite 다운로드 후 설치\nhttps://www.iis.net/downloads/microsoft/url-rewrite\nStep 2) 제어판 > 관리 도구 > IIS(인터넷 정보 서비스) 관리자 > 해당 웹 사이트 > [URL 재작성]\nStep 3) 작업 탭 > [서버 값 관리 – 서버 변수 보기...] > 서버 변수 이름 추가\n[ 서버 변수 추가 ]\n\n\nStep 4) [URL 재작성] > 작업 탭 > [규칙 추가...] > 아웃바운드 규칙 > 빈 규칙 > 다음 사항 적용\n- 이름(N): Remove Server\n- 검색 범위: 서버 변수\n- 서버 변수 이름: RESPONSE_SERVER\n- 패턴(T): .*\n[ 아웃바운드 규칙 추가 ]\n[X-Powered-By 헤더 제거]\nStep 1) 제어판 > 관리 도구 > IIS(인터넷 정보 서비스) 관리자 > 해당 웹 사이트 > [HTTP 응답 헤더]\nStep 2) [X-Powered-By] 설정 제거\n[ X-Powered-By 헤더 제거 ]\n\n\nl FTP\nStep 1) IIS(인터넷 정보 서비스) 관리자 > FTP 메시지 > 기본 배너 숨기기 설정\n[ FTP 기본 배너 숨기기 설정 ]\nl SMTP\nStep 1) 시작 > 실행 > cmd > adsutil.vbs 파일이 있는 디렉터리로 이동\n- 명령어: cd C:\\inetpub\\AdminScripts\n- adsutil.vbs를 사용하기 위해 서버 관리자에서 역할 추가 필요 → ”웹 서버(IIS) > 관리 도구 > IIS 6 관리 \n호환성 > IIS 6 스크립팅 도구“ 설치 필요\nStep 2) IIS에서 서비스 중인 SMTP 서비스 목록 확인\n- 명령어: cscript adsutil.vbs enum /p smtpsvc\nStep 3) SMTP 서비스에 connectresponse 속성 값에서 배너 문구 수정\n- 명령어: cscript adsutil.vbs set smtpsvc/1/connectresponse “Banner Text”\nStep 4) SMTP 서비스 재시작\n- 명령어: net stop smtpsvc (중지)\n- 명령어: net start smtpsvc (시작)",
       "guide_page": 225,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -886,9 +1103,16 @@
       "cases": "l Windows NT, 2000\nStep 1) 시작 > 설정 > 제어판 > 관리 도구 > 텔넷 서버 설정\nStep 2) NTLM 인증 방식만 사용\nl Windows 2003, 2008, 2012\nStep 1) 시작 > 실행 > cmd > tlntadmn config\nStep 2) tlntadmn config sec = +NTLM -passwd (passwd 인증 방식을 제외하고 NTLM 방식만 사용)\nStep 3) 불필요 시 해당 서비스 중지\n시작 > 실행 > SERVICES.MSC > Telnet > 속성 [일반] 탭에서 \"시작 유형\"을 \"사용 안 함\"으로 설정한 \n후 Telnet 서비스 중지",
       "guide_page": 228,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -912,9 +1136,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 설정 > 제어판 > 데이터 원본(ODBC) > 시스템 DSN > 해당 드라이브 클릭\nStep 2) 사용하지 않은 데이터 소스 제거\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > ODBC 데이터 원본 > 시스템 DSN > 해당 드라이브 클릭\nStep 2) 사용하지 않는 데이터 소스 제거\n[ 불필요 ODBC 데이터 소스 확인 및 제거 ]",
       "guide_page": 229,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -938,9 +1169,16 @@
       "cases": "l Windows 2000, 2003, 2008\nStep 1) 시작 > 실행 > 열기 > TSCC.MSC 실행(Windows 2008은 TSCONFIG.MC)\nStep 2) RDP-Tcp connection에서 우클릭 > 속성 실행\nStep 3) [세션] 탭에서 사용자 설정 무시(Override user settings)를 적용하고 유휴 시 세션이 끊어지도록 “유휴 세\n션 제한 시간”을 “30분” 이하로 설정\n\n\nl Windows 2012, 2016, 2019, 2022\nStep 1) 시작 > 실행 > GPEDIT.MSC(로컬 그룹 정책 편집기)\nStep 2) 컴퓨터 구성 > 관리 템플릿 > 터미널 서비스 > 원격 데스크톱 세션 호스트 > 세션 시간 제한 >\nStep 3) [활성 상태지만 유휴 터미널 서비스 세션에 시간 제한 설정] > [유휴 세션 제한]을 30분 이하로 설정\n[ 유휴 세션 제한 설정 ]",
       "guide_page": 230,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1016,9 +1254,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 긴급한 경우 수시로 업데이트 진행\n(백신 프로그램 종류마다 다소 차이는 있으나 매주 업데이트가 진행됨)\nStep 2) 정기적인 업데이트를 통해 검색엔진을 최신 버전으로 유지하고, 백신 프로그램 제조사에서 발표하는 \n경보 주시\nStep 3) 백신 프로그램의 자동 업데이트 기능 이용 시 온라인을 통해 변동 사항을 자동으로 업데이트하여 알 수 있음",
       "guide_page": 234,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1042,9 +1287,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 프로그램 > 관리 도구 > 도메인 사용자 관리자 > 정책 > 감사\n§ 로그온 및 로그오프, 보안 정책 바꾸기: 성공/실패 감사\n§ 사용자 권한 사용, 사용자 및 그룹 관리: 실패 감사\n\n\nl Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 감사 정책\n<감사 정책 권고 기준>\n§ 계정 관리: 실패 감사\n§ 계정 로그온 이벤트 : 성공/실패 감사\n§ 권한 사용 : 성공/실패 감사\n§ 디렉터리 서비스 액세스 : 실패 감사\n§ 로그온 이벤트 : 성공/실패 감사\n§ 정책 변경 : 성공/실패 감사\n[ 감사 정책 설정 ]",
       "guide_page": 235,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1068,9 +1320,16 @@
       "cases": "l Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\n [인터넷 동기화 설정 시]\nStep 1) 제어판 > 시계 및 국가 > 날짜 및 시간 > 인터넷 시간 > 설정 변경 > 인터넷 시간 서버와 동기화\nStep 2) 신뢰할 수 있는 NTP 서버 입력 후 적용\n[ NTP 설정 및 동기화 ]\n\n\n[내부 NTP 서버 사용 시]\nStep 1) 시간 동기화 정보 확인 (Client)\nCMD > w32tm /dumpreg /subkey:parameters\nStep 2) 내부 NTP서버로 시간동기화 설정 (Client)\n(설정) CMD > w32tm /config /syncfromflags:manual /manualpeerlist:{NTP서버 IP or 도메인} /update\n(적용 확인) CMD > w32tm /dumpreg /subkey:parameters\n※ Client에서 동기화 설정 후 ‘SpecialPollInterval’ ‘MaxPosPhaseCorrection’ 설정에 따라 주기적으로 \n자동으로 동기화가 적용되지만 NTP Server에서 다음 명령어로 즉시 적용 가능함.\nCMD > w32tm /resync\nStep 1) 동기화 시간차 확인\nCMD > w32tm /stripchart /dataonly /computer:{NTP서버 IP or 도메인}",
       "guide_page": 237,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1094,9 +1353,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 이벤트 뷰어 > 해당 로그 > 속성 > 일반\nStep 2) 최대 로그 크기 → 10240KB\n최대 로그 크기에 도달할 때: 다음보다 오래된 이벤트 덮어쓰기 → 90일\n[ 이벤트 로그 덮어쓰기 설정 ]\n※ Windows 2008, 2012, 2016, 2019 서버의 경우 덮어쓰기 날짜 지정 불가능",
       "guide_page": 239,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1120,9 +1386,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012\nStep 1) 탐색기 > 로그 디렉터리 > 속성 > 보안\nStep 2) Everyone 권한 제거\nl Windows 2016, 2019, 2022\nStep 1) 탐색기 > 로그 디렉터리 > 속성 > 보안 > 고급\nStep 2) Everyone 권한 제거\n[ 로그 디렉터리 권한 확인 ]",
       "guide_page": 240,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1146,9 +1419,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 서비스 > Remote Registry > 속성\nStep 2) 시작 유형을 “사용 안 함”으로 설정한 후 서비스 중지\n[ Remote Registry 사용 중지 설정 ]\n\n\n점검 및 조치 사례\nl Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\n※ 백신 프로그램에 대한 인지도, 효과성 등을 검토하여 설치할 수 있음",
       "guide_page": 241,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1172,9 +1452,16 @@
       "cases": "",
       "guide_page": 242,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1198,9 +1485,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) %systemroot%\\system32\\config\\SAM > 속성 > 보안\nStep 2) Administrator, System 그룹 외 다른 사용자 및 그룹 권한 제거\n[ SAM 파일 권한 확인 ]",
       "guide_page": 243,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1224,9 +1518,16 @@
       "cases": "l Windows NT, 2000\nStep 1) 바탕화면 > 등록 정보 > 화면 보호기\nStep 2) “암호 사용” 설정 및 대기 시간 “10분” 이하로 설정\nl Windows 2003\nStep 1) 바탕화면 > 마우스 우클릭 > 속성 > 디스플레이 등록 정보 > [화면 보호기]\nStep 2) \"다시 시작할 때 암호로 보호\" 설정 및 대기 시간 “10분” 이하로 설정\n\n\nl Windows 2008, 2012\nStep 1) 제어판 > 디스플레이 > 화면 보호기 변경\nStep 2) \"다시 시작할 때 로그온 화면 표시\" 설정 및 대기 시간 “10분” 이하로 설정\nl Windows 2016, 2019, 2022\nStep 1) 설정 > 개인 설정 > 잠금 화면 > 화면 보호기 설정\nStep 2) \"다시 시작할 때 로그온 화면 표시\" 설정 및 대기 시간 “10분” 이하로 설정\n[ 화면 보호기 설정 ]",
       "guide_page": 244,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1250,9 +1551,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 제어판 > 관리 도구 > 레지스트리 편집기\nStep 2) 다음의 레지스트리 값 추가 또는 변경\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\\nShutdownWithoutLogon = 0\nl Windows 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) “로그온하지 않고 시스템 종료 허용”을 “사용 안 함”으로 설정\n\n\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “시스템 종료: 로그온하지 않고 시스템 종료 허용”을 “사용 안 함”으로 설정\n[ 로그온하지 않고 시스템 종료 허용 사용 안 함 설정 ]",
       "guide_page": 246,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1276,9 +1584,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 사용자 권한 할당\nStep 2) “원격 시스템에서 강제로 시스템 종료” 정책에 Administrators 외 다른 계정 및 그룹 제거\n[ 원격 시스템에서 강제 종료 ]",
       "guide_page": 248,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1302,9 +1617,16 @@
       "cases": "l Windows NT, 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) “보안 감사를 로그 할 수 없는 경우 즉시 시스템 종료” 정책을 “사용 안 함”으로 설정\n\n\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “감사: 보안 감사를 로그 할 수 없는 경우 즉시 시스템 종료” 정책을 “사용 안 함”으로 설정\n[ 감사 정책 사용 안 함 설정 ]",
       "guide_page": 249,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1328,9 +1650,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 제어판 > 관리 도구 > 레지스트리 편집기 \nHKLM\\SYSTEM\\CurrentControlSet\\Control\\LSA\nStep 2) RestrictAnonymous 값을 “1”로 설정\nl Windows 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) “익명의 연결에 추가적인 제한”에 “명백한 익명의 사용 권한이 없으면 액세스 제한” 선택\n\n\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) \"네트워크 액세스 : SAM 계정과 공유의 익명 열거 허용 안 함”과 “네트워크 액세스 : SAM 계정의 익명 \n열거 허용 안 함”에 “사용” 선택\n[ 익명 열거 허용 안 함 사용 설정 ]",
       "guide_page": 251,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1354,9 +1683,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 레지스트리 편집기 \nHKLM\\SOFTWARE\\Microsoft\\WindowsNT\\CurrentVersion\\Winlogon\nStep 2) “AutoAdminLogon” 값을 “0”으로 설정\nStep 3) “Default Password” 존재 시 제거\n[ AutoAdminLogon 값 확인 ]",
       "guide_page": 253,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1380,9 +1716,16 @@
       "cases": "l Windows NT, 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) “이동식 NTFS 미디어 꺼내기 허용” 정책을 “Administrators”로 설정\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “장치 : 이동식 미디어 포맷 및 꺼내기 허용” 정책을 “Administrators”로 설정\n[ 이동식 미디어 포맷 및 꺼내기 허용 ]",
       "guide_page": 254,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1406,9 +1749,16 @@
       "cases": "l Windows NT, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 레지스트리 편집기\nHKLM\\System\\CurrentControlSet\\Services\\Tcpip\\Parameters\\ 폴더\nStep 2) 다음의 DoS 방어 레지스트리 값 추가 또는 변경\n§ SynAttackProtect = REG_DWORD 0(False) - > 1 이상\n§ EnableDeadGWDetect = REG_DWORD 1(True) - > 0\n§ KeepAliveTime = REG_DWORD 7,200,000(2시간) - > 300,000(5분)\n§ NoNameReleaseOnDemand = REG_DWORD 0(False) - > 1",
       "guide_page": 255,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1432,9 +1782,16 @@
       "cases": "l Windows NT, 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) “사용자가 프린터 드라이버를 설치할 수 없게 함” 정책을 “사용”으로 설정\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “장치: 사용자가 프린터 드라이버를 설치할 수 없게 함” 정책을 “사용”으로 설정\n[ 장치: 사용자가 프린터 드라이버를 설치할 수 없게 함 적용 ]",
       "guide_page": 256,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1458,9 +1815,16 @@
       "cases": "l Windows NT, 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) “로그인 시간이 만료되면 클라이언트 연결 끊기” 정책 “사용” 설정\n“세션 연결을 중단하기 전에 필요한 유휴 시간” 정책 “15분” 이하로 설정\n\n\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “Microsoft 네트워크 서버: 로그온 시간이 만료되면 클라이언트 연결 끊기” 정책 “사용” 설정\n“Microsoft 네트워크 서버: 세션 연결을 중단하기 전에 필요한 유휴 시간” 정책 “15분” 이하로 설정\n[ 로그온 시간이 만료되면 클라이언트 연결 끊기 “사용” 설정 ]\n[ 세션을 중단하기 전에 필요한 유휴 시간 “15분” 설정 ]",
       "guide_page": 257,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1484,9 +1848,16 @@
       "cases": "l Windows NT\nStep 1) 시작 > 제어판 > 관리 도구 > 레지스트리 편집기\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\WindowsNT\\CurrentVersion\\Winlogon\nStep 2) LegalNoticeCaption: 제목\nStep 3) LegalNoticeText: 메시지 내용\n※ 변경된 레지스트리 키의 내용은 시스템을 로그오프 한 후 반영됨\nl Windows 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) 로그온 시도하는 사용자에 대한 메시지 제목: 배너 제목 입력\nStep 3) 로그온 시도하는 사용자에 대한 메시지 텍스트: 배너 내용 입력\n\n\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) 대화형 로그온: 로그온 시도하는 사용자에 대한 메시지 제목: 배너 제목 입력\nStep 3) 대화형 로그온: 로그온 시도하는 사용자에 대한 메시지 텍스트: 배너 내용 입력\n[ 로그온 시도 경고 메시지 설정 ]",
       "guide_page": 259,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1510,9 +1881,16 @@
       "cases": "l Windows NT\nStep 1) Windows NT: C:\\WinNT\\Profiles\\사용자 홈 디렉터리 > 등록 정보 > 보안\nStep 2) Everyone 권한 제거(All Users, Default User 디렉터리는 제외)\nl Windows 2000, 2003\nStep 1) C:\\Documents and Settings\\사용자 홈 디렉터리 > 속성 > 보안\nStep 2) Everyone 권한 제거(All Users, Default User 디렉터리는 제외)\nl Windows 2008\nStep 1) C:\\사용자\\<사용자 계정>\nStep 2) 해당 사용자에 대한 권한 외 일반 계정 삭제\n\n\nl Windows 2012, 2016, 2019, 2022\nStep 1) C:\\사용자\\<사용자 계정>\nStep 2) 해당 사용자에 대한 권한 외 일반 계정 삭제\n[ 사용자 권한 설정 확인 ]",
       "guide_page": 261,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1536,9 +1914,16 @@
       "cases": "l Windows NT, 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) “LAN Manager 인증 수준” 정책에 “NTLMv2 응답만 보내기” 설정\n\n\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) “네트워크 보안: LAN Manager 인증 수준” 정책에 NTLMv2 응답만 보내기” 설정\n[ LAN Manager 인증 수준 설정 ]",
       "guide_page": 263,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1562,9 +1947,16 @@
       "cases": "l Windows NT, 2000\nStep 1) 시작 > 실행 > SECPOL.MSC > 로컬 정책 > 보안 옵션\nStep 2) 아래 3가지 정책을 모두 \"사용\"으로 설정\n• 도메인 구성원: 보안 채널 데이터를 디지털 암호화 또는 서명 (항상)\n• 도메인 구성원: 보안 채널 데이터 디지털 서명 (가능한 경우)\n• 도메인 구성원: 보안 채널 데이터를 디지털 암호화 (가능한 경우)\n\n\nl Windows 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 로컬 정책 > 보안 옵션\nStep 2) 아래 3가지 정책을 모두 \"사용\"으로 설정\n• 도메인 구성원: 보안 채널 데이터를 디지털 암호화 또는 서명 (항상)\n• 도메인 구성원: 보안 채널 데이터 디지털 서명 (가능한 경우)\n• 도메인 구성원: 보안 채널 데이터를 디지털 암호화 (가능한 경우)\n[ 보안 채널 데이터 설정 적용 ]",
       "guide_page": 265,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1588,9 +1980,16 @@
       "cases": "l Windows NTM, 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 실행 > CMD > fsutil fsinfo volumeinfo (해당 드라이브)\nStep 2) FAT 파일 시스템 사용 시 아래 명령으로 NTFS 변환\n시작 > 실행 > CMD > convert 드라이브명: /fs:ntfs\n(예) convert F: /fs/ntfs라고 입력 시 F 드라이브는 NTFS 형식으로 변환됨",
       "guide_page": 267,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1640,9 +2039,16 @@
       "cases": "l Windows 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > 관리 도구 > 로컬 보안 정책 > 계정 정책 > Kerberos 정책\n컴퓨터 시계 동기화 최대 허용 오차 5분으로 설정\n[ 컴퓨터 시계 동기화 최대 허용 오차 ]",
       "guide_page": 269,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     },
     {
@@ -1666,9 +2072,16 @@
       "cases": "l Windows 2000, 2003, 2008, 2012, 2016, 2019, 2022\nStep 1) 시작 > 제어판 > Windows Defender 방화벽 > Windows 방화벽 설정 또는 해제 \n(또는 시작 > 실행 > “firewall.cpl” 입력)\nStep 2) Windows Defender 방화벽 “사용” 설정\n[ 방화벽 “사용” 설정 ]",
       "guide_page": 270,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "server2012r2",
+        "server2016",
+        "server2019",
+        "server2022",
+        "win10",
+        "win11"
+      ],
       "deviation": null
     }
   ]

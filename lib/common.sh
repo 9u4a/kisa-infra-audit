@@ -6,7 +6,14 @@
 #
 # 사용: 카테고리 run.sh 에서 ". ../lib/common.sh" (경로는 상대 위치에 맞게 조정)
 
-TOOL_VERSION="0.1.0"
+# VERSION 파일이 버전의 단일 소스다 (루트 CLAUDE.md 버전 규칙 참고). 호출부(각 카테고리
+# run.sh)가 이 파일을 소싱하기 전에 반드시 LIB_DIR 을 설정해 두므로 (". $LIB_DIR/common.sh"),
+# 그 값을 그대로 이용해 "$LIB_DIR/../VERSION" 을 읽는다.
+if [ -n "${LIB_DIR:-}" ] && [ -f "$LIB_DIR/../VERSION" ]; then
+    TOOL_VERSION=$(cat "$LIB_DIR/../VERSION")
+else
+    TOOL_VERSION="0.0.0-unknown"
+fi
 GUIDE_VERSION="2026"
 
 # ---- 색상 (비TTY 이면 자동 해제) ----------------------------------------
