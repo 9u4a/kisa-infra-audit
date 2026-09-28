@@ -138,7 +138,28 @@ def parse_criteria(section_text: str):
     return targets, good, vuln
 
 
-def parse_items_for_category(doc, cat: dict):
+def load_existing_tracking(out_dir: Path) -> dict:
+    """기존 guide.json에서 구현 진행 상태(automation/fix/envs/deviation)만 코드별로 읽어온다.
+    이 필드들은 PDF 추출 대상이 아니라 이후 check/fix 구현 단계에서 채워지는 값이므로,
+    재추출 시 덮어쓰지 않고 보존한다 (guide.json을 손으로 고치지 않는다는 원칙과 양립시키기 위함)."""
+    existing_path = out_dir / "guide.json"
+    tracking = {}
+    if existing_path.exists():
+        try:
+            existing = json.loads(existing_path.read_text(encoding="utf-8"))
+            for it in existing.get("items", []):
+                tracking[it["code"]] = {
+                    "automation": it.get("automation", "manual"),
+                    "fix": it.get("fix", "manual"),
+                    "envs": it.get("envs", []),
+                    "deviation": it.get("deviation"),
+                }
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return tracking
+
+
+def parse_items_for_category(doc, cat: dict, tracking: dict):
     text, page_marks = load_category_text(doc, cat["start"], cat["end"])
     matches = list(ITEM_HEADER_RE.finditer(text))
     items = []
@@ -165,6 +186,8 @@ def parse_items_for_category(doc, cat: dict):
         note = "" if note.strip() == "-" else note
 
         guide_page = page_for_offset(m.start(), page_marks)
+        # 구현 진행 상태는 재추출 시에도 보존 (없으면 기본값)
+        meta = tracking.get(code, {"automation": "manual", "fix": "manual", "envs": [], "deviation": None})
 
         items.append({
             "code": code,
@@ -184,11 +207,11 @@ def parse_items_for_category(doc, cat: dict):
             "cases": cases,
             "guide_page": guide_page,
             "guide_version": GUIDE_VERSION,
-            # 작업용 메타 (추후 구현 단계에서 채움)
-            "automation": "manual",
-            "fix": "manual",
-            "envs": [],
-            "deviation": None,
+            # 작업용 메타 (check/fix 구현 단계에서 채움 — 재추출 시 보존됨, load_existing_tracking 참고)
+            "automation": meta["automation"],
+            "fix": meta["fix"],
+            "envs": meta["envs"],
+            "deviation": meta["deviation"],
         })
     return items
 
@@ -212,11 +235,11 @@ def render_markdown(cat: dict, items: list) -> str:
 
     lines.append("## 항목 요약")
     lines.append("")
-    lines.append("| 코드 | 중요도 | 항목명 | 분류 |")
-    lines.append("|---|---|---|---|")
+    lines.append("| 코드 | 중요도 | 항목명 | 분류 | 자동화 |")
+    lines.append("|---|---|---|---|---|")
     for (gno, gname), gitems in sorted(groups.items()):
         for it in sorted(gitems, key=lambda x: int(x["code"].split("-")[1])):
-            lines.append(f"| {it['code']} | {it['severity']} | {it['title']} | {gno}. {gname} |")
+            lines.append(f"| {it['code']} | {it['severity']} | {it['title']} | {gno}. {gname} | {it['automation']} |")
     lines.append("")
 
     for (gno, gname), gitems in sorted(groups.items()):
@@ -263,9 +286,10 @@ def main():
     for cat in CATEGORIES:
         if args.only and cat["dir"] != args.only:
             continue
-        items = parse_items_for_category(doc, cat)
         out_dir = ROOT / cat["dir"]
         out_dir.mkdir(parents=True, exist_ok=True)
+        tracking = load_existing_tracking(out_dir)
+        items = parse_items_for_category(doc, cat, tracking)
 
         missing_fields = 0
         for it in items:

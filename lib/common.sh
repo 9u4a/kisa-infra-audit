@@ -253,6 +253,77 @@ write_summary() {
     } > "$_f"
 }
 
+# ---- 파일 소유자/권한 공통 판정 헬퍼 -----------------------------------------
+# "소유자가 X(들 중 하나)이고 권한이 N 이하" 형태의 판단기준이 반복되는 항목(U-16,18,19,20,21,22,29 등)이
+# 공용으로 사용. 실행 후 CHECK_STATUS/CHECK_DETAIL/CHECK_EVIDENCE 를 채운다.
+# check_owner_perm <file> <"허용 소유자 공백구분">  <최대 8진수 권한(예: 644)>
+check_owner_perm() {
+    _file=$1; _allowed_owners=$2; _max_perm=$3
+
+    if [ ! -e "$_file" ]; then
+        CHECK_STATUS="NA"
+        CHECK_DETAIL="$_file 파일이 존재하지 않음"
+        CHECK_EVIDENCE=""
+        return
+    fi
+
+    _owner=$(stat -c '%U' "$_file" 2>/dev/null)
+    [ -z "$_owner" ] && _owner=$(stat -f '%Su' "$_file" 2>/dev/null)
+    _perm=$(stat -c '%a' "$_file" 2>/dev/null)
+    [ -z "$_perm" ] && _perm=$(stat -f '%OLp' "$_file" 2>/dev/null)
+
+    _owner_ok=0
+    for _o in $_allowed_owners; do
+        [ "$_owner" = "$_o" ] && _owner_ok=1
+    done
+    _perm_ok=0
+    if [ -n "$_perm" ] && [ "$_perm" -le "$_max_perm" ] 2>/dev/null; then
+        _perm_ok=1
+    fi
+
+    CHECK_EVIDENCE=$(ls -l "$_file" 2>/dev/null)
+    if [ "$_owner_ok" -eq 1 ] && [ "$_perm_ok" -eq 1 ]; then
+        CHECK_STATUS="GOOD"
+        CHECK_DETAIL="$_file 소유자(${_owner})/권한(${_perm})이 기준(허용 소유자: ${_allowed_owners} / 권한 ${_max_perm} 이하)을 충족함"
+    else
+        CHECK_STATUS="VULN"
+        CHECK_DETAIL="$_file 소유자(${_owner})/권한(${_perm})이 기준(허용 소유자: ${_allowed_owners} / 권한 ${_max_perm} 이하)을 위반함"
+    fi
+}
+
+# ---- "서비스 비활성화" 공통 판정 헬퍼 ----------------------------------------
+# U-34/36/38/39/42/43/44/52 등 "OO 서비스가 비활성화되어 있으면 양호" 패턴 공용.
+# 프로세스 실행 여부 + systemd 유닛 활성/활성화 여부로 판정한다 (inetd/xinetd 대체 서비스 포함 안 함,
+# 필요 시 호출부에서 xinetd.d 설정을 추가로 확인).
+# check_service_disabled <라벨> <pgrep 패턴> <"systemd 유닛 이름 공백구분(선택)">
+check_service_disabled() {
+    _label=$1; _proc_pattern=$2; _units=${3:-}
+    _found=""
+
+    if command -v pgrep >/dev/null 2>&1; then
+        _p=$(pgrep -f "$_proc_pattern" 2>/dev/null)
+        [ -n "$_p" ] && _found="$_found
+프로세스 실행 중(pgrep -f '$_proc_pattern'): $_p"
+    fi
+
+    if command -v systemctl >/dev/null 2>&1; then
+        for _u in $_units; do
+            systemctl is-active --quiet "$_u" 2>/dev/null && _found="$_found
+systemd 유닛 활성(active): $_u"
+        done
+    fi
+
+    if [ -n "$_found" ]; then
+        CHECK_STATUS="VULN"
+        CHECK_DETAIL="${_label} 서비스가 활성화되어 있음"
+        CHECK_EVIDENCE="$_found"
+    else
+        CHECK_STATUS="GOOD"
+        CHECK_DETAIL="${_label} 서비스가 비활성화되어 있음 (프로세스/systemd 유닛 미탐지)"
+        CHECK_EVIDENCE=""
+    fi
+}
+
 # ---- 결과 디렉토리 준비 -----------------------------------------------------
 # prepare_output_dir <base_dir> <category_num>  -> OUT_DIR 에 경로 저장
 prepare_output_dir() {
