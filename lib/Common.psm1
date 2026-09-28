@@ -199,4 +199,32 @@ function Get-SecPrivilegeAccounts {
     return $raw -split ',' | Where-Object { $_ } | ForEach-Object { ConvertFrom-Sid $_.Trim() }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts -Variable ToolVersion, GuideVersion
+# ---- MSSQL 연결/쿼리 (08_dbms) ---------------------------------------------------
+# sqlcmd.exe 를 사용한다(MSSQL 설치 시 기본 동봉되는 mssql-tools, 대상 무설치 원칙 준수).
+# 비밀번호는 인자로 절대 넘기지 않고 SQLCMDPASSWORD 환경변수로만 전달한다
+# (run.ps1 이 $env:DB_PASSWORD 를 이 변수에 매핑, 08_dbms/CLAUDE.md "접속정보 취급" 원칙).
+# $Global:DbQueryOk 로 "쿼리 실패"와 "쿼리 성공+결과 0건"을 구분한다(PC-15에서 배운 원칙과 동일).
+function Invoke-MssqlQuery {
+    param([Parameter(Mandatory)][string]$Sql)
+    # -C: 서버 인증서를 신뢰(자체 서명 인증서가 흔한 사내/컨테이너 환경 대응). mssql-tools18(sqlcmd
+    # Go 재작성판, 현재 표준 배포판)은 기본적으로 암호화 연결을 강제하며 인증서 검증에 실패하면
+    # 접속 자체가 안 되므로 필요하다 (구버전 mssql-tools 의 sqlcmd 는 이 옵션이 없을 수 있음).
+    $sqlArgs = @('-h', '-1', '-W', '-s', '|', '-b', '-C')
+    $target = if ($env:DB_HOST) { $env:DB_HOST } else { 'localhost' }
+    if ($env:DB_PORT) { $target = "$target,$($env:DB_PORT)" }
+    $sqlArgs += @('-S', $target)
+    if ($env:DB_USER) { $sqlArgs += @('-U', $env:DB_USER) } else { $sqlArgs += @('-E') }
+    if ($env:DB_NAME) { $sqlArgs += @('-d', $env:DB_NAME) }
+    $sqlArgs += @('-Q', $Sql)
+    try {
+        $out = & sqlcmd @sqlArgs 2>$Global:DbErrFile
+        $Global:DbQueryOk = ($LASTEXITCODE -eq 0)
+        return $out
+    } catch {
+        $Global:DbQueryOk = $false
+        $_.Exception.Message | Out-File -FilePath $Global:DbErrFile -Encoding utf8
+        return $null
+    }
+}
+
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery -Variable ToolVersion, GuideVersion

@@ -32,7 +32,9 @@
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     },
@@ -61,7 +63,9 @@
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     },
@@ -90,7 +94,9 @@
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     },
@@ -119,7 +125,9 @@
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     },
@@ -144,9 +152,11 @@
       "cases": "l Oracle DB\n Step 1) SQL*Plus 설정 확인\n-- Check for both reuse max and reuse time not set\nSELECT profile FROM DBA_PROFILES WHERE (resource_name = 'PASSWORD_REUSE_MAX' A\nND limit IN ('UNLIMITED', 'NULL')) OR (profile IN (SELECT profile FROM DBA_PROFILES WHE\nRE resource_name = 'PASSWORD_REUSE_TIME') AND limit IN ('UNLIMITED', 'NULL'));\n-- Check for reuse max with value that is less than allowed minimum\nSELECT profile FROM DBA_PROFILES WHERE resource_name = 'PASSWORD_REUSE_MAX' AN\nD limit NOT IN ('UNLIMITED', 'NULL') AND REGEXP_LIKE(limit, '^[0-9]+$') -- Only consider nume\nric values AND TO_NUMBER(limit) < 10;\n\n\n-- Check for reuse time that is less than allowed minimum\nSELECT profile FROM DBA_PROFILES WHERE resource_name = 'PASSWORD_REUSE_TIME' AN\nD limit NOT IN ('UNLIMITED', 'NULL') AND REGEXP_LIKE(limit, '^[0-9]+$') -- Only consider nume\nric values AND TO_NUMBER(limit) < 365;\n Step 2) PASSWORD_REUSE_TIME 및 PROFILE 파라미터 수정\nSQL> ALTER PROFILE default LIMIT password_reuse_time 365 password_reuse_max 10;\nSQL> ALTER PROFILE [프로파일명] LIMIT password_reuse_time DEFAULT password_reuse_max \ndefault;\nl Altibase\n Step 1) 다음 명령어를 통해 비밀번호 정책 설정 여부 확인\nSELECT * FROM system_.sys_users_;\n Step 2) 아래 Property에 대해 비밀번호 정책 설정\nCASE_SENSITIVE_PASSWORD\nFAILED_LOGIN_ATTEMPTS\nPASSWORD_LOCK_TIME\nPASSWORD_LIFE_TIME\nPASSWORD_GRACE_TIME\nPASSWORD_REUSE_TIME\nPASSWORD_REUSE_MAX\nPASSWORD_VERIFY_FUNCTION\n정책 적용 시 다음 명령어를 사용\nALTER USER [계정명] LIMIT (Property 숫자);\n예시) ALTER USER TESTUSER LIMIT (FAILED_LOGIN_ATTEMPTS 7, PASSWORD_LOCK_TIM\nE 7);\n\n\nl Tibero\n Step 1) 사용자별 비밀번호 PROFILE 적용 여부 확인\nSELECT * FROM dba_users;\n[ 사용자별 비밀번호 PROFILE 적용 여부 확인 ]\n Step 2) 설정되어 있을 경우 PROFILE 설정 내용 확인\nSELECT * FROM dba_users;\n[ PASSWORD_REUSE_TIME, PASSWORD_REUSE_MAX 파라미터값 확인 ]\n Step 3) 설정되어 있지 않을 경우 PROFILE 생성 또는 수정 시(ALTER PROFILE) 비밀번호 정책 설정 적용 시 \n다음 명령어를 사용\nCREATE PROFILE prof LIMIT\n예시) CREATE PROFILE prof LIMIT\nfailed_login_attempts 3\npassword_lock_time 1/1440\npassword_life_time 90\npassword_reuse_time unlimited\npassword_reuse_max 10\npassword_grace_time 10\npassword_verify_function verify_function;",
       "guide_page": 613,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "oracle"
+      ],
       "deviation": null
     },
     {
@@ -174,7 +184,9 @@
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     },
@@ -199,10 +211,11 @@
       "cases": "l Oracle DB\n Step 1) 실행 중인 프로세스를 통한 확인\n$ ps –ef | grep pmon\n Step 2) Oracle Listener 프로세스 사용자 확인\n$ ps –ef | grep tnslsnr\n Step 3) 사용자 계정을 'Oracle'로 전환\n$ su – oracle (현재 사용자/관리자 계정에서 'Oracle' 사용자로 전환)\n$ lsnrctl stop (Oracle Listener 중지)\n$ sqlplus / as sysdba (SQL*Plus 유틸리티를 이용하여 시스템 관리자(SYSDBA) 권한으로 로그인)\n$ shutdown immediate (데이터베이스 종료)\n Step 4) Oracle 서비스 재시작\n$ lsnrctl start (Oracle Listener 시작)\n$ sqlplus / as sysdba (SQL*Plus 유틸리티를 이용하여 시스템 관리자(SYSDBA) 권한으로 로그인)\n\n\n$ startup (데이터베이스 시작)\nl MySQL\n Step 1) 실행 중인 프로세스를 통한 확인\n# ps –ef | grep mysqld\n Step 2) mysql server configuration 파일에서 [mysqld] 그룹의 'user' 지시자의 설정값 확인\n# cat [mysql server configuration 파일 위치] | grep user (user=mysql로 설정되어 있으면 양호)\n Step 3) mysql server configuration 파일에서 [mysqld] 그룹의 'user' 지시자 설정\n# vi [mysql server configuration 파일 위치] (일반적으로 /etc/my.cnf.d/mysql-server.cnf)\n※ user = [mysqld를 구동할 시스템의 일반 사용자 계정]\nl Altibase\n Step 1) 실행 중인 프로세스를 통한 확인\n# ps –ef | grep altibase | grep –v grep\n Step 2) Altibase 디렉터리 및 파일을 Altibase 전용 계정으로 소유자 변경\n# chown –R [계정명]:[그룹명] '[Altibase 디렉터리 위치]’\n Step 3) Altibase 전용 계정으로 DB 구동\nl Cubrid\n Step 1) 실행 중인 프로세스를 통한 확인\n# ps –ef | egrep 'cub_master|cub_broker|cub_manager' | grep –v grep\n(cub_master, cub_broker, cub_manager 데몬이 root 또는 root 권한으로 구동되었는지 확인)\n Step 2) 삭제 후 cubrid 계정으로 재설치 또는 같은 DB를 생성 후에 언로드/로드를 통해 기존 데이터 이관",
       "guide_page": 619,
       "guide_version": "2026",
-      "automation": "partial",
+      "automation": "auto",
       "fix": "manual",
       "envs": [
-        "mysql"
+        "mysql",
+        "oracle"
       ],
       "deviation": null
     },
@@ -231,7 +244,9 @@
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     },
@@ -256,9 +271,11 @@
       "cases": "l Oracle DB\n Step 1) Failed_login_attempts Profile 파라미터 수정\nSQL> ALTER PROFILE LIMIT FAILED_LOGIN_ATTEMPTS XX; (XX회 이하로 설정)\n Step 2) Profile 적용\nSQL> connect / as sysdba\nSQL> @$Ora_Home/rdbms/admin/utlpwdmg. 또는\ndefault profile에 unlimited로 설정하고 이 default 값을 적용하고자 하는 profile에 적용\nSQL> ALTER PROFILE DEFAULT LIMIT PASSWORD_LOCK_TIME UNLIMITED;\n해당 Profile이 잠길 경우 자동으로 해제되지 않음\nSQL> ALTER PROFILE [Profile명] LIMIT PASSWORD_LOCK_TIME XX;\n해당 Profile이 잠길 경우 XX일 이후 잠금 해제\n※ utlpwdmg.sql : 비밀번호 관리 관련 기능 설정 및 Profile 수정 역할을 하는 스크립트\n\n\nl Altibase\n Step 1) SELECT * FROM system_.sys_users_;\n Step 2) 아래 Property에 대해 비밀번호 정책 설정\nCASE_SENSITIVE_PASSWORD\nFAILED_LOGIN_ATTEMPTS\nPASSWORD_LOCK_TIME\nPASSWORD_LIFE_TIME\nPASSWORD_GRACE_TIME\nPASSWORD_REUSE_TIME\nPASSWORD_REUSE_MAX\nPASSWORD_VERIFY_FUNCTION\n Step 3) 정책 적용 시 다음 명령어를 사용\nALTER USER 계정명 LIMIT (Property 숫자);\n예시) ALTER USER testuser LIMIT (FAILED_LOGIN_ATTEMPTS 7);\nl Tibero\n Step 1) 사용자별 비밀번호 PROFILE 적용 여부 확인\nSELECT * FROM dba_users;\n[ 사용자별 비밀번호 PROFILE 적용 여부 확인 ]\n Step 2) 설정되어 있을 경우 PROFILE 설정 내용 확인\nSELECT * FROM dba_profiles;\n[ PROFILE 설정 내용 확인 ]\n\n\n Step 3) 설정되어 있지 않을 경우 PROFILE 생성 시(또는 수정 시 ALTER PROFILE) 비밀번호 정책 설정 정책 \n적용 시 다음 명령어를 사용\nCREATE PROFILE prof LIMIT\n예시) CREATE PROFILE prof LIMIT\nFAILED_LOGIN_ATTEMPTS 3\nPASSWORD_LOCK_TIME 1/1440\nPASSWORD_LIFE_TIME 90\nPASSWORD_REUSE_TIME UNLIMITED\nPASSWORD_REUSE_MAX 10\nPASSWORD_GRACE_TIME 10\nPASSWORD_VERIFY_FUNCTION verify_function;",
       "guide_page": 625,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "oracle"
+      ],
       "deviation": null
     },
     {
@@ -286,7 +303,9 @@
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     },
@@ -311,13 +330,15 @@
       "cases": "l Oracle DB, Tibero\n Step 1) DBA만 접근 가능한 테이블의 권한 확인(SQL*Plus)\nSQL> SELECT grantee, privilege, owner, table_name FROM dba_tab_privs WHERE (owner = 'SYS' or t\nable_name LIKE 'DBA_%') AND privilege <> 'EXECUTE' AND grantee NOT IN ('PUBLIC', 'AQ_AD\nMINISTRATOR_ROLE', 'AQ_USER_ROLE', 'AURORA$JIS$UTILITY$', 'OSE$HTTP$ADMIN', 'TR\nACESVR', 'CTXSYS', 'DBA', 'DELETE_CATALOG_ROLE', 'EXECUTE_CATALOG_ROLE', 'EXP_F\nULL_DATABASE', 'GATHER_SYSTEM_STATISTICS', 'HS_ADMIN_ROLE', 'IMP_FULL_DATAB\nASE', 'LOGSTDBY_ADMINISTRATOR', 'MDSYS', 'ODM', 'OEM_MONITOR', 'OLAPSYS', 'ORDSY\nS', 'OUTLN', 'RECOVERY_CATALOG_OWNER', 'SELECT_CATALOG_ROLE', 'SNMPAGENT', 'SY\nSTEM', 'WKSYS', 'WKUSER', 'WMSYS', 'WM_ADMIN_ROLE', 'XDB', 'LBACSYS', 'PERFSTAT', 'X\nDBADMIN') AND grantee NOT IN (SELECT grantee FROM dba_role_privs WHERE granted_role = 'D\nBA') ORDER BY grantee; (어떤 계정이나 role이 나타나지 않으면 양호)\n\n\n Step 2) 불필요하게 테이블 접근 권한이 사용자 계정에 할당된 경우(SQL*Plus)\nSQL> REVOKE <권한> ON <Object> FROM user;\nl MSSQL\n Step 1) system tables 접근 권한이 PUBLIC, GUEST 또는 비인가된 사용자에게 부여된 경우 접근 권한을 제거\nREVOKE <권한> ON <Object> FROM [계정명]|[PUBLIC]|[GUEST];\n Step 2) 시스템 테이블에 접근하기 위해서는 stored procedure 또는 information_schema views를 통해 접근해야 \n함\n Step 3) 시스템 테이블에 접근 가능한 stored procedure는 사용이 제한되어야 함\nl MySQL\n Step 1) 사용자 계정에 부여된 권한 확인\nSHOW GRANTS FOR <계정명>;\n Step 2) 접근이 필요한 데이터베이스 및 테이블에만 권한 적용\nGRANT <권한> privileges ON <DB명>.<테이블명> to '<계정명>'@'<호스트명 or IP>';\nl Altibase\n Step 1) sys_tables_를 조회하여 system_ 외 접근 계정 유무 확인\nSELECT * FROM system_.sys_tables_;\n Step 2) 불필요 계정 접근 시 해당 접근 해제\nl PostgreSQL\n Step 1) 사용자 및 역할 권한 정보 조회\nSELECT * FROM information_schema.role_table_grants;\n Step 2) 스키마명에 해당되는 Table에 대한 접근 권한을 일반 사용자로부터 제거\nREVOKE [all,select,insert,update...] ON all tables IN schema '스키마명' FROM '계정명';",
       "guide_page": 633,
       "guide_version": "2026",
-      "automation": "partial",
+      "automation": "auto",
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
-      "deviation": null
+      "deviation": "Oracle 대상: 가이드 원문의 정적 예외 목록(내장 롤 이름 나열)이 Oracle 19c/21c/23c 이후 추가된 내장 롤을 포함하지 못해 대량 오탐이 발생함을 Docker(gvenzl/oracle-free 23ai) 실기 테스트로 확인. dba_users.oracle_maintained='N' 조건으로 대체해 버전에 관계없이 동작하도록 수정(같은 취지: DBA 외 일반 사용자 계정의 시스템 테이블 접근 차단)."
     },
     {
       "code": "D-12",
@@ -340,9 +361,11 @@
       "cases": "l Oracle DB\n Step 1) Listener 비밀번호 설정\nLSNRCTL> change_password\nOld password: <Old Password> (Not displayed)\nNew password: <New password> (Not displayed)\nReenter new password: <New password> (Not displayed)Connecting (DESCRIPTION=(ADDRESS=(PR\nOTOCOL=TCP)(HOST=prolin1)(PORT=1521)(IP=FIRST)))\nPassword change for LISTENER\nThe command completed successfully\nLSNRCTL> set password\n\n\nLSNRCTL> save_config\n Step 2) Listener 매개변수 설정\n1. $TNS_ADMIN/listener.ora 파일 내에 아래 Option 추가\nPASSWORDS_<listener_name> = <Encrypted Password>\nADMIN_RESTRICTIONS_<listener_name> = ON\n2. Listener 재시작 및 상태 확인\nLSNRCTL> lsnrctl stop\nLSNRCTL> lsnrctl start\nLSNRCTL> lsnrctl reload\nLSNRCTL> lsnrctl status\n※ Oracle 12c release 2 이후 버전은 Listener 비밀번호 설정을 지원하지 않으므로 해당사항 없음",
       "guide_page": 635,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "oracle"
+      ],
       "deviation": null
     },
     {
@@ -368,7 +391,9 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mssql"
+      ],
       "deviation": null
     },
     {
@@ -392,11 +417,12 @@
       "cases": "l Oracle DB\n[Unix OS]\n Step 1) 디렉터리 또는 파일의 권한 점검\n$ORACLE_HOME/bin/oracle (755)\n$ORACLE_HOME/bin/[    ] (755)\n→ [․sqlplus,sqlldr,sqlload,proc,oraenv,oerr,exp,imp,tkprof,tnsping,wrap]\n$ORACLE_HOME/bin/[    ] (750)\n→ [․svrmgrl, lsnrctl, dbsnmp]\n$ORACLE_HOME/network (755)\n$ORACLE_HOME/network/admin/[    ] (755)\n→ [․listener.ora, sqlnet.ora 등]\n$ORACLE_HOME/lib (755)\n\n\n$ORACLE_HOME/network/admin/[    ] (644)\n→ [․tnsnames.ora, protocol.ora, sqlpnet.ora]\n$ORACLE_HOME/dbs/init.ora (640)\n$ORACLE_HOME/dbs/init<SID>.ora (640)\n- Find $ORACLE_HOME –name init*.ora –print\n- 파일 및 디렉터리의 권한 설정 변경\n# chmod <적용 권한> <파일명>\n Step 2) redo 파일, 데이터베이스 설정 파일, 데이터 파일 위치 확인(SQL*Plus)\nSQL> Select value from v$parameter where name='spfile';\nSQL> Select 'Control Files: '||value from v$parameter where name='control_files';\nSQL> select 'Control Files: '||value from v$parameter where name='spfile';\nSQL> select 'Logfile: '||member from v$logfile;\nSQL> select 'Datafile: '||name from v$datafile;\n- 파일 및 디렉터리의 권한 설정 변경\n# chmod <적용 권한> <파일명>\n[Windows OS]\n Step 1) 패스워드 파일(orapw<SID>) 접근 권한은 administrators, system group, owner group, oracle service \ncount, DBA에게 모든 권한 또는, 그 이하로 설정하고 다른 그룹은 제거함\nl MySQL\n[Unix OS]\n Step 1) 설정 파일 (my.cnf, my.ini)의 접근 권한 설정\n설정 파일 (my.cnf, my.ini)의 접근 권한을 설정 파일에 대한 보호를 위하여 600 또는 640으로 설정\nmy.cnf 파일 위치: /etc/my.cnf, <각 홈디렉터리>/my.cnf\n# chmod 600 ./my.cnf\n[Windows OS]\n Step 1) 설정 파일의 접근 권한은 Adminisrators, SYSTEM, Owner에게 모든 권한 또는 그 이하로 설정하고 다른 \n그룹은 제거함\n\n\nl PostgreSQL\n[Unix OS]\n Step 1) 주요 설정 파일 위치 확인\npostgresql.conf 파일 위치: [$datadir]\nDB 접속 통제 설정 파일 위치: /postgres/data/pg_hba.conf, /postgres/data/pg_ident.conf\nlog_directory : /log_directory/pg_log\n Step 2) 주요 설정 파일의 권한 설정\n환경설정 파일(postgresql.conf)의 권한을 640 이하로 설정\n# chmod 640 [$datadir]/postgresql.conf\nDB접속 통제 설정 파일(pg_hba.conf, pg_ident.conf)의 권한을 640 이하로 설정\n# chmod 640 ./pg_hba.conf\n# chmod 640 ./pg_ident.conf\n히스토리 파일 (.psql_history)의 권한을 600 이하로 설정\n$chmod 600 .psql_history\nLog 파일(pg_log)의 권한을 640 이하로 설정\n#chmod 640 [Log 파일]\n[Windows OS]\n Step 1) 주요 환경설정 파일의 접근 권한은 Administrators, SYSTEM, Owner에게 모든 권한 또는 필요 권한만 \n부여하여 설정하고 기타 다른 그룹은 권한 제거\nl Cubrid\n Step 1) cubrid.conf 파일 권한 확인\n# ls –l $_CUBRID_DATABASES/conf/cubrid.conf 또는\n# ls –l /root/CUBRID-11.2.8.0824-bf70ab7-Linux.x86_64/conf/cubrid.conf (설치경로 직접 입력)\n Step 2) cubrid.conf 파일 권한 설정\n# sudo chmod 640 /root/CUBRID-11.2.8.0824-bf70ab7-Linux.x86_64/conf/cubrid.conf\n※ cubrid.conf 파일의 권한이 600 또는 640일 경우 양호함",
       "guide_page": 639,
       "guide_version": "2026",
-      "automation": "partial",
+      "automation": "auto",
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle"
       ],
       "deviation": "가이드 원문 '대상'에는 Oracle DB/PostgreSQL/Cubrid만 명시되어 있으나, 같은 항목의 '점검 및 조치 사례' 본문에는 MySQL my.cnf 파일 권한(600/640) 절차가 포함되어 있어 이를 근거로 MySQL도 자동화 대상에 포함함(대상 필드 원문은 변경하지 않음)."
     },
@@ -421,9 +447,11 @@
       "cases": "l Oracle DB\n Step 1) 파일 권한 확인\n$ORACLE_HOME/network/admin 디렉터리 권한 확인\nUnix 계열 : ls –a\nWindows 계열 : 파일 속성\nLSNRCTL> status ListenerName (listener.ora 파일 확인)\nlistener.ora 파일에서 ADMIN_RESTRICTIONS_<listener name> = ON 설정 확인\n\n\n Step 2) ADMIN_RESTRICTIONS_LISTENER 설정 추가\nlistener.ora 파일에 ADMIN_RESTRICTIONS_<listener name>=ON 라인을 추가한 후 listener를 재실행\n하거나 lsnrctl reload 명령어를 실행하여 재로딩\n[ ADMIN_RESTRICTIONS_<listener name>=ON 옵션 설정 ]",
       "guide_page": 642,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "oracle"
+      ],
       "deviation": null
     },
     {
@@ -447,9 +475,11 @@
       "cases": "l MSSQL\n Step 1) Windows 인증 모드 활성화\nSQL Server Management Studio > 해당 서버 우클릭 > 속성 > 보안 > 서버 인증> Windows 인증 모드\n(W)를 클릭하여 활성화\n\n\n[ Windows 인증 모드(W) 활성화 ]",
       "guide_page": 644,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mssql"
+      ],
       "deviation": null
     },
     {
@@ -473,9 +503,11 @@
       "cases": "l Oracle DB, Tibero\n Step 1) 설정 확인(SQL*Plus)\nSQL> SELECT owner FROM dba_tables WHERE table_name = 'AUD$';\n Step 2) Audit table에 접근할 권한이 없는 계정이 확인될 경우 권한 삭제(SYS 또는 SYSTEM 제외)\nREVOKE <권한> ON <Object> FROM <계정명>;\nl Altibase\n Step 1) 사용자 계정을 조회하여 SYSTEM_, SYS의 USER_ID를 확인\nSELECT * FROM system_.sys_users_;\n Step 2) 시스템 테이블 조회 내용 중 AUDIT 관련 테이블 정보의 TABLE_ID 확인\nSELECT * FROM system_.sys_tables_;\n Step 3) Audit Table의 계정에 불필요한 권한이 부여되어 있는 경우 권한 삭제\n\n\nREVOKE <권한> ON [audit_table] FROM [계정명];\nl Tibero\n감사 기록은 $TB_SID.tip 파일에 설정된 AUDIT_TRAIL 파라미터에 따라 데이터베이스 내부 또는 OS 파일에 \n저장할 수 있으며, OS 파일에 감사 기록을 저장하는 경우 파일의 위치와 최대 크기를 각각 $TB_SID.tip파일의 \nAUDIT_FILE_DEST 파라미터와 AUDIT_FILE_SIZE 파라미터로 설정할 수 있음\n Step 1) <$TB_SID.tip> 파일에 아래 내용 입력\nAUDIT_TRAIL=DB_EXTENDED\n감사 기록에 포함되는 기본 정보 및 사용자가 실행한 SQL 문장까지 저장\n※ 다음 정적뷰를 통해 감사 기록 조회가 가능\nDBA_AUDIT_TRAIL (SELECT * FROM dba_audit_trail;)\nUSER_AUDIT_TRAIL (SELECT * FROM user_audit_trail;)\n또는\nAUDIT_TRAIL=OS\nAUDIT_FILE_DEST=/home/Tibero/audit/audit_trail.log\nAUDIT_FILE_SIZE=10M\n위와 같이 설정하면 \"/home/Tibero/audit/audit_trail.log\"에 최대 10MB의 크기로 감사 기록이 저장됨 \n※ 감사 파일이 있는 디렉터리에는 일반 사용자는 접근할 수 없도록 설정",
       "guide_page": 646,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "oracle"
+      ],
       "deviation": null
     },
     {
@@ -499,9 +531,11 @@
       "cases": "l Oracle DB\n Step 1) DBA Role 설정 확인(SQL*Plus)\nSQL> SELECT granted_role FROM dba_role_privs WHERE grantee = 'PUBLIC';\n Step 2) PUBLIC 그룹의 권한 취소(SQL*Plus)\nSQL> REVOKE [Role name] FROM PUBLIC;\nl Altibase\n Step 1) 사용자 정보를 조회하여 Object 권한, 시스템 권한이 Public 또는 Guest에게 부여되어 있는지 확인\nSELECT * FROM system_.sys_users_;\nSELECT * FROM system_.sys_grant_object_;\nSELECT * FROM system_.sys_grant_system_;\nGRANTOR_ID : 권한을 부여한 사용자의 식별자로, SYS_USERS_ 메타테이블의 한 USER_ID 값과 동일\nGRANTEE_ID : 권한을 부여받은 사용자의 식별자로, SYS_USERS_ 메타테이블의 한 USER_ID 값과 \n\n\n동일함. 단, Object 권한을 Public에게 부여한 경우, SYS_USERS_메타테이블에 존재하지 않는 \nUSER_ID 값인 \"0\"이 칼럼에 나타남\n Step 2) 불필요 권한 회수\nREVOKE <권한> ON <Object> FROM [계정명];\nl Tibero\n Step 1) 사용자 정보를 조회하여 Role 부여가 적절한지 확인\nSELECT * FROM dba_role_privs;\nSELECT * FROM user_role_privs;\n Step 2) 불필요 권한 회수\nREVOKE <권한> FROM [계정명];",
       "guide_page": 648,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "oracle"
+      ],
       "deviation": null
     },
     {
@@ -525,9 +559,11 @@
       "cases": "l Oracle DB\n Step 1) OS_ROLES 확인\nSQL> SHOW PARAMETER os_roles;\nSQL> SELECT value FROM v$parameter WHERE name = 'os_roles';\nOracle_HomeDirectory/admin/pfile/init.ora에서 OS_ROLE = FALSE 추가 및 인스턴스 재시작\n\n\n Step 2) REMOTE_OS_AUTHENTICATION 확인\nSQL> SHOW PARAMETER remote_os_authent;\nSQL> SELECT value FROM v$parameter WHERE name = 'remote_os_authent';\nOracle_HomeDirectory/admin/pfile/init.ora에서 remote_os_authent = FALSE 추가 및 인스턴스 재시작\n Step 3) REMOTE_OS_ROLES 확인\nSQL> SHOW PARAMETER remote_os_roles;\nSQL> SELECT value FROM v$parameter WHERE name = 'remote_os_roles';\nOracle_HomeDirectory/admin/pfile/init.ora에서 remote_os_roles = FALSE 추가 및 인스턴스 재시작\n※ 버전 9i 이후 버전은 SPFILE을 재생성해야 하므로, DBMS를 Shutdown시키면 spfile이 재생성 됨",
       "guide_page": 650,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "oracle"
+      ],
       "deviation": null
     },
     {
@@ -554,9 +590,10 @@
       "automation": "manual",
       "fix": "manual",
       "envs": [
-        "postgres"
+        "postgres",
+        "oracle"
       ],
-      "deviation": null
+      "deviation": "Oracle 대상: D-11과 동일한 이유로 정적 예외 목록 대신 dba_users.oracle_maintained='N' 조건을 사용(Oracle 내장 스키마 오탐 방지, Docker 실기 테스트로 확인)."
     },
     {
       "code": "D-21",
@@ -579,12 +616,13 @@
       "cases": "l Oracle DB, Tibero\n Step 1) 설정 확인(SQL*Plus)\nSQL> SELECT grantee || ':' || owner || '.' || table_name FROM dba_tab_privs WHERE grantable = 'YES' \nand owner NOT IN ('SYS', 'MDSYS', 'ORDPLUGINS', 'ORDSYS', 'SYSTEM', 'WMSYS', 'SDB', \n'LBACSYS') AND grantee NOT IN (SELECT grantee FROM dba_role_privs WHERE granted_role = \n'DBA') ORDER BY grantee; (계정이 나오는 경우 취약)\n Step 2) 권한 회수, 재부여(SQL*Plus)\nSQL> REVOKE role FROM user;\nl\nl MySQL\n Step 1) 설정 확인\n\n\nSELECT user, grant_priv FROM mysql.user; (계정이 나오는 경우 취약)\n Step 2) 권한 회수\nREVOKE <권한> ON <대상> FROM [계정명];\nl Altibase\n Step 1) 사용자 계정을 조회하여 일반 사용자에게 with grant option이 부여(1)되어 있는 경우 취약\nSELECT * FROM system_.sys_users_;\nSELECT * FROM system_.sys_grant_object_;\nSELECT * FROM system_.sys_privileges_;\n Step 2) 권한 회수\nREVOKE <권한> ON <Object> FROM [계정명];",
       "guide_page": 654,
       "guide_version": "2026",
-      "automation": "partial",
+      "automation": "auto",
       "fix": "manual",
       "envs": [
-        "mysql"
+        "mysql",
+        "oracle"
       ],
-      "deviation": null
+      "deviation": "Oracle 대상: D-11과 동일한 이유로 owner 정적 예외 목록 대신 dba_users.oracle_maintained='N' 조건을 사용."
     },
     {
       "code": "D-22",
@@ -607,9 +645,11 @@
       "cases": "l Oracle DB\n Step 1) init.ora 설정 파일에 RESOURCE_LIMIT = TRUE 라인 추가\n(Oracle_HomeDirectory/admin/pfile/init.ora)\n#vi /Oracle_HomeDirectory/admin/pfile/init.ora\n Step 2) SQL*Plus에서 명령어로 설정 추가 및 확인\nSQL> ALTER SYSTEM SET RESOURCE_LIMIT = TRUE;\nSQL> SHOW PARAMETER RESOURCE_LIMIT;",
       "guide_page": 656,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "oracle"
+      ],
       "deviation": null
     },
     {
@@ -633,9 +673,11 @@
       "cases": "l MSSQL\n    [ xp_cmdshell 사용이 불필요한 경우ㅣ\n Step 1) SQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반\n Step 2) XPCmdShellEnabled 값 확인\n2.1) Microsoft SQL Server Management Studio에서 확인\n[ 개체 탐색기를 통한 프로시저 확인 ]\n2.2) 퀴리문으로 확인\n\n\nSELECT name, value FROM sys.configurations WHERE name = 'xp_cmdshell’;\n※ value가 1이면 활성화, 0이면 비활성화 되어 있는 상태\n Step 3) XPCmdShellEnabled 값을 false로 설정\n3.1) Microsoft SQL Server Management Studio에서 설정\nSQL Server Management Studio > 개체 탐색기 > 컴퓨터 이름 우클릭 > 패싯 > 일반\n3.2) 퀴리문으로 설정\nEXEC sp_configure 'show advanced options', 1; GO\nRECONFIGURE; GO\nEXEC sp_configure 'xp_cmdshell', 1; GO\nRECONFIGURE GO\n    [ xp_cmdshell 사용이 필요한 경우ㅣ\n Step 1) xp_cmdshell의 public 실행 권한 제거\n1.1) Microsoft SQL Server Management Studio에서 제거\nSQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 데이터베이스 > 시스템 데이터베이스 > \nmaster > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저 > sys.xp_cmdshell > 마우스 \n우클릭 > 속성 > 사용권한에서 public에 대한 사용권한에 ‘실행’ 권한 제거\n\n\n1.2) 퀴리문으로 public에 대한 실행 권한 제거\nREVOKE EXECUTE ON master.dbo.xp_cmdshell TO public\n Step 1) 서비스 계정(애플리케이션 연동 등)의 sysadmin 권한 제거\n2.1) Microsoft SQL Server Management Studio에서 제거\nSQL Server Management Studio > 개체 탐색기 > [컴퓨터 이름] > 보안 > 로그인 > [각 계정 선택] > 마우스 \n우클릭 > 속성 > 서버 역할에서 sysadmin 권한 제거\n\n\n2.2) 퀴리문으로 서비스 계정의 sysadmin 권한 제거\n   - sysadmin 권한이 부여된 계정 확인\nEXEC sp_helpsrvrolemember 'sysadmin’\n   - sysadmin 권한이 부여된 계정에 대해 권한 제거\nEXEC master..sp_dropsrvrolemember @loginame = N'<계정명>', @rolename = N'sysadmin'\n※",
       "guide_page": 657,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mssql"
+      ],
       "deviation": null
     },
     {
@@ -659,9 +701,11 @@
       "cases": "l MSSQL\n Step 1) SQL Server Management Studio > 개체 탐색기 > 데이터베이스\n Step 2) 시스템 데이터베이스 > master > 프로그래밍 기능 > 확장 저장 프로시저 > 시스템 확장 저장 프로시저\n[ 시스템 확장 저장 프로시저 확인 ]\n\n\n Step 3) 각 시스템 확장 저장 프로시저 제한 > 마우스 우클릭 > 속성\n[ 시스템 확장 저장 프로시저 속성 확인 ]\n Step 4) 사용 권한 > public 실행 권한 제거(체크 해제)\n[ public 실행 권한 제거 ]\n시스템 확장 저장 프로시저 제한\nsys.xp_readdmultistring\nsys.xp_redeletekey\nsys.xp_regdeletevalue\nsys.xp_regenumvalues\nsys.xp_regread\nsys.xp_regremovemultistring\nsys.xp_regwrite",
       "guide_page": 661,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mssql"
+      ],
       "deviation": null
     },
     {
@@ -689,7 +733,9 @@
       "fix": "manual",
       "envs": [
         "mysql",
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     },
@@ -717,7 +763,9 @@
       "automation": "partial",
       "fix": "manual",
       "envs": [
-        "postgres"
+        "postgres",
+        "oracle",
+        "mssql"
       ],
       "deviation": null
     }

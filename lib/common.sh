@@ -447,6 +447,17 @@ proc_uid() {
     awk '/^Uid:/{print $2; exit}' "/proc/$1/status" 2>/dev/null
 }
 
+# proc_pids_by_comm_glob <패턴> -> 부분 일치(예: "*pmon*")하는 PID 목록. Oracle 백그라운드
+# 프로세스(ora_pmon_<SID> 등)처럼 이름에 인스턴스 SID가 섞여 정확 일치를 쓸 수 없는 경우 사용.
+proc_pids_by_comm_glob() {
+    _pattern=$1
+    for _p in /proc/[0-9]*; do
+        [ -r "$_p/comm" ] || continue
+        _c=$(cat "$_p/comm" 2>/dev/null)
+        case "$_c" in $_pattern) echo "${_p#/proc/}" ;; esac
+    done
+}
+
 # ---- XML 주석 제거 (Tomcat/JEUS 등 XML 설정 파일 파싱 전 필수) ----------------
 # Tomcat 기본 tomcat-users.xml 은 예시 관리자 계정이 <!-- ... --> 주석으로 감싸진 채 배포되며,
 # grep 만으로 검색하면 "파일에 텍스트가 있다"와 "실제로 활성화된 설정이다"를 구분하지 못해
@@ -559,6 +570,60 @@ postgres_hba_path() {
     for _f in /var/lib/postgresql/data/pg_hba.conf /var/lib/pgsql/data/pg_hba.conf \
               /etc/postgresql/*/main/pg_hba.conf; do
         [ -f "$_f" ] && { printf '%s' "$_f"; return; }
+    done
+}
+
+# ---- DBMS 공통: Oracle 연결/쿼리 --------------------------------------------
+# 비밀번호는 sqlplus 인자(argv)로 절대 넘기지 않고, 접속 문자열을 표준입력(파이프)으로만
+# 전달한다(ps 목록 노출 방지). DB_USER/DB_PASSWORD 미지정 시 OS 인증("/ as sysdba")으로 접속한다.
+oracle_connect_line() {
+    if [ -n "${DB_USER:-}" ] && [ -n "${DB_PASSWORD:-}" ]; then
+        _target=""
+        [ -n "${DB_HOST:-}" ] && _target="@//${DB_HOST}:${DB_PORT:-1521}/${DB_NAME:-FREE}"
+        printf 'connect %s/%s%s\n' "$DB_USER" "$DB_PASSWORD" "$_target"
+    else
+        printf 'connect / as sysdba\n'
+    fi
+}
+
+# oracle_query <sql>  -- 결과를 stdout 에 출력, 실패 시(SQL 오류/접속 실패) 0이 아닌 값 반환
+oracle_query() {
+    _out=$(
+        { oracle_connect_line
+          printf 'whenever sqlerror exit sql.sqlcode\n'
+          printf 'whenever oserror exit failure\n'
+          printf 'set heading off feedback off pagesize 0 verify off linesize 500 trimspool on\n'
+          printf 'set colsep |\n'
+          printf '%s\n' "$1"
+          printf 'exit\n'
+        } | sqlplus -s /nolog 2>"${DB_ERR_FILE:-/dev/null}"
+    )
+    _rc=$?
+    printf '%s\n' "$_out"
+    return $_rc
+}
+
+oracle_home() {
+    if [ -n "${ORACLE_HOME:-}" ] && [ -d "$ORACLE_HOME" ]; then printf '%s' "$ORACLE_HOME"; return; fi
+    for _d in /opt/oracle/product/*/dbhome* /opt/oracle/product/*/db* \
+              /u01/app/oracle/product/*/dbhome_1 /u01/app/oracle/product/*/db_1; do
+        [ -d "$_d" ] && { printf '%s' "$_d"; return; }
+    done
+}
+
+oracle_sqlnet_ora() {
+    _h=$(oracle_home)
+    [ -n "$_h" ] && [ -f "$_h/network/admin/sqlnet.ora" ] && { printf '%s' "$_h/network/admin/sqlnet.ora"; return; }
+    for _f in "${TNS_ADMIN:-}/sqlnet.ora" /etc/oracle/sqlnet.ora; do
+        [ -n "$_f" ] && [ -f "$_f" ] && { printf '%s' "$_f"; return; }
+    done
+}
+
+oracle_listener_ora() {
+    _h=$(oracle_home)
+    [ -n "$_h" ] && [ -f "$_h/network/admin/listener.ora" ] && { printf '%s' "$_h/network/admin/listener.ora"; return; }
+    for _f in "${TNS_ADMIN:-}/listener.ora" /etc/oracle/listener.ora; do
+        [ -n "$_f" ] && [ -f "$_f" ] && { printf '%s' "$_f"; return; }
     done
 }
 

@@ -5,6 +5,47 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-28
+### Added
+- `08_dbms` DBMS 26개 항목에 Oracle(22항목, `checks/oracle/D-xx.sh`)과 MSSQL(14항목,
+  `checks/mssql/D-xx.ps1` + 신규 `08_dbms/run.ps1`)을 추가 — DBMS 4대 엔진(MySQL/PostgreSQL/
+  Oracle/MSSQL) 우선 구현이 완료됨.
+- `lib/common.sh`: Oracle 연결/쿼리 헬퍼(`oracle_query`, `oracle_home`, `oracle_sqlnet_ora`,
+  `oracle_listener_ora`), 부분 일치 프로세스 조회(`proc_pids_by_comm_glob`, Oracle
+  `ora_pmon_<SID>`처럼 이름에 SID가 섞인 프로세스용). 비밀번호는 sqlplus 인자로 넘기지 않고
+  접속 문자열을 표준입력(파이프)으로만 전달한다.
+- `lib/Common.psm1`: MSSQL 연결/쿼리 헬퍼 `Invoke-MssqlQuery`(sqlcmd 기반, `-C` 로 자체 서명
+  인증서 신뢰). 비밀번호는 `SQLCMDPASSWORD` 환경변수로만 전달.
+- `08_dbms/run.ps1`: 다른 카테고리와 동일한 CLI(`-l/-i/-g/-o/-h`) + MSSQL 전용 접속 옵션
+  (`-SqlHost/-SqlPort/-SqlUser/-SqlDb`). MSSQL은 단일 엔진이라 `-e` 는 생략.
+- **Oracle: Docker 컨테이너(gvenzl/oracle-free 23ai/26ai 비공식 이미지)에서 실제 진단 실행으로
+  검증**, 오류 0건. **MSSQL: 공식 Linux 이미지(mcr.microsoft.com/mssql/server:2022-latest) +
+  PowerShell 컨테이너(mcr.microsoft.com/powershell, mssql-tools18 apt 설치)로 원격 접속 검증**,
+  DB 쿼리 기반 항목 오류 0건 — D-10(Windows 방화벽 조회)만 Linux 컨테이너에서 테스트 불가능해
+  실제 Windows 11 호스트에서 별도로 로직 검증함(D-13 ODBC 조회도 동일).
+
+### Fixed
+- **Oracle 내장 롤 대량 오탐(D-11/D-20/D-21)**: 가이드 원문이 제시한 예외 목록은 특정 시점(구버전)
+  Oracle의 내장 롤을 정적으로 나열한 것이라, 19c/21c/23c 이후 추가된 수십 개의 신규 내장 롤
+  (GSMADMIN_INTERNAL, XDB, AUDIT_ADMIN 등)을 "인가되지 않은 일반 사용자"로 오판하는 버그를
+  Docker(gvenzl/oracle-free) 실기 테스트로 발견. `dba_users.oracle_maintained='N'` 조건으로
+  대체해 Oracle 버전에 관계없이 동작하도록 수정.
+- **PowerShell `$Script:` 스코프가 파일 경계를 넘지 않는 버그**: `run.ps1`에서 설정한
+  `$Script:DbErrFile`을 `lib/Common.psm1`(모듈 스코프)과 `checks/mssql/*.ps1`(각 체크 파일
+  스코프)이 서로 다른 변수로 인식해, DB 연결 실패 시 실제 오류 메시지 대신 항상 빈 문자열만
+  표시되던 버그를 발견. `$Global:` 스코프로 전환해 수정(PowerShell 5.1/7 공통 이슈로, 여러
+  스크립트 파일에 걸쳐 상태를 공유해야 하는 모든 향후 카테고리에 적용되는 교훈).
+- **MSSQL `USE master;` 결과 오염(D-11/D-23/D-24)**: `sqlcmd`가 `USE` 실행 시 "Changed database
+  context to 'master'." 안내 메시지를 결과 스트림에 섞어 출력해, 실제 조회 결과가 0건이어도
+  항상 "결과 있음(취약)"으로 오판되던 버그를 Docker 실기 테스트로 발견. `master.sys.*` 3-part
+  naming으로 `USE` 없이 조회하도록 수정.
+- **MSSQL 기본 제공 호환 테이블 오탐(D-11)**: `spt_fallback_db`/`spt_values`/`spt_monitor` 등은
+  Microsoft가 기본으로 PUBLIC에 SELECT를 부여해 배포하는 레거시 호환용 테이블이라 오탐 대상에서
+  제외.
+- **`$env:TEMP`가 Linux(pwsh 7)에서 비어 있는 문제**: MSSQL이 Linux 호스트에서도 동작할 수 있어
+  `08_dbms/run.ps1`이 Windows 전용 `$env:TEMP` 대신 `[System.IO.Path]::GetTempPath()`(양쪽
+  플랫폼 동작)를 쓰도록 수정.
+
 ## [0.6.0] - 2026-09-28
 ### Added
 - `08_dbms` DBMS 26개 항목(D-01~D-26) 중 MySQL/PostgreSQL 대상 진단 로직 구현, POSIX sh —
