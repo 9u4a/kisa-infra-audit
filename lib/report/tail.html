@@ -1,0 +1,152 @@
+</script>
+
+<script>
+(function(){
+  "use strict";
+  var STATUS_ORDER = {VULN:0, MANUAL:1, ERROR:2, NA:3, GOOD:4};
+  var SEV_ORDER = {"상":0, "중":1, "하":2};
+  var STATUS_LABEL = {VULN:"취약", MANUAL:"수동점검", ERROR:"오류", NA:"해당없음", GOOD:"양호"};
+
+  function readJson(id){
+    var el = document.getElementById(id);
+    var txt = el ? el.textContent.trim() : "";
+    if (!txt) return null;
+    try { return JSON.parse(txt); } catch(e){ console.error("JSON parse 실패:", id, e); return null; }
+  }
+
+  var guide = readJson("guide-data");   // { category, prefix, items:[...] }
+  var result = readJson("result-data"); // { tool_version, category, host, env, generated_at, items:[{code,status,detail,evidence}] }
+
+  var guideByCode = {};
+  (guide && guide.items ? guide.items : []).forEach(function(it){ guideByCode[it.code] = it; });
+
+  var rows = (result && result.items ? result.items : []).map(function(r){
+    var g = guideByCode[r.code] || {};
+    return {
+      code: r.code,
+      status: r.status || "MANUAL",
+      detail: r.detail || "",
+      evidence: r.evidence || "",
+      title: g.title || r.code,
+      severity: g.severity || "-",
+      group_no: g.group_no || 0,
+      group_name: g.group_name || "",
+      criteria_good: (g.criteria && g.criteria.good) || "",
+      criteria_vuln: (g.criteria && g.criteria.vuln) || "",
+      remediation: g.remediation || "",
+      guide_page: g.guide_page || ""
+    };
+  });
+
+  rows.sort(function(a,b){
+    var sa = STATUS_ORDER[a.status] != null ? STATUS_ORDER[a.status] : 9;
+    var sb = STATUS_ORDER[b.status] != null ? STATUS_ORDER[b.status] : 9;
+    if (sa !== sb) return sa - sb;
+    var va = SEV_ORDER[a.severity] != null ? SEV_ORDER[a.severity] : 9;
+    var vb = SEV_ORDER[b.severity] != null ? SEV_ORDER[b.severity] : 9;
+    if (va !== vb) return va - vb;
+    return a.code.localeCompare(b.code, "ko");
+  });
+
+  // ---- 헤더 -------------------------------------------------------------
+  document.getElementById("hdr-title").textContent =
+    (result && result.category ? result.category : (guide && guide.category) || "") + " 진단 보고서";
+  var metaParts = [];
+  if (result) {
+    metaParts.push("호스트: " + result.host);
+    metaParts.push("환경: " + result.env);
+    metaParts.push("생성: " + result.generated_at);
+    metaParts.push("도구 v" + result.tool_version + " / 가이드 " + result.guide_version + "판");
+  }
+  document.getElementById("hdr-meta").textContent = metaParts.join("  ·  ");
+
+  // ---- 요약 카드 ----------------------------------------------------------
+  var counts = {VULN:0, MANUAL:0, ERROR:0, NA:0, GOOD:0};
+  rows.forEach(function(r){ if (counts[r.status] != null) counts[r.status]++; });
+  var total = rows.length;
+  var judged = total - counts.NA; // N/A 제외 기준 준수율
+  var complyBase = counts.VULN + counts.GOOD; // 자동판정된 항목 기준 준수율(단순 참고치)
+  var complyRate = complyBase ? Math.round((counts.GOOD / complyBase) * 100) : 0;
+
+  var cardsEl = document.getElementById("cards");
+  var cardDefs = [
+    ["전체", total, ""],
+    ["취약", counts.VULN, "vuln"],
+    ["수동점검", counts.MANUAL, "manual"],
+    ["오류", counts.ERROR, "error"],
+    ["해당없음", counts.NA, "na"],
+    ["양호", counts.GOOD, "good"]
+  ];
+  cardsEl.innerHTML = cardDefs.map(function(c){
+    return '<div class="card '+c[2]+'"><div class="num">'+c[1]+'</div><div class="lbl">'+c[0]+'</div></div>';
+  }).join("") + '<div class="card"><div class="num">'+complyRate+'%</div><div class="lbl">준수율(취약/양호 중)</div></div>';
+
+  var barEl = document.getElementById("dist-bar");
+  var colorVar = {VULN:"var(--vuln)", MANUAL:"var(--manual)", ERROR:"var(--error)", NA:"var(--na)", GOOD:"var(--good)"};
+  barEl.innerHTML = ["VULN","MANUAL","ERROR","NA","GOOD"].map(function(s){
+    var pct = total ? (counts[s] / total * 100) : 0;
+    return '<span style="width:'+pct+'%;background:'+colorVar[s]+'"></span>';
+  }).join("");
+
+  // ---- 테이블 렌더 --------------------------------------------------------
+  var tbody = document.getElementById("tbody");
+  var fStatus = document.getElementById("f-status");
+  var fSeverity = document.getElementById("f-severity");
+  var fText = document.getElementById("f-text");
+  var fCount = document.getElementById("f-count");
+
+  function esc(s){
+    return String(s == null ? "" : s).replace(/[&<>]/g, function(c){
+      return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
+    });
+  }
+
+  function render(){
+    var st = fStatus.value, sv = fSeverity.value, tx = fText.value.trim().toLowerCase();
+    var filtered = rows.filter(function(r){
+      if (st && r.status !== st) return false;
+      if (sv && r.severity !== sv) return false;
+      if (tx && (r.code + " " + r.title).toLowerCase().indexOf(tx) === -1) return false;
+      return true;
+    });
+    fCount.textContent = filtered.length + " / " + total + "건 표시";
+
+    var html = "";
+    filtered.forEach(function(r, idx){
+      var rid = "d" + idx;
+      html += '<tr class="item-row" data-target="'+rid+'">'
+        + '<td class="code">'+esc(r.code)+'</td>'
+        + '<td class="sev">'+esc(r.severity)+'</td>'
+        + '<td>'+esc(r.title)+'</td>'
+        + '<td class="sev">'+esc(r.group_no)+'. '+esc(r.group_name)+'</td>'
+        + '<td><span class="badge '+esc(r.status)+'">'+esc(STATUS_LABEL[r.status] || r.status)+'</span></td>'
+        + '</tr>';
+      html += '<tr class="detail-row" id="'+rid+'" style="display:none"><td colspan="5"><div class="detail">'
+        + '<h4>판정 근거</h4><div>'+(esc(r.detail) || '-')+'</div>'
+        + (r.evidence ? '<h4>증적</h4><pre>'+esc(r.evidence)+'</pre>' : '')
+        + '<h4>판단 기준 (가이드 원문)</h4><div>양호: '+esc(r.criteria_good)+'</div><div>취약: '+esc(r.criteria_vuln)+'</div>'
+        + '<h4>조치 방법 (가이드 원문)</h4><div>'+esc(r.remediation)+'</div>'
+        + (r.guide_page ? '<h4>가이드 페이지</h4><div>p.'+esc(r.guide_page)+'</div>' : '')
+        + '</div></td></tr>';
+    });
+    tbody.innerHTML = html || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:30px;">표시할 항목이 없습니다.</td></tr>';
+
+    Array.prototype.forEach.call(tbody.querySelectorAll(".item-row"), function(tr){
+      tr.addEventListener("click", function(){
+        var target = document.getElementById(tr.getAttribute("data-target"));
+        if (target) target.style.display = (target.style.display === "none") ? "table-row" : "none";
+      });
+    });
+  }
+
+  fStatus.addEventListener("change", render);
+  fSeverity.addEventListener("change", render);
+  fText.addEventListener("input", render);
+  render();
+
+  document.getElementById("footer").textContent =
+    "본 보고서는 진단 시점의 스냅샷이며 대상 설정을 변경하지 않습니다. 조치는 별도 fix 스크립트를 통해 수행하세요.";
+})();
+</script>
+</body>
+</html>

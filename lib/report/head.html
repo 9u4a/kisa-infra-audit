@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>주요정보통신기반시설 진단 보고서</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --text:#1a1d23; --muted:#6b7280; --border:#e3e5e9;
+    --vuln:#dc2626; --manual:#d97706; --error:#c026d3; --na:#9ca3af; --good:#16a34a;
+    --accent:#2563eb;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14161a; --panel:#1c1f26; --text:#e8eaed; --muted:#9aa1ab; --border:#2c313a;
+      --vuln:#f87171; --manual:#fbbf24; --error:#e879f9; --na:#6b7280; --good:#4ade80; --accent:#60a5fa;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14161a; --panel:#1c1f26; --text:#e8eaed; --muted:#9aa1ab; --border:#2c313a;
+    --vuln:#f87171; --manual:#fbbf24; --error:#e879f9; --na:#6b7280; --good:#4ade80; --accent:#60a5fa;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Malgun Gothic,sans-serif;font-size:14px;}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px;}
+  header.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:16px;}
+  header.top h1{font-size:20px;margin:0;}
+  .meta{color:var(--muted);font-size:12.5px;line-height:1.6;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:16px 0;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
+  .card .num{font-size:24px;font-weight:700;}
+  .card .lbl{color:var(--muted);font-size:12px;margin-top:2px;}
+  .card.vuln .num{color:var(--vuln);} .card.manual .num{color:var(--manual);}
+  .card.error .num{color:var(--error);} .card.na .num{color:var(--na);} .card.good .num{color:var(--good);}
+  .bar{display:flex;height:10px;border-radius:6px;overflow:hidden;margin-top:10px;border:1px solid var(--border);}
+  .bar span{display:block;height:100%;}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:18px 0 10px;}
+  .toolbar select,.toolbar input{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;}
+  .toolbar .spacer{flex:1;}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  thead th{text-align:left;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding:10px 12px;border-bottom:1px solid var(--border);}
+  tbody td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr.item-row{cursor:pointer;}
+  tbody tr.item-row:hover{background:color-mix(in srgb, var(--accent) 6%, transparent);}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;color:#fff;}
+  .badge.VULN{background:var(--vuln);} .badge.MANUAL{background:var(--manual);}
+  .badge.ERROR{background:var(--error);} .badge.NA{background:var(--na);} .badge.GOOD{background:var(--good);}
+  .sev{font-size:12px;color:var(--muted);}
+  .code{font-family:ui-monospace,Consolas,monospace;font-weight:600;}
+  tr.detail-row td{background:color-mix(in srgb, var(--accent) 4%, var(--panel));padding:0;}
+  .detail{padding:14px 18px 18px 40px;font-size:13px;line-height:1.7;}
+  .detail h4{margin:10px 0 4px;font-size:12.5px;color:var(--muted);text-transform:uppercase;}
+  .detail pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin:4px 0;}
+  footer{color:var(--muted);font-size:12px;margin-top:24px;text-align:center;}
+  @media print{ .toolbar{display:none;} body{background:#fff;} .card,table{border-color:#ccc;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div>
+    <h1 id="hdr-title">주요정보통신기반시설 진단 보고서</h1>
+    <div class="meta" id="hdr-meta"></div>
+  </div>
+</header>
+
+<div class="cards" id="cards"></div>
+<div class="bar" id="dist-bar"></div>
+
+<div class="toolbar">
+  <select id="f-status">
+    <option value="">전체 상태</option>
+    <option value="VULN">취약</option>
+    <option value="MANUAL">수동점검</option>
+    <option value="ERROR">오류</option>
+    <option value="NA">해당없음</option>
+    <option value="GOOD">양호</option>
+  </select>
+  <select id="f-severity">
+    <option value="">전체 중요도</option>
+    <option value="상">상</option>
+    <option value="중">중</option>
+    <option value="하">하</option>
+  </select>
+  <input id="f-text" type="text" placeholder="코드/항목명 검색">
+  <span class="spacer"></span>
+  <span class="meta" id="f-count"></span>
+</div>
+
+<table>
+  <thead><tr><th style="width:70px">코드</th><th style="width:46px">중요도</th><th>항목명</th><th style="width:100px">분류</th><th style="width:90px">상태</th></tr></thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<footer id="footer"></footer>
+</div>
+
+<script id="guide-data" type="application/json">

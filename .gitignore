@@ -1,0 +1,25 @@
+# 가이드 원본 PDF (저작권 문제로 커밋하지 않음. guide.json/guide.md 정리본만 포함)
+*.pdf
+
+# 실행 결과물
+/output/
+**/output/
+
+# 로그
+*.log
+
+# Claude Code 관련 파일 (로컬 작업용, 공개 저장소에는 포함하지 않음)
+.claude/
+CLAUDE.md
+.githooks/
+
+# OS/에디터
+.DS_Store
+Thumbs.db
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
