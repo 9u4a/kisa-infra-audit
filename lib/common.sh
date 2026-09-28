@@ -331,6 +331,144 @@ systemd 유닛 활성(active): $_u"
     fi
 }
 
+# ---- 웹 엔진 자동 탐지 및 설정 경로 조회 (03_web 전용) -------------------------
+# 여러 엔진이 동시에 설치되어 있을 수 있으므로 공백 구분 목록으로 반환한다.
+detect_web_engines() {
+    WEB_ENGINES=""
+    { command -v httpd >/dev/null 2>&1 || command -v apache2 >/dev/null 2>&1 || \
+      [ -x /usr/local/apache2/bin/httpd ]; } && WEB_ENGINES="$WEB_ENGINES apache"
+    { command -v nginx >/dev/null 2>&1 || pgrep -x nginx >/dev/null 2>&1; } && \
+      WEB_ENGINES="$WEB_ENGINES nginx"
+    { [ -n "${CATALINA_HOME:-}" ] || pgrep -f catalina >/dev/null 2>&1 || \
+      [ -x /usr/local/tomcat/bin/catalina.sh ]; } && WEB_ENGINES="$WEB_ENGINES tomcat"
+    pgrep -f jeus >/dev/null 2>&1 && WEB_ENGINES="$WEB_ENGINES jeus"
+    pgrep -x wsbtoc >/dev/null 2>&1 && WEB_ENGINES="$WEB_ENGINES webtob"
+    WEB_ENGINES=$(printf '%s' "$WEB_ENGINES" | sed -E 's/^ //')
+}
+
+# apache_conf_path — 대표적인 설치 레이아웃(공식 도커/소스, Debian/Ubuntu, RHEL 계열) 순으로 탐색
+apache_conf_path() {
+    for p in /usr/local/apache2/conf/httpd.conf /etc/apache2/apache2.conf /etc/httpd/conf/httpd.conf; do
+        [ -f "$p" ] && { echo "$p"; return 0; }
+    done
+    return 1
+}
+
+# apache_extra_confs — httpd.conf 가 "실제로" Include/IncludeOptional 하는 파일만 재귀적으로
+# 찾아 반환한다. 공식 Docker 이미지 등은 conf/extra/ 안에 기본적으로 비활성(주석 처리된
+# Include) 샘플 설정이 다수 들어있어, 디렉터리를 통째로 훑으면 실제로는 로드되지 않는 설정
+# (예: httpd-dav.conf 의 "Dav On" 예시)을 활성 설정으로 오판하는 실제 버그가 있었다
+# (03_web WEB-18 을 Docker 컨테이너로 검증하다 발견). 반드시 Include 체인을 따라간다.
+_apache_resolve_includes() {
+    _file=$1; _root=$2
+    [ -f "$_file" ] || return 0
+    grep -E '^[[:space:]]*Include(Optional)?[[:space:]]+' "$_file" 2>/dev/null | \
+    sed -E 's/^[[:space:]]*Include(Optional)?[[:space:]]+"?([^"]*)"?[[:space:]]*$/\2/' | \
+    while IFS= read -r _pat; do
+        case "$_pat" in
+            /*) _resolved="$_pat" ;;
+            *) _resolved="$_root/$_pat" ;;
+        esac
+        for _f in $_resolved; do
+            [ -f "$_f" ] || continue
+            echo "$_f"
+            _apache_resolve_includes "$_f" "$_root"
+        done
+    done
+}
+
+apache_extra_confs() {
+    _main=$(apache_conf_path) || return 1
+    _root=$(grep -E '^[[:space:]]*ServerRoot' "$_main" 2>/dev/null | head -n1 | \
+            sed -E 's/^[[:space:]]*ServerRoot[[:space:]]+"?([^"]*)"?.*/\1/')
+    [ -z "$_root" ] && _root=$(dirname "$(dirname "$_main")")
+    _apache_resolve_includes "$_main" "$_root"
+}
+
+nginx_conf_path() {
+    for p in /etc/nginx/nginx.conf /usr/local/nginx/conf/nginx.conf; do
+        [ -f "$p" ] && { echo "$p"; return 0; }
+    done
+    return 1
+}
+
+# nginx_extra_confs — nginx.conf 가 "실제로" include 하는 파일만 재귀적으로 찾아 반환한다
+# (Apache 와 동일한 이유로 디렉터리 전체를 훑지 않는다).
+_nginx_resolve_includes() {
+    _file=$1
+    [ -f "$_file" ] || return 0
+    grep -E '^[[:space:]]*include[[:space:]]+' "$_file" 2>/dev/null | \
+    sed -E 's/^[[:space:]]*include[[:space:]]+"?([^";]*)"?[[:space:]]*;.*/\1/' | \
+    while IFS= read -r _pat; do
+        for _f in $_pat; do
+            [ -f "$_f" ] || continue
+            echo "$_f"
+            _nginx_resolve_includes "$_f"
+        done
+    done
+}
+
+nginx_extra_confs() {
+    _main=$(nginx_conf_path) || return 1
+    _nginx_resolve_includes "$_main"
+}
+
+# tomcat_home — $CATALINA_HOME 우선, 없으면 대표 설치 경로 탐색
+tomcat_home() {
+    if [ -n "${CATALINA_HOME:-}" ] && [ -d "$CATALINA_HOME" ]; then
+        echo "$CATALINA_HOME"; return 0
+    fi
+    for d in /usr/local/tomcat /opt/tomcat /usr/share/tomcat9 /usr/share/tomcat10 /var/lib/tomcat9; do
+        [ -d "$d" ] && { echo "$d"; return 0; }
+    done
+    return 1
+}
+
+# ---- /proc 기반 프로세스 조회 (pgrep/ps 미설치 환경 대비) ---------------------
+# 최소 구성 컨테이너 이미지(예: 공식 httpd/nginx Docker 이미지)는 procps 패키지가 없어
+# ps/pgrep 자체가 없는 경우가 흔하다. /proc/*/comm, /proc/*/status 는 커널이 직접 제공하므로
+# 항상 사용 가능하며, 이 방식이 더 이식성이 높다 (03_web WEB-09 구현 중 실제로 겪은 문제).
+# proc_pids_by_comm <comm 이름> -> 일치하는 PID 목록(줄바꿈 구분)
+proc_pids_by_comm() {
+    _name=$1
+    for _p in /proc/[0-9]*; do
+        [ -r "$_p/comm" ] || continue
+        _c=$(cat "$_p/comm" 2>/dev/null)
+        [ "$_c" = "$_name" ] && echo "${_p#/proc/}"
+    done
+}
+
+# proc_uid <pid> -> 실제 UID (숫자, root=0)
+proc_uid() {
+    awk '/^Uid:/{print $2; exit}' "/proc/$1/status" 2>/dev/null
+}
+
+# ---- XML 주석 제거 (Tomcat/JEUS 등 XML 설정 파일 파싱 전 필수) ----------------
+# Tomcat 기본 tomcat-users.xml 은 예시 관리자 계정이 <!-- ... --> 주석으로 감싸진 채 배포되며,
+# grep 만으로 검색하면 "파일에 텍스트가 있다"와 "실제로 활성화된 설정이다"를 구분하지 못해
+# 주석 처리된 계정을 활성 계정으로 오판하는 실제 버그가 있었다(03_web WEB-01을 Docker 컨테이너로
+# 검증하다 발견). XML/설정 파일을 grep 하기 전에는 항상 이 함수로 주석을 먼저 제거한다.
+strip_xml_comments() {
+    awk '
+    {
+        line = $0
+        out = ""
+        while (1) {
+            if (incomment) {
+                end = index(line, "-->")
+                if (end > 0) { line = substr(line, end + 3); incomment = 0 }
+                else { line = ""; break }
+            } else {
+                start = index(line, "<!--")
+                if (start > 0) { out = out substr(line, 1, start - 1); line = substr(line, start + 4); incomment = 1 }
+                else { out = out line; line = ""; break }
+            }
+        }
+        print out
+    }
+    ' "$1" 2>/dev/null
+}
+
 # ---- 결과 디렉토리 준비 -----------------------------------------------------
 # prepare_output_dir <base_dir> <category_num>  -> OUT_DIR 에 경로 저장
 prepare_output_dir() {

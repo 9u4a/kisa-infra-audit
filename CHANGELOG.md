@@ -5,6 +5,36 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-28
+### Added
+- `03_web` 웹 서비스 26개 항목(WEB-01~WEB-26) 진단 로직 구현, POSIX sh — Apache/Nginx/Tomcat
+  대상(IIS/JEUS/WebtoB는 이후 로드맵). 여러 엔진이 한 호스트에 동시에 설치되어 있어도
+  `detect_web_engines` 가 전부 감지해 각각 개별 판정 후 종합한다.
+- `03_web/run.sh`: 다른 카테고리와 동일한 CLI(`-l/-i/-g/-e/-o/-h`), `-e` 로 엔진 수동 지정 가능.
+- `lib/common.sh`: 웹 엔진 자동 탐지/설정 경로 탐색 헬퍼(`detect_web_engines`,
+  `apache_conf_path`, `nginx_conf_path`, `tomcat_home`), `Include`/`include` 체인을 재귀적으로
+  따라가 실제 로드되는 설정 파일만 반환하는 `apache_extra_confs`/`nginx_extra_confs`, XML 주석을
+  제거하는 `strip_xml_comments`, `ps`/`pgrep` 없이도 동작하는 `/proc` 기반 프로세스 조회
+  (`proc_pids_by_comm`, `proc_uid`) 추가.
+- **Docker 컨테이너(공식 httpd:2.4/nginx:latest/tomcat:10 이미지)에서 실제 진단 실행으로 검증**
+  — 세 엔진 모두 오류 0건, 판정 결과가 각 이미지의 실제 기본 설정과 정확히 일치함을 확인
+  (예: Apache 기본 디렉터리 리스팅 활성화 VULN, Nginx worker 프로세스 기본 비루트 권한 GOOD 등).
+
+### Fixed
+- **설정 파일 존재 ≠ 설정 적용**: Apache 공식 이미지의 `conf/extra/*.conf` 샘플들이 메인 설정에서
+  주석 처리되어 실제로는 로드되지 않는데도 디렉터리를 통째로 grep 해 활성 설정으로 오판하던
+  버그(WEB-18, WebDAV 오탐)를 `Include` 체인 재귀 추적 방식으로 수정.
+- **XML 주석 미인식**: Tomcat `tomcat-users.xml` 의 기본 예시 관리자 계정이 `<!-- -->` 주석으로
+  감싸져 있는데도 활성 계정으로 오판하던 버그(WEB-01)를 `strip_xml_comments` 도입으로 수정하고,
+  동일 문제가 있던 WEB-02/04/06/10/12/13/15/16/19/22/23 의 Tomcat 분기에도 일괄 적용.
+- **`ps`/`pgrep` 부재 시 무검증을 GOOD으로 오판**: 공식 Apache/Nginx Docker 이미지에 procps가
+  없어 프로세스를 찾지 못했는데도 "위반 없음=GOOD"으로 판정하던 버그(WEB-09)를 `/proc` 직접
+  파싱 방식으로 교체하고, 여전히 프로세스를 찾지 못하면 `MANUAL`로 정직하게 응답하도록 수정.
+- **guide.json CRLF 오염**: Windows에서 Python 기본 텍스트 모드로 `guide.json`/`guide.md` 를 쓰면
+  `\n` 이 `\r\n` 으로 바뀌어, 이 파일을 대상 호스트의 POSIX sh/awk(특히 mawk)로 파싱할 때 각 줄
+  끝에 숨은 `\r` 때문에 필드 값이 깨지는 문제를 Docker 컨테이너 테스트로 발견. `lib/extract_guide.py`
+  의 파일 쓰기에 `newline="\n"` 을 명시해 근본 수정 — 6개 카테고리 guide.json/guide.md 전체 재생성.
+
 ## [0.4.0] - 2026-09-28
 ### Added
 - `07_pc` PC(Windows 10/11) 18개 항목(PC-01~PC-18) 진단 로직 전체 구현, PowerShell 5.1.

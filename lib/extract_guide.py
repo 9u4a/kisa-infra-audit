@@ -298,6 +298,9 @@ def main():
                 if not val:
                     missing_fields += 1
 
+        # newline="\n" 필수: Windows 에서 기본 텍스트 모드로 쓰면 \n 이 \r\n 으로 변환되어,
+        # 대상 호스트(Unix/컨테이너)의 POSIX sh/awk 로 guide.json 을 파싱할 때 각 줄 끝에 숨은 \r 이
+        # 남아 필드 값이 깨지는 문제가 실제로 발생했다 (예: mawk 환경에서 title 끝에 잘못된 문자 노출).
         (out_dir / "guide.json").write_text(
             json.dumps({
                 "category": cat["name"],
@@ -307,8 +310,9 @@ def main():
                 "items": items,
             }, ensure_ascii=False, indent=2),
             encoding="utf-8",
+            newline="\n",
         )
-        (out_dir / "guide.md").write_text(render_markdown(cat, items), encoding="utf-8")
+        (out_dir / "guide.md").write_text(render_markdown(cat, items), encoding="utf-8", newline="\n")
 
         status = "OK" if len(items) == cat["expected"] else "MISMATCH"
         report.append((cat["dir"], len(items), cat["expected"], status, missing_fields))
