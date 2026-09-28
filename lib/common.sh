@@ -142,8 +142,12 @@ banner_start() {
 # ---- 결과 수집 (JSON 조립) --------------------------------------------------
 # 항목 하나의 결과를 임시 파일에 NDJSON 한 줄로 append
 # result_add <outfile> <code> <status> <detail> <evidence>
+# JSON 문자열은 raw TAB/CR 같은 제어문자를 이스케이프 없이 포함할 수 없다(JSON 스펙 위반).
+# mysql/psql 의 배치(-B/-A) 출력은 컬럼을 TAB 으로 구분하므로, DBMS 증적(evidence)을 그대로
+# 담으면 생성된 result.json 이 깨진다(Python json.loads 가 "Invalid control character" 로 거부하는
+# 실제 버그를 08_dbms Docker 검증 중 발견). 이스케이프 전에 TAB/CR 을 먼저 정리한다.
 json_escape() {
-    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk '{printf "%s\\n", $0}' | sed '$ s/\\n$//'
+    printf '%s' "$1" | tr '\t\r' '  ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk '{printf "%s\\n", $0}' | sed '$ s/\\n$//'
 }
 
 result_add() {
@@ -467,6 +471,95 @@ strip_xml_comments() {
         print out
     }
     ' "$1" 2>/dev/null
+}
+
+# ---- DBMS 공통: 엔진 탐지 (08_dbms) -----------------------------------------
+# 로컬에서 구동 중인 DBMS 데몬을 /proc 기반으로 탐지한다 (ps/pgrep 미존재 이미지 대응,
+# 03_web 에서 검증된 방식 재사용). 여러 엔진이 동시에 감지되면 DBMS_ENGINE 을 비워
+# run.sh 가 -e 로 명시적으로 선택하도록 안내한다 (DBMS는 엔진별 카탈로그/권한 체계가
+# 완전히 달라 Web처럼 여러 엔진을 한 번에 합산 진단하지 않는다).
+detect_dbms_engine() {
+    _found=""
+    [ -n "$(proc_pids_by_comm mysqld)" ] && _found="$_found mysql"
+    [ -n "$(proc_pids_by_comm postgres)" ] && _found="$_found postgres"
+    _found=$(printf '%s' "$_found" | awk '{$1=$1};1')
+    _count=$(printf '%s\n' "$_found" | wc -w | tr -d ' ')
+    if [ "$_count" -eq 1 ]; then
+        DBMS_ENGINE="$_found"
+    else
+        DBMS_ENGINE=""
+        DBMS_ENGINES_FOUND="$_found"
+    fi
+}
+
+# ---- DBMS 공통: MySQL 연결/쿼리 ---------------------------------------------
+# 접속 정보는 run.sh 가 파싱한 DB_HOST/DB_PORT/DB_USER/DB_SOCKET 환경변수를 사용하고,
+# 비밀번호는 절대 인자로 노출하지 않고 MYSQL_PWD 환경변수로만 전달한다
+# (08_dbms/CLAUDE.md "접속정보 취급" 원칙). DB_ERR_FILE 은 run.sh 가 mktemp 로 준비한다.
+mysql_args() {
+    _a="-N -B --connect-timeout=5"
+    [ -n "${DB_HOST:-}" ] && _a="$_a -h $DB_HOST"
+    [ -n "${DB_PORT:-}" ] && _a="$_a -P $DB_PORT"
+    [ -n "${DB_USER:-}" ] && _a="$_a -u $DB_USER"
+    [ -n "${DB_SOCKET:-}" ] && _a="$_a -S $DB_SOCKET"
+    printf '%s' "$_a"
+}
+
+# mysql_query <sql>  -- 결과를 탭 구분으로 stdout 에 출력, 실패 시 0이 아닌 값 반환
+mysql_query() {
+    if [ -n "${DB_PASSWORD:-}" ]; then
+        # shellcheck disable=SC2046
+        MYSQL_PWD="$DB_PASSWORD" mysql $(mysql_args) -e "$1" 2>"${DB_ERR_FILE:-/dev/null}"
+    else
+        # shellcheck disable=SC2046
+        mysql $(mysql_args) -e "$1" 2>"${DB_ERR_FILE:-/dev/null}"
+    fi
+}
+
+mysql_config_path() {
+    for _f in /etc/my.cnf /etc/mysql/my.cnf /etc/mysql/mysql.conf.d/mysqld.cnf \
+              /etc/mysql/mariadb.conf.d/50-server.cnf; do
+        [ -f "$_f" ] && { printf '%s' "$_f"; return; }
+    done
+}
+
+# ---- DBMS 공통: PostgreSQL 연결/쿼리 ----------------------------------------
+psql_args() {
+    _a="-X -q -t -A --no-psqlrc"
+    [ -n "${DB_HOST:-}" ] && _a="$_a -h $DB_HOST"
+    [ -n "${DB_PORT:-}" ] && _a="$_a -p $DB_PORT"
+    [ -n "${DB_USER:-}" ] && _a="$_a -U $DB_USER"
+    _a="$_a -d ${DB_NAME:-postgres}"
+    printf '%s' "$_a"
+}
+
+# psql_query <sql>  -- 결과를 |로 구분된 행으로 stdout 에 출력, 실패 시 0이 아닌 값 반환
+psql_query() {
+    if [ -n "${DB_PASSWORD:-}" ]; then
+        # shellcheck disable=SC2046
+        PGPASSWORD="$DB_PASSWORD" psql $(psql_args) -c "$1" 2>"${DB_ERR_FILE:-/dev/null}"
+    else
+        # shellcheck disable=SC2046
+        psql $(psql_args) -c "$1" 2>"${DB_ERR_FILE:-/dev/null}"
+    fi
+}
+
+postgres_config_path() {
+    _cf=$(psql_query "SHOW config_file;" 2>/dev/null | tr -d '\r' | awk '{$1=$1};1')
+    if [ -n "$_cf" ] && [ -f "$_cf" ]; then printf '%s' "$_cf"; return; fi
+    for _f in /var/lib/postgresql/data/postgresql.conf /var/lib/pgsql/data/postgresql.conf \
+              /etc/postgresql/*/main/postgresql.conf; do
+        [ -f "$_f" ] && { printf '%s' "$_f"; return; }
+    done
+}
+
+postgres_hba_path() {
+    _hf=$(psql_query "SHOW hba_file;" 2>/dev/null | tr -d '\r' | awk '{$1=$1};1')
+    if [ -n "$_hf" ] && [ -f "$_hf" ]; then printf '%s' "$_hf"; return; fi
+    for _f in /var/lib/postgresql/data/pg_hba.conf /var/lib/pgsql/data/pg_hba.conf \
+              /etc/postgresql/*/main/pg_hba.conf; do
+        [ -f "$_f" ] && { printf '%s' "$_f"; return; }
+    done
 }
 
 # ---- 결과 디렉토리 준비 -----------------------------------------------------

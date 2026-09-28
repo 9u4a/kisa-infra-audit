@@ -5,6 +5,43 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-28
+### Added
+- `08_dbms` DBMS 26개 항목(D-01~D-26) 중 MySQL/PostgreSQL 대상 진단 로직 구현, POSIX sh —
+  각 엔진의 카탈로그/뷰가 완전히 달라 `checks/mysql/D-xx.sh` / `checks/postgres/D-xx.sh` 로
+  엔진별 디렉터리를 분리해 구현(08_dbms/CLAUDE.md 설계 그대로 적용). 가이드 원문의 "대상" 필드에
+  해당 엔진이 없는 항목(D-05/09/12/13/15~19/22~24 등, Oracle/MSSQL/Windows OS 전용)은 두 엔진
+  모두에서 `NA`로 정직하게 응답한다. Oracle/MSSQL/Altibase/Tibero/Cubrid 는 이번 버전 범위
+  밖이며(로드맵 0.6.x 별도 버전), 해당 엔진 선택 시 전 항목 `NA`로 응답한다.
+- `08_dbms/run.sh`: 다른 카테고리와 동일한 CLI(`-l/-i/-g/-e/-o/-h`) + DBMS 전용 접속 옵션
+  (`--host/--port/--user/--db/--socket`). **비밀번호는 CLI 인자로 절대 받지 않고 `DB_PASSWORD`
+  환경변수로만 전달**하며, 내부적으로 `MYSQL_PWD`/`PGPASSWORD` 환경변수로 클라이언트에 넘겨
+  `ps` 목록에 노출되지 않도록 한다(08_dbms/CLAUDE.md "접속정보 취급" 원칙). `-e` 미지정 시
+  `/proc` 기반으로 로컬에 구동 중인 엔진을 자동 탐지하되, 여러 엔진이 동시에 감지되면(Web과 달리
+  DBMS는 엔진별 카탈로그가 완전히 달라 합산 진단이 부적절) `-e` 로 명시적으로 선택하도록 안내한다.
+- `lib/common.sh`: `detect_dbms_engine`, MySQL/PostgreSQL 연결·쿼리 헬퍼(`mysql_query`,
+  `psql_query`, `mysql_config_path`, `postgres_config_path`, `postgres_hba_path`) 추가.
+- **Docker 컨테이너(공식 mysql:8, postgres:16 이미지)에서 실제 진단 실행으로 검증** — 두 엔진
+  모두 오류 0건, 판정 결과가 컨테이너의 실제 상태(mysqld/postgres 프로세스 실행 계정, 설정 파일
+  권한, mysql.user/pg_hba.conf 내용 등)와 정확히 일치함을 `/proc`·`stat`·직접 SQL 조회로 교차
+  검증. 항목별 자동화 수준(auto/partial/manual)은 `guide.json` 의 `automation`/`envs` 필드에
+  반영했다(재추출 시에도 `load_existing_tracking` 이 보존함을 재확인).
+
+### Fixed
+- **JSON 제어문자 오염**: `mysql -B`/`psql -A` 배치 출력은 컬럼을 TAB(0x09)으로 구분하는데,
+  `lib/common.sh` 의 `json_escape` 가 TAB/CR 같은 제어문자를 이스케이프하지 않아 DBMS 증적
+  (evidence)이 포함된 `result.json` 이 깨지는 버그(Python `json.loads` 가 "Invalid control
+  character" 로 거부)를 Docker 컨테이너 검증 중 발견. 이스케이프 전에 TAB/CR 을 공백으로 정리하도록
+  수정 — 프로젝트 전체(다른 카테고리 포함)에 적용되는 공통 함수라 향후 유사 버그를 원천 차단.
+- **PostgreSQL 내장 role 오탐(D-11)**: `pg_catalog` 권한 조회 시 PostgreSQL이 기본 제공하는
+  predefined role(`pg_read_all_stats` 등, `pg_` 접두사)을 "인가되지 않은 일반 사용자"로 오판하던
+  버그를 Docker 실기 테스트로 발견, `grantee NOT LIKE 'pg\_%'` 조건 추가로 수정.
+
+### Note
+- 목표: 0.6.x 에서 Oracle(sqlplus)/MSSQL(sqlcmd, `run.ps1`)을 추가할 예정 — Oracle은 비공식
+  Docker 이미지, MSSQL은 공식 Linux 이미지로 실기 검증 가능하나 현재 범위 밖으로 명시적으로
+  분리함(사용자 확인 후 결정).
+
 ## [0.5.0] - 2026-09-28
 ### Added
 - `03_web` 웹 서비스 26개 항목(WEB-01~WEB-26) 진단 로직 구현, POSIX sh — Apache/Nginx/Tomcat

@@ -5,9 +5,9 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 가능한 항목은 자동 조치(fix)까지 지원합니다.
 
 > ⚠️ 이 저장소는 **개발 진행 중**(SemVer 0.x)입니다. 현재는 Unix(67항목, Linux 대상), Windows
-> Server(64항목), Web(26항목, Apache/Nginx/Tomcat), PC(18항목, Windows 10/11) 카테고리가 실제
-> 진단 로직으로 구현되어 있고, 나머지 카테고리는 가이드 추출·정리본(`guide.json`/`guide.md`)까지만
-> 준비된 상태입니다. 로드맵은 아래를 참고하세요.
+> Server(64항목), Web(26항목, Apache/Nginx/Tomcat), PC(18항목, Windows 10/11), DBMS(26항목 중
+> MySQL/PostgreSQL 대상) 카테고리가 실제 진단 로직으로 구현되어 있고, 나머지 카테고리는 가이드
+> 추출·정리본(`guide.json`/`guide.md`)까지만 준비된 상태입니다. 로드맵은 아래를 참고하세요.
 
 ## 핵심 원칙
 1. **가이드 원문 우선** — 항목명·판단기준·조치방법은 가이드 원문 그대로 사용, 자동화에 꼭 필요한
@@ -27,7 +27,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 구현 (Apache/Nginx/Tomcat) |
 | [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | ⚪ 정리본만 |
 | [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 구현 |
-| [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | ⚪ 정리본만 |
+| [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟡 MySQL/PostgreSQL 구현 (Oracle/MSSQL 등은 이후) |
 
 ## 빠른 시작
 ### Unix (Linux rhel/debian)
@@ -62,6 +62,16 @@ sh 03_web/run.sh -e nginx          # 특정 엔진으로 제한 (apache|nginx|to
 sh 03_web/run.sh -i WEB-01,WEB-04  # 특정 항목만
 ```
 
+### DBMS (MySQL/PostgreSQL)
+```sh
+sh 08_dbms/run.sh -e mysql --host 127.0.0.1 --port 3306 --user root   # DB_PASSWORD 환경변수로 비밀번호 전달
+sh 08_dbms/run.sh -e postgres --host 127.0.0.1 --db postgres --user postgres
+sh 08_dbms/run.sh -e mysql -i D-01,D-08             # 특정 항목만
+sh 08_dbms/run.sh -l                                # 항목 목록 확인 (26항목 전체)
+```
+`-e` 생략 시 로컬에 구동 중인 엔진을 자동 탐지합니다(단, 여러 엔진이 동시에 감지되면 `-e` 로
+명시 지정 필요). 비밀번호는 CLI 인자가 아닌 `DB_PASSWORD` 환경변수로만 전달합니다.
+
 모든 카테고리는 동일한 CLI 옵션 문자(`-l/-i/-g/-o/-h`)를 사용합니다 (`CLAUDE.md` "CLI 옵션 문자
 통일" 참고). 결과는 언어에 관계없이 `output/<host>_<카테고리번호>_<시각>/` 아래 동일한 구조로
 생성됩니다:
@@ -85,7 +95,8 @@ python lib/extract_guide.py --only 01_unix
 | 0.3.0 ✅ | Windows Server 64항목 |
 | 0.4.0 ✅ | PC 18항목 |
 | 0.5.0 ✅ | Web 26항목 (Apache/Nginx/Tomcat; IIS/JEUS/WebtoB 는 이후) |
-| 0.6.0 | DBMS 26항목 |
+| 0.6.0 ✅ | DBMS 26항목 중 MySQL/PostgreSQL (Oracle/MSSQL/Altibase/Tibero/Cubrid 는 이후) |
+| 0.6.x | DBMS: Oracle(sqlplus)/MSSQL(sqlcmd, run.ps1) 추가 |
 | 0.7.0 | Network 38항목 |
 | 0.8.0 | 자동 조치(fix) 공통 인프라 + Unix/Windows/PC |
 | 0.9.0 | Web/DBMS fix, Network 조치 스크립트, 통합 런처, 다중 호스트 보고서 병합 |

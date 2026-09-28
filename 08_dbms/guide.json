@@ -28,9 +28,12 @@
       "cases": "l Oracle DB\n    [기본 계정 비밀번호 변경]\n Step 1) 기본 계정 사용 여부 및 정책 확인\nSQL> SELECT USERNAME, ACCOUNT_STATUS, PROFILE FROM DBA_USERS;\n Step 2) 사용되는 계정의 경우 비밀번호 변경 후 사용\nSQL> ALTER USER <기본 계정명> IDENTIFIED BY <신규 비밀번호>;\n    [기본 계정 잠금 설정]\n Step 1) 활성화 되어 있는 기본 계정 확인\nSQL> SELECT USERNAME, ACCOUNT_STATUS, PROFILE FROM DBA_USERS;\n Step 2) 활성화 되어 있는 기본 계정 잠금 설정\nSQL> SELECT username, account_status, lock_date, expiry_date, profile FROM dba_users WHERE \naccount_status ='OPEN';\nALTER USER <기본 계정명> ACCLUNT LOCK;\n\n\n※ Oracle DB 기본 계정 정보\nl MSSQL\n Step 1) sa 계정 비밀번호 변경\nALTER LOGIN sa WITH PASSWORD = '신규 비밀번호';\n[ sa 계정 비밀번호 변경 ]\n Step 2) 비밀번호 정책 강제 사용 적용\nl MySQL\n Step 1) root 계정 비밀번호 변경\n[mysql 5.7]\nmysql> UPDATE user SET authentication_string = PASSWORD('신규 비밀번호') WHERE User = 'root'; \nmysql> flush privileges;\n[mysql 8.0]\nmysql> ALTER USER 'root'@'localhost' IDENTIFIED BY '신규 비밀번호';\nUser\nPassword\nUser\nPassword\nscott\ntiger or tigger\nsystem\nmanager\ndbsnmp\ndbsnmp\nsys\nchangeon_install\ntracesvr\ntrace\noutln\noutln\nordplugins\nordplugins\nordsys\nordsys\nctxsys\nctxsys\nmdsys\nmdsys\nadams\nwood \nblake\npapr\nclark\nclth\njones\nsteel\nlbacsys\nlbacsys\n-　\n-　\n\n\nmysql> flush privileges;\nl Altibase\n Step 1) 비밀번호 정책 설정 여부 확인\nSELECT * FROM system_.sys_users_;\n Step 2) ALTER USER 명령어로 비밀번호 변경\nAltibase 서버에 sys 유저로 접속 후 ALTER USER 명령어로 비밀번호를 변경\nALTER USER sys IDENTIFIED BY [신규 비밀번호];\n또는\naltipasswd 명령어로 비밀번호 변경(Altibase 서버 온라인 상태에서 수행)\n$ altipasswd\nPrevious Password : old_password\nNew Password : new_password\nRetype New Password : new_password\nl Tibero\n Step 1) sys 계정 비밀번호 변경\nALTER USER sys IDENTIFIED BY [신규 비밀번호];\nl PostgreSQL\n Step 1) postgres 계정으로 접속 계정 변경 및 접속\n$ sudo –u postgres psql\n# ALTER USER postgres WITH PASSWORD '신규 비밀번호';\n# \\q\nl Cubrid\n Step 1) 사용자 계정 비밀번호 사용 여부 확인\ncsql> SELECT name, password FROM db_user;\ncsql> SELECT * FROM db_password;\n Step 2) 사용자 계정 비밀번호 변경\n\n\ncsql> ALTER USER \"사용자 계정명\" PASSWORD '신규 비밀번호';\n※ 비밀번호가 취약하게 설정된 경우 비밀번호를 다음 기준을 준수하여 변경함\n< 비밀번호 관리 방법 >\n1. 영문, 숫자, 특수문자를 조합하여 계정명과 상이한 8자 이상의 비밀번호 설정\n다음의 문자 종류 중 2가지 종류 이상을 조합하여 최소 10자리 이상 또는, 3가지 종류 이상을 \n조합하여 최소 8자리 이상의 길이로 구성\n1) 영문 대문자(26개)\n2) 영문 소문자(26개)\n3) 숫자(10개)\n4) 특수문자(32개)\n2. 시스템마다 상이한 비밀번호 사용\n3. 비밀번호를 기록해 놓을 경우 변형하여 기록\n4. 가급적 자주 비밀번호를 변경",
       "guide_page": 596,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -56,7 +59,10 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -80,9 +86,12 @@
       "cases": "l Oracle DB\n Step 1) PASSWORD_LIFE_TIME Profile 파라미터 변경\nSQL> ALTER PROFILE <프로파일명> LIMIT PASSWORD_LIFE_TIME xx;\n Step 2) Profile 값과 관련된 사용자 변경\nSQL> ALTER PROFILE <계정명> PROFILE <변경할 프로파일명>;\n Step 3) 비밀번호 정책 설정 변경\nSQL> ALTER PROFILE <프로파일명> LIMIT\nFAILED_LOGIN_ATTEMPTS 3 (비밀번호 실패 3번 까지만 가능)\nPASSWORD_LIFE_TIME 30 (30일 동안만 비밀번호 사용 가능\nPASSWORD_REUSE_TIME 30 (사용한 비밀번호 30일 후부터 재사용 가능)\nPASSWORD_VERIFY_FUNCTION verify_function (비밀번호 복잡성 검증)\n\n\nPASSWORD_GRACE_TIME 5; (life time이 끝나고 5일 동안 메시지를 보여줌)\nl MSSQL\n Step 1) 비밀번호 변경 주기는 '암호 만료 강제 적용'을 적용함으로써 주기적으로 변경할 수 있으며, 변경 기간은 \nOS의 '암호 정책'에서 적용받으므로 '암호 정책 > 최대 암호 사용 기간' 설정도 변경해야 함\n Step 2) 암호 만료 강제 적용\n보안 > 로그인 > 각 로그인 계정 > 속성 > “암호 만료 강제 적용” 설정\n[ 암호 만료 강제 적용 설정 ]\n Step 3) OS 암호 정책 설정\n[관리 도구] > [로컬 보안 정책] > [보안 설정] > [계정 정책] > [암호 정책] > 최대 암호 사용 기간 : '60일' \n설정\n[ 최대 암호 사용 기간 설정 ]\nl MySQL\n     [비밀번호 복잡도 정책 설정]\n Step 1) 비밀번호 정책 확인\n\n\nmysql> SHOW VARIABLES LIKE 'validate_password%';\n※ component_validate_password가 설치되어 있지 않은 경우 아래와 같이 해당 컴포넌트 설치\nmysql> INSTALL COMPONENT 'file://component_validate_password';\n Step 2) 비밀번호 정책 설정\n다음과 같은 방법으로 각각의 비밀번호 정책을 설정\nSET GLOBAL validate_password.policy = 'MEDIUM'; \n(비밀번호 정책의 강도 LOW/MEDIUM/STRONG)\nSET GLOBAL validate_password.length = 8; (비밀번호 최소 길이)\nSET GLOBAL validate_password.mixed_case_count = 1; (포함되어야 하는 영문 대소문자 최소 개수)\nSET GLOBAL validate_password.number_count = 1; (포함되어야 하는 숫자 최소 개수)\nSET GLOBAL validate_password.special_char_count = 1; (포함되어야 하는 특수문자 최소 개수)\n※ Linux계열(/etc/my.cnf 또는 /etc/mysql/my.cnf), Windows(C:\\ProgramData\\MySQL\\MySQL Server <설치된 \n버전>\\my.ini)의 <mysqld> 섹션에 설정을 추가하여 정책 설정 가능\n※ 비밀번호 신규 적용 및 초기화 시 설정 규칙에 맞추어 관리하고, 저장 시에는 일방향 암호화 알고리즘을 통해 \n암호화 처리(One-Way Encryption)함\n     [비밀번호 LifeTime 정책 적용 ]\n Step 1) 비밀번호 정책 확인\nmysql> SHOW VARIABLES LIKE 'default_password_lifetime';\n Step 2) 비밀번호 LifeTime 설정\nmysql> SET GLOBAL default_password_lifetime=90;\n※ 기본 값\n    - 5.7.11 이전 버전 : 0\n    - 5.7.11 이후 버전  및 8.0 이후 버전 : 360\n Step 3) 정책 적용전에 생성된 계정의 LifeTime 변경\nmysql> ALTER USER <계정명>'@'<호스트명 or IP>' PASSWORD EXPIRE INTERVAL 91 DAY;\nl Altibase\n Step 1) 다음 명령어를 통해 비밀번호 정책 설정 여부 확인\nSELECT * FROM system_.sys_users_;\n\n\n Step 2) 아래 Property에 대해 비밀번호 정책 설정\nCASE_SENSITIVE_PASSWORD = 1\nFAILED_LOGIN_ATTEMPTS\nPASSWORD_LOCK_TIME\nPASSWORD_LIFE_TIME\nPASSWORD_GRACE_TIME\nPASSWORD_REUSE_TIME\nPASSWORD_REUSE_MAX\nPASSWORD_VERIFY_FUNCTION\n정책 적용 시 다음 명령어를 사용\nALTER USER 계정명 LIMIT (Property 숫자);\n예시) ALTER USER TESTUSER LIMIT (FAILED_LOGIN_ATTEMPTS 7, PASSWORD_LOCK_TIM\nE 7);\nl Tibero\n Step 1) 사용자별 비밀번호 PROFILE 적용 여부 확인\n비밀번호 설정 규칙에 맞추어 비밀번호를 설정할 수 있도록 시스템 차원에서 기능 제공\nSELECT * FROM dba_users;\n[ 사용자별 비밀번호 PROFILE 적용 여부 확인 ]\n Step 2) 설정되어 있을 경우 PROFILE 설정 내용 확인\nSELECT * FROM dba_profiles;\n\n\n[ PROFILE 설정 내용 확인 ]\n Step 3) 설정되어 있지 않을 경우 PROFILE 생성 또는 수정 시(ALTER PROFILE) 비밀번호 정책 설정 적용 시 \n다음 명령어를 사용\nCREATE PROFILE prof LIMIT\n예시) CREATE PROFILE prof LIMIT\nfailed_login_attempts 3\npassword_lock_time 1/1440\npassword_life_time 90\npassword_reuse_time unlimited\npassword_reuse_max 10\npassword_grace_time 10\npassword_verify_function verify_function;",
       "guide_page": 603,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -108,7 +117,10 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -160,7 +172,10 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -184,9 +199,11 @@
       "cases": "l Oracle DB\n Step 1) 실행 중인 프로세스를 통한 확인\n$ ps –ef | grep pmon\n Step 2) Oracle Listener 프로세스 사용자 확인\n$ ps –ef | grep tnslsnr\n Step 3) 사용자 계정을 'Oracle'로 전환\n$ su – oracle (현재 사용자/관리자 계정에서 'Oracle' 사용자로 전환)\n$ lsnrctl stop (Oracle Listener 중지)\n$ sqlplus / as sysdba (SQL*Plus 유틸리티를 이용하여 시스템 관리자(SYSDBA) 권한으로 로그인)\n$ shutdown immediate (데이터베이스 종료)\n Step 4) Oracle 서비스 재시작\n$ lsnrctl start (Oracle Listener 시작)\n$ sqlplus / as sysdba (SQL*Plus 유틸리티를 이용하여 시스템 관리자(SYSDBA) 권한으로 로그인)\n\n\n$ startup (데이터베이스 시작)\nl MySQL\n Step 1) 실행 중인 프로세스를 통한 확인\n# ps –ef | grep mysqld\n Step 2) mysql server configuration 파일에서 [mysqld] 그룹의 'user' 지시자의 설정값 확인\n# cat [mysql server configuration 파일 위치] | grep user (user=mysql로 설정되어 있으면 양호)\n Step 3) mysql server configuration 파일에서 [mysqld] 그룹의 'user' 지시자 설정\n# vi [mysql server configuration 파일 위치] (일반적으로 /etc/my.cnf.d/mysql-server.cnf)\n※ user = [mysqld를 구동할 시스템의 일반 사용자 계정]\nl Altibase\n Step 1) 실행 중인 프로세스를 통한 확인\n# ps –ef | grep altibase | grep –v grep\n Step 2) Altibase 디렉터리 및 파일을 Altibase 전용 계정으로 소유자 변경\n# chown –R [계정명]:[그룹명] '[Altibase 디렉터리 위치]’\n Step 3) Altibase 전용 계정으로 DB 구동\nl Cubrid\n Step 1) 실행 중인 프로세스를 통한 확인\n# ps –ef | egrep 'cub_master|cub_broker|cub_manager' | grep –v grep\n(cub_master, cub_broker, cub_manager 데몬이 root 또는 root 권한으로 구동되었는지 확인)\n Step 2) 삭제 후 cubrid 계정으로 재설치 또는 같은 DB를 생성 후에 언로드/로드를 통해 기존 데이터 이관",
       "guide_page": 619,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql"
+      ],
       "deviation": null
     },
     {
@@ -210,9 +227,12 @@
       "cases": "l OracleDB\n Step 1) SQL*Plus 쿼리를 통한 암호화 알고리즘 확인\nSELECT username, password_versions FROM dba_users;\n Step 2) sqlnet.ora 파일 수정\n$ vi /u01/app/oracle/product/11.2.0/xe/network/admin/sqlnet.ora\nSQLNET.ALLOWED_LOGON_VERSION_SERVER = 12\nSQLNET.ALLOWED_LOGON_VERSION_CLIENT = 12\n※ sqlnet.ora 파일 기본 경로\nUnix/Linux : $ORACLE_HOME/network/admin/sqlnet.ora\nWindows : %ORACLE_HOME%\\network\\admin\\sqlnet.ora\n※ Oracle DB 알고리즘 : 10G(MD5), 11G(SHA-1), 12C(SHA-512, AES)\n\n\nl MSSQL\n Step 1) 저장된 비밀번호 해시 값 확인\nselect name, password_hash from sys.sql_logins;\n    ※ MSSQL 2012이상에서 사용자 계정의 비밀번호는 32bit Salt를 적용한 SHA-512 해시 알고리즘을 사용\n    [ 일반 이용자 패스워드 해시 알고리즘 변경 ]\n Step 1) 데이터베이스 접속\nUSE <데이터베이스명>\nGO\n Step 1) 열 추가\nALTER TABLE <테이블명> ADD <신규 해시 칼럼명> varbinary(256)\nGO\n Step 2) 새로운 열에 암호화 된 데이터 저장\nUPDATE <테이블명> SET <신규 해시 칼럼명> = HASHBYTES(‘SHA2_256’, <기존 해시 칼럼명>)\nGO\n Step 3) 기존 열 제거\nALTER TABLE <테이블명> DROP COLUMN <기존 해시 칼럼명>\nGO\nl MySQL\n Step 1) 계정별 암호화 알고리즘 확인\n[mysql 5.7]\nmysql> SELECT user, host, plugin FROM mysql.user; 또는\nmysql> SELECT host, user, plugin, password AS authentication_string FROM mysql.user;\n[mysql 8.0]\n\n\nmysql> SELECT user, host, plugin FROM mysql.user; 또는\nmysql> SELECT host, user, plugin, authentication_string FROM mysql.user;\n Step 2) 비밀번호 및 암호화 알고리즘 설정\n[mysql 5.7]\n- user 생성 시 적용\nCREATE USER '계정명'@'host' IDENTIFIED BY '비밀번호';\n- 기존 user 적용\nALTER USER '계정명'@'host' IDENTIFIED '신규 비밀번호';\n※ mysql 5.7에서는 기본적으로 mysql_native_password 플러그인이 사용되므로 별도의 지정이 필요하지 않음\n[mysql 8.0]\n- user 생성 시 적용\nmysql> CREATE USER '계정명'@'localhost' IDENTIFIED WITH caching_sha2_password BY '비밀번호';\n- 기존 user 적용\nmysql> ALTER USER '계정명'@'localhost' IDENTIFIED WITH caching_sha2_password BY '비밀번호';\n※ mysql v8.0 이상부터 암호화 알고리즘으로 caching_sha2_password(SHA-256)가 적용됨\n※ mysql v5.7 버전에서 사용하던 데이터베이스를 8.0으로 업그레이드하여 mysql_native_password 플러그인이 유\n지되는 경우 위와 같이 caching_sha2_password 알고리즘을 지정하여 적용할 수 있음\nl Tibero\n Step 1) 쿼리문을 통한 암호화 알고리즘 확인\nSELECT \"TS#\", \"ENCRYPTIONALG\", \"ENCRYPTEDTS\" FROM V$ENCRYPTED_TABLESPACES;\n Step 2) 암호화 알고리즘 적용\nALTER TABLESPACE \"ENCRYPTED_TS\" ENCRYPTION USING '적용할 암호화 알고리즘';\nl PostgreSQL\n Step 1) psql 접속 후 계정별 암호화 알고리즘 확인\npostgres=# SELECT usename, passwd FROM pg_shadow;\n Step 2) 명령어를 통한 알고리즘 적용\n\n\n- user 생성 시 적용\npostgres=# CREATE USER 계정명 password '설정할 비밀번호';\n- 기존 user 적용\npostgres=# ALTER USER 계정명 WITH password '설정할 비밀번호';\n※ default 설정으로 SCRAM-SHA-256 암호화 알고리즘이 적용\n※ peer : 로컬에서만 연결이 가능하며 OS에서 클라이언트의 OS 사용자 이름을 얻고 요청한 데이터베이스 사용자 \n이름과 일치하는지 확인하는 인증 방식",
       "guide_page": 621,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -262,9 +282,12 @@
       "cases": "l Windows OS\n Step 1) 특정 IP주소에서만 접속 가능하도록 방화벽 등이 설정되어 있는지 확인\n시작 > 제어판 > 시스템 및 보안 > Windows Defender 방화벽 > 고급 설정 > 고급 보안이 포함된 \nWindows Defender 방화벽 > 인바운드 규칙 > 원격 데스크톱 – 사용자 모드(TCP-In)/사용자 모드\n(UDP-In)\n[ 원격 데스크톱 방화벽 규칙 확인 ]\n\n\n Step 2) DB서버에 접근 가능한 특정 IP 지정\n원격 데스크톱 – 사용자 모드(TCP-In)/사용자 모드(UDP-In) 속성 > 영역 > 원격 IP주소 > 다음 IP주소 > \n추가 > IP주소 입력\n[ 원격 데스크톱 – 사용자 모드(TCP-In) 속성 ]\n       \n[ 원격 데스크톱 – 사용자 모드(UDP-In) 속성 ]\nl Oracle DB\n Step 1) oracle 계정으로 로그인\nsu - oracle\n Step 1) 텍스트 에디터로 $ORA_NET/sqlnet.ora 파일 오픈\nvi $ORA_NET/sqlnet.ora\n Step 2) sqlnet.ora 파일의 끝에 다음 두 라인을 추가\ntcp.validnode_checking = yes\ntcp.invited_nodes = ( 127.0.0.1, [allowed IP's] )\n Step 3) Listener 재시작\n$ORACLE_HOME/bin/lsnrctl stop\n$ORACLE_HOME/bin/lsnrctl start\nl MySQL\n Step 1) user 테이블을 조회하여 모든 클리이언트에서 접속 가능하도록 설정되어 있는 계정을 특정 IP에서만 접\n속 가능하도록 변경\nmysql> UPDATE user SET host = '<접속 IP>' WHERE user ='<계정명>' and host='%';\n\n\nl Altibase\n Step 1) Altibase HDB Property 파일을 수정하여 접근 제어 적용\n$Altibase_HOME/conf/altibase.properties의 IP Access Control Lists에서 내부 정책에 맞게 수정\n※ Altibase HDB 서버가 실행되지 않은 상태에서 할 수 있는 정적인 환경설정 방법으로 Property 파일에서 해당 \n구성 요소를 특정 값으로 설정한 후 Altibase HDB 서버를 구동해야 수정된 값이 Altibase HDB 서버에 반영\n됨\n[ altibase.properties 파일 ]\n Step 2) Altibase HDB 서버에 적용된 접근 제어 설정 확인\niSQL> SELECT name, value1 FROM v$property WHERE name LIKE 'ACCESS_CONTROL_%';\nl PostgreSQL\n Step 1) Data 디렉터리 내에 postgres.conf 파일 설정\n[ postgres.conf 파일 ]\n※ listen_addresses는 서버가 클라이언트 애플리케이션의 연결을 수신 대기할 TCP/IP 주소를 지정함. 호\n스트 이름 및/또는 숫자 IP 주소의 쉼표로 구분된 목록 형식으로 지정할 수 있으며, *를 사용하는 경우  \n모든 IP에 대해 수신 대기함. 기본값은 localhost 이며 로컬 TCP/IP “루프백” 연결 만 허용\n Step 2) Data 디렉터리 내에 pg_hba.conf 파일 설정\n                     TYPE          DATABASE            USER            CIDR-ADDRESS           METHOD\n                     --------         -----------------          ---------         -------------------------       ----------------\n                       host                (DB명)                (사용자)            (접속 허용 IP)                   md5\n\n\n[ pg_hba.conf 파일 ]\n Step 3) USER에 접근 허용 '계정명'과 CIDR-ADDRESS에 접속을 '허용할 IP' 설정\n※ PostgreSQL은 기본 설치 시 외부에서 접속할 수 없음\n※ IP 접근 제한 설정 시 postgresql.conf와 pg_hba.conf 두 개의 설정 파일이 연계되어 있으므로 하나의 파일이라\n도 설정이 잘못되어 있는 경우 DB 접속이 불가능 할 수 있음.\n\n\nl Tibero\n Step 1) LSNR_INVITED_IP(특정 IP주소를 갖는 클라이언트만 허용, 그 외 차단)\n$TB_SID.tip 파일 안에 다음 예시 내용을 참조하여 입력\nLSNR_INVITED_IP=192.168.1.1;192.168.2.0/24;192.1.0.0/16\nLSNR_INVITED_IP의 최대 길이는 255자이며, 256자 이상의 IP주소를 설정할 경우에는 LSNR_INVIT\nESD_IP_FILE을 사용\n(특정 IP주소를 기재한 파일의 절대 경로를 LSNR_INVITED_IP_FILE에 입력)\n※ 초기화 파라미터에 설정된 IP주소에 따라 클라이언트의 네트워크 접속을 허용하거나 차단 \n※ $TB_SID는 Tibero 설치 시 입력한 데이터베이스 이름과 동일(/ c:/tibero/tibero5/config/데이터베이스.tip)\n●\n$TB_SID.tip \n파일에 \nLSNR_INVITED_IP와 \nLSNR_DENIED_IP가 \n모두 \n설정되어 \n있는 \n경우 \nLSNR_DENIED_IP의 설정은 무시되며 LSNR_INVITED_IP만 적용된다. 즉, LSNR_INVITED_IP에 설정된 IP\n주소의 클라이언트를 제외하고는 모든 접속이 차단된다.\n●\n$TB_SID.tip 파일에 LSNR_INVITED_IP와 LSNR_DENIED_IP가 모두 설정되지 않은 경우 모든 \n클라이언트의 네트워크 접속이 허용된다.\n●\n루프백 주소(Loopback Address, 127.0.0.1)에서 접속하는 경우 LSNR_INVITED_IP 또는 LSNR_DENIED_IP\n의 설정과는 무관하게 항상 허용된다. X Tibero 서버를 운영하는 중에 서버를 다시 기동하지 않고 LSNR_INVI\nTED_IP 또는 LSNR_DENIED_IP의 설정을 변경하려는 경우 우선 $TB_SID.tip 파일에 LSNR_INVITED_IP \n또는 LSNR_DENIED_IP의설정을 변경한 후 파일을 저장하고 다음의 명령을 실행한다.\nALTER SYSTEM LISTENER PARAMETER RELOAD;\n위의 명령을 실행하면 $TB_SID.tip 파일에서 LSNR_INVITED_IP 또는 LSNR_DENIED_IP의 내용을 다시 \n읽어 변경된 내용을 실시간으로 적용한다.",
       "guide_page": 628,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -288,9 +311,12 @@
       "cases": "l Oracle DB, Tibero\n Step 1) DBA만 접근 가능한 테이블의 권한 확인(SQL*Plus)\nSQL> SELECT grantee, privilege, owner, table_name FROM dba_tab_privs WHERE (owner = 'SYS' or t\nable_name LIKE 'DBA_%') AND privilege <> 'EXECUTE' AND grantee NOT IN ('PUBLIC', 'AQ_AD\nMINISTRATOR_ROLE', 'AQ_USER_ROLE', 'AURORA$JIS$UTILITY$', 'OSE$HTTP$ADMIN', 'TR\nACESVR', 'CTXSYS', 'DBA', 'DELETE_CATALOG_ROLE', 'EXECUTE_CATALOG_ROLE', 'EXP_F\nULL_DATABASE', 'GATHER_SYSTEM_STATISTICS', 'HS_ADMIN_ROLE', 'IMP_FULL_DATAB\nASE', 'LOGSTDBY_ADMINISTRATOR', 'MDSYS', 'ODM', 'OEM_MONITOR', 'OLAPSYS', 'ORDSY\nS', 'OUTLN', 'RECOVERY_CATALOG_OWNER', 'SELECT_CATALOG_ROLE', 'SNMPAGENT', 'SY\nSTEM', 'WKSYS', 'WKUSER', 'WMSYS', 'WM_ADMIN_ROLE', 'XDB', 'LBACSYS', 'PERFSTAT', 'X\nDBADMIN') AND grantee NOT IN (SELECT grantee FROM dba_role_privs WHERE granted_role = 'D\nBA') ORDER BY grantee; (어떤 계정이나 role이 나타나지 않으면 양호)\n\n\n Step 2) 불필요하게 테이블 접근 권한이 사용자 계정에 할당된 경우(SQL*Plus)\nSQL> REVOKE <권한> ON <Object> FROM user;\nl MSSQL\n Step 1) system tables 접근 권한이 PUBLIC, GUEST 또는 비인가된 사용자에게 부여된 경우 접근 권한을 제거\nREVOKE <권한> ON <Object> FROM [계정명]|[PUBLIC]|[GUEST];\n Step 2) 시스템 테이블에 접근하기 위해서는 stored procedure 또는 information_schema views를 통해 접근해야 \n함\n Step 3) 시스템 테이블에 접근 가능한 stored procedure는 사용이 제한되어야 함\nl MySQL\n Step 1) 사용자 계정에 부여된 권한 확인\nSHOW GRANTS FOR <계정명>;\n Step 2) 접근이 필요한 데이터베이스 및 테이블에만 권한 적용\nGRANT <권한> privileges ON <DB명>.<테이블명> to '<계정명>'@'<호스트명 or IP>';\nl Altibase\n Step 1) sys_tables_를 조회하여 system_ 외 접근 계정 유무 확인\nSELECT * FROM system_.sys_tables_;\n Step 2) 불필요 계정 접근 시 해당 접근 해제\nl PostgreSQL\n Step 1) 사용자 및 역할 권한 정보 조회\nSELECT * FROM information_schema.role_table_grants;\n Step 2) 스키마명에 해당되는 Table에 대한 접근 권한을 일반 사용자로부터 제거\nREVOKE [all,select,insert,update...] ON all tables IN schema '스키마명' FROM '계정명';",
       "guide_page": 633,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -366,10 +392,13 @@
       "cases": "l Oracle DB\n[Unix OS]\n Step 1) 디렉터리 또는 파일의 권한 점검\n$ORACLE_HOME/bin/oracle (755)\n$ORACLE_HOME/bin/[    ] (755)\n→ [․sqlplus,sqlldr,sqlload,proc,oraenv,oerr,exp,imp,tkprof,tnsping,wrap]\n$ORACLE_HOME/bin/[    ] (750)\n→ [․svrmgrl, lsnrctl, dbsnmp]\n$ORACLE_HOME/network (755)\n$ORACLE_HOME/network/admin/[    ] (755)\n→ [․listener.ora, sqlnet.ora 등]\n$ORACLE_HOME/lib (755)\n\n\n$ORACLE_HOME/network/admin/[    ] (644)\n→ [․tnsnames.ora, protocol.ora, sqlpnet.ora]\n$ORACLE_HOME/dbs/init.ora (640)\n$ORACLE_HOME/dbs/init<SID>.ora (640)\n- Find $ORACLE_HOME –name init*.ora –print\n- 파일 및 디렉터리의 권한 설정 변경\n# chmod <적용 권한> <파일명>\n Step 2) redo 파일, 데이터베이스 설정 파일, 데이터 파일 위치 확인(SQL*Plus)\nSQL> Select value from v$parameter where name='spfile';\nSQL> Select 'Control Files: '||value from v$parameter where name='control_files';\nSQL> select 'Control Files: '||value from v$parameter where name='spfile';\nSQL> select 'Logfile: '||member from v$logfile;\nSQL> select 'Datafile: '||name from v$datafile;\n- 파일 및 디렉터리의 권한 설정 변경\n# chmod <적용 권한> <파일명>\n[Windows OS]\n Step 1) 패스워드 파일(orapw<SID>) 접근 권한은 administrators, system group, owner group, oracle service \ncount, DBA에게 모든 권한 또는, 그 이하로 설정하고 다른 그룹은 제거함\nl MySQL\n[Unix OS]\n Step 1) 설정 파일 (my.cnf, my.ini)의 접근 권한 설정\n설정 파일 (my.cnf, my.ini)의 접근 권한을 설정 파일에 대한 보호를 위하여 600 또는 640으로 설정\nmy.cnf 파일 위치: /etc/my.cnf, <각 홈디렉터리>/my.cnf\n# chmod 600 ./my.cnf\n[Windows OS]\n Step 1) 설정 파일의 접근 권한은 Adminisrators, SYSTEM, Owner에게 모든 권한 또는 그 이하로 설정하고 다른 \n그룹은 제거함\n\n\nl PostgreSQL\n[Unix OS]\n Step 1) 주요 설정 파일 위치 확인\npostgresql.conf 파일 위치: [$datadir]\nDB 접속 통제 설정 파일 위치: /postgres/data/pg_hba.conf, /postgres/data/pg_ident.conf\nlog_directory : /log_directory/pg_log\n Step 2) 주요 설정 파일의 권한 설정\n환경설정 파일(postgresql.conf)의 권한을 640 이하로 설정\n# chmod 640 [$datadir]/postgresql.conf\nDB접속 통제 설정 파일(pg_hba.conf, pg_ident.conf)의 권한을 640 이하로 설정\n# chmod 640 ./pg_hba.conf\n# chmod 640 ./pg_ident.conf\n히스토리 파일 (.psql_history)의 권한을 600 이하로 설정\n$chmod 600 .psql_history\nLog 파일(pg_log)의 권한을 640 이하로 설정\n#chmod 640 [Log 파일]\n[Windows OS]\n Step 1) 주요 환경설정 파일의 접근 권한은 Administrators, SYSTEM, Owner에게 모든 권한 또는 필요 권한만 \n부여하여 설정하고 기타 다른 그룹은 권한 제거\nl Cubrid\n Step 1) cubrid.conf 파일 권한 확인\n# ls –l $_CUBRID_DATABASES/conf/cubrid.conf 또는\n# ls –l /root/CUBRID-11.2.8.0824-bf70ab7-Linux.x86_64/conf/cubrid.conf (설치경로 직접 입력)\n Step 2) cubrid.conf 파일 권한 설정\n# sudo chmod 640 /root/CUBRID-11.2.8.0824-bf70ab7-Linux.x86_64/conf/cubrid.conf\n※ cubrid.conf 파일의 권한이 600 또는 640일 경우 양호함",
       "guide_page": 639,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
-      "deviation": null
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
+      "deviation": "가이드 원문 '대상'에는 Oracle DB/PostgreSQL/Cubrid만 명시되어 있으나, 같은 항목의 '점검 및 조치 사례' 본문에는 MySQL my.cnf 파일 권한(600/640) 절차가 포함되어 있어 이를 근거로 MySQL도 자동화 대상에 포함함(대상 필드 원문은 변경하지 않음)."
     },
     {
       "code": "D-15",
@@ -524,7 +553,9 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -548,9 +579,11 @@
       "cases": "l Oracle DB, Tibero\n Step 1) 설정 확인(SQL*Plus)\nSQL> SELECT grantee || ':' || owner || '.' || table_name FROM dba_tab_privs WHERE grantable = 'YES' \nand owner NOT IN ('SYS', 'MDSYS', 'ORDPLUGINS', 'ORDSYS', 'SYSTEM', 'WMSYS', 'SDB', \n'LBACSYS') AND grantee NOT IN (SELECT grantee FROM dba_role_privs WHERE granted_role = \n'DBA') ORDER BY grantee; (계정이 나오는 경우 취약)\n Step 2) 권한 회수, 재부여(SQL*Plus)\nSQL> REVOKE role FROM user;\nl\nl MySQL\n Step 1) 설정 확인\n\n\nSELECT user, grant_priv FROM mysql.user; (계정이 나오는 경우 취약)\n Step 2) 권한 회수\nREVOKE <권한> ON <대상> FROM [계정명];\nl Altibase\n Step 1) 사용자 계정을 조회하여 일반 사용자에게 with grant option이 부여(1)되어 있는 경우 취약\nSELECT * FROM system_.sys_users_;\nSELECT * FROM system_.sys_grant_object_;\nSELECT * FROM system_.sys_privileges_;\n Step 2) 권한 회수\nREVOKE <권한> ON <Object> FROM [계정명];",
       "guide_page": 654,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql"
+      ],
       "deviation": null
     },
     {
@@ -654,7 +687,10 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "mysql",
+        "postgres"
+      ],
       "deviation": null
     },
     {
@@ -678,9 +714,11 @@
       "cases": "l Oracle DB\n Step 1) 데이터베이스 감사 기록 정책 및 백업 정책 수립\n Step 2) DBMS에 대한 기본적인 감사를 설정함\n아래와 같은 명령어를 통해 로그인 실패, 권한, Object 등에 대한 감사 설정\nSQL> connect sys as sysdba\nEnter password: ********\nConnected.\nSQL> ALTER SYSTEM SET AUDIT_TRAIL=DB SCOPE=SPFILE;\nSystem altered.\nSQL> shutdown immediate\nDatabase closed.\nDatabase dismounted.\nORACLE instance shut down.\n\n\nSQL> startup\nORACLE instance started.\nSQL> AUDIT SESSION WHENEVER NOT SUCCESSFUL;\nAudit succeeded.\nl MSSQL\n데이터베이스 감사 기록 정책 및 백업 정책 수립\n●\nMSSQL 2000\nDB 접근에 대한 보안 감사를 할 수 있도록 보안 감사 설정\n[SQL SERVER] > [등록정보] > [보안] > [감사수준] > '모두' 선택\n●\nMSSQL 2005, 2008, 2012, 2016, 2019, 2022\n[SQL SERVER] > [마우스 우클릭] > [속성] > [보안] > [로그인 감사] 옵션 > '실패한 로그인과 성공한 로그인 \n모두' 선택\n[ 로그인 감사 설정 ]\nl Altibase\n Step 1) AUDIT 구문으로 감사 정책을 설정\n Step 2) 정책 설정 후 감사 조건 적용\nALTER SYSTEM STOP AUDIT;\nALTER SYSTEM START AUDIT;\nALTER SYSTEM RELOAD AUDIT;\n※ Altibase HDB 서버 내에서 실행되고 있는 특정 구문 또는 모든 구문을 실시간으로 추적하고, 로그를 남기는 \n것을 감사(Audit)라고 하며, SYS 사용자만이 이 구문을 사용해서 감사 조건을 설정할 수 있음\n\n\nl Tibero\n Step 1) 감사 기능은 감사 대상에 따라 두 종류로 구분됨\n1. 스키마 Object에 대한 감사\n지정된 스키마 Object에 수행되는 모든 동작을 기록할 수 있음\n2. 시스템 특권에 대한 감사\n지정된 시스템 특권을 사용하는 모든 동작을 기록할 수 있음\n※ 감사를 설정하거나 해제하려면 다음 명령을 사용함\n- audit (감사 설정)\n- noaudit (감사 해제)\n[감사 설정]\n Step 1) 스키마 Object에 대한 감사\n다른 사용자가 소유한 스키마의 Object 또는 디렉터리 Object를 감사하기 위해서는 AUDIT ANY 시스\n템 특권을 부여받아야 함\n예시) AUDIT DELETE ON t BY SESSION WHENEVER SUCCESSFUL;\n→ 테이블에 수행되는 모든 DELETE 문이 성공하는 경우에만 감사 기록을 남김\n Step 2) 시스템 특권에 대한 감사\n시스템 특권을 감사하기 위해서는 AUDIT SYSTEM 시스템 특권을 부여받아야 함\n예시) AUDIT CREATE table BY Tibero;\n→ Tibero라는 사용자가 테이블을 생성하려고 할 때 그것이 성공하든 실패하든 관계없이 감사 기록을 남김\n[감사 해제]\n Step 1) 스키마 Object에 대한 감사 해제\n다른 사용자가 소유한 스키마의 Object 또는 디렉터리 Object의 감사를 해제하기 위해서는 AUDIT \nANY 시스템 특권을 부여받아야 함\n예시) NOAUDIT DELETE ON t BY SESSION WHENEVER SUCCESSFUL;\n→ 테이블에 수행되는 모든 DELETE문에 대해 더 이상 감사 기록을 남기지 않음\n Step 2) 시스템 특권에 대한 감사 해제\n시스템 특권의 감사를 해제하기 위해서는 AUDIT SYSTEM 시스템 특권을 부여받아야 함\n예시) NOAUDIT CREATE table BY Tibero;\n→ Tibero라는 사용자가 테이블을 생성할 때 더 이상 감사 기록을 남기지 않음\n\n\n※ SYS 사용자 감사 설정 방법\n<$TB_SID.tip> 파일을 아래 내용처럼 입력 또는 수정\n예시) AUDIT_SYS_OPERATIONS=Y\nAUDIT_FILE_DEST=/home/Tibero/audit/audit_trail.log\nAUDIT_FILE_SIZE=10M\nSYS사용자의 명령을 감사하도록 설정하면 수행한 모든 동작이 OS 파일에 기록되며 보안상의 이유로 데이터\n베이스에는 기록되지 않음\nl PostgreSQL\n Step 1) Log 감사 설정 여부 확인\npostgres=# SHOW logging_collector;\nlogging_collector\n-------------------\non (1 row)\n Step 2) postgresql.conf 파일 내 logging_collector을 on으로설정\nlogging_collector = on",
       "guide_page": 666,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "postgres"
+      ],
       "deviation": null
     }
   ]
