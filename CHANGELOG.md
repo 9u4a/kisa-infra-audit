@@ -5,6 +5,43 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-28
+### Added
+- `05_network` 네트워크 장비 38개 항목(N-01~N-38) 중 Cisco IOS 진단 로직 구현, Python 3.10+
+  (`05_network/run.py` + `checks/cisco_ios/N-xx.py`). 다른 카테고리와 달리 대상 장비에 아무것도
+  배치하지 않는 **오프라인 설정파일 분석** 방식이다 — 미리 수집한 `show running-config` 텍스트
+  파일을 입력받아 분석자 PC에서 판정한다(05_network/CLAUDE.md).
+- `05_network/parsers/cisco_ios.py`: 설정 텍스트 파싱 컨텍스트(`Ctx`) — 전체 텍스트 정규식 검색,
+  `line con/vty/aux` 및 `interface` 블록 추출(Cisco IOS의 "하위 명령은 공백 1칸 들여쓰기" 규칙으로
+  블록 경계 판별), IP가 설정되고 shutdown되지 않은 "사용 중" 인터페이스만 골라내는 헬퍼 포함.
+- `lib/report_common.py`: 분석자 PC Python 카테고리용 공용 결과/보고서 모듈 — sh의
+  `lib/common.sh`, PowerShell의 `lib/Common.psm1`과 동일한 역할(result.json 조립, CSV/summary
+  작성, report.html 렌더링)을 Python으로 제공. 향후 Python 기반 카테고리(다중 호스트 병합 등)가
+  재사용할 공용 인프라.
+- 실행: `python run.py -f running-config.txt` (벤더 자동 판별), `-v cisco_ios`(수동 지정),
+  `-d configs/`(디렉터리 일괄), 그 외 `-i/-g/-l/-o/-h` 는 전 카테고리와 동일.
+- **실기 검증**: 실제 장비가 없어(카테고리 특성상 Docker화 불가능) 직접 작성한 Cisco IOS
+  `show running-config` 픽스처 2종(전형적 취약 설정/전형적 강화 설정, 실제 IOS 문법 기준)으로
+  38개 항목 전체를 교차 검증 — 취약 픽스처: 취약 30·수동점검 6·양호 2·오류 0, 강화 픽스처:
+  양호 30·수동점검 8·취약 0·오류 0(동일 8개 항목이 두 픽스처 모두에서 일관되게 MANUAL로 귀결됨을
+  확인, 설계대로 조직 정책 판단이 불가피한 항목들). Windows 콘솔 인코딩 문제(cp949) 방지를 위해
+  `sys.stdout.reconfigure(encoding="utf-8")` 적용.
+
+### Fixed
+- **SNMP community ACL/권한 판정(N-19/N-20) 정규식이 다음 줄까지 캡처하는 버그**: Cisco 설정의
+  섹션 구분자 `!`는 별도 줄에 있는데, 정규식의 선택적 "ACL 인자" 그룹에 `\s+\S+`(개행 포함)를
+  써서 다음 줄의 `!`를 ACL 인자로 잘못 캡처해 "ACL이 지정됨=양호"로 오판하던 버그를 픽스처
+  테스트로 발견. 줄 내부 공백만 매치하는 `[ \t]+`로 교체해 줄 경계를 넘지 않도록 수정.
+- SNMP Community String 등 비밀번호에 준하는 값은 증적(evidence)에 원문을 남기지 않고
+  길이/기본값 여부만 남기도록 처리(08_dbms의 "접속정보 원문 미저장" 원칙을 이 카테고리에도 적용).
+
+### Note
+- 가이드 원문이 명시적으로 "기본값이 비활성화"라고 밝힌 항목(N-35 identd, N-38 mask-reply)은
+  그 기본값을 신뢰해 설정에 명시적 비활성화 라인이 없어도 양호로 판정한다. 그 외 기본값이
+  버전에 따라 다를 수 있는 항목(N-26 finger, N-28 small-servers, N-31 directed-broadcast)은
+  임의로 안전하다고 가정하지 않고 MANUAL로 응답한다(W-48 레지스트리 기본값 오판 사례와 동일 원칙).
+- Juniper/Alteon/Passport/Piolink 는 미구현 — 이후 로드맵 과제.
+
 ## [0.6.1] - 2026-09-28
 ### Added
 - `08_dbms` DBMS 26개 항목에 Oracle(22항목, `checks/oracle/D-xx.sh`)과 MSSQL(14항목,

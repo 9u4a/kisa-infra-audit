@@ -28,9 +28,11 @@
       "cases": "l Cisco IOS\n  Step 1) enable 비밀번호 설정 확인\nRouter> enable\nRouter# show running-config\n  Step 2) VTY, 콘솔, 보조(AUX) 포트의 로그인 인증 방식 및 비밀번호 설정 확인\nlogin: 라인 비밀번호 인증\nlogin local: 로컬 사용자 인증\n\n\nlogin authentication: AAA 인증\nno login: 인증 없이 사용자 모드(User EXEC mode) 접근\n  Step 3) enable 비밀번호 설정\nRouter# config terminal (단축 명령 conf t)\nRouter(config)# enable secret <비밀번호> 또는 Router(config)# enable password <비밀번호>\nRouter(config)# end\n  Step 4) 가상 터미널(VTY) 비밀번호 설정\nRouter# config terminal\nRouter(config)# line vty ?\n<0X4> First Line number\nRouter(config)# line vty 0 4\nRouter(config-line)# login\nRouter(config-line)# password <비밀번호>\n  Step 5) 콘솔 비밀번호 설정\nRouter# config terminal\nRouter(config)# line console ?\n<0X0> First Line number\nRouter(config)# line console 0\nRouter(config-line)# login\nRouter(config-line)# password <비밀번호>\n  Step 6) 보조(AUX) 포트 비밀번호 설정\n Router# config terminal\n Router(config)# line aux ?\n <0X0> First Line number\n Router(config)# line aux 0\n Router(config-line)# login\n Router(config-line)# password <비밀번호>\n※ AUX 포트는 일반적으로 무단 접근을 방지하기 위해 N-18 항목(불필요한 보조 입출력 포트 사용 금지)과 같\n이 비활성화 설정\n\n\nl Radware Alteon\n  Step 1) admpw 설정 확인\nMain# /cfg/dump\n  Step 2) 관리자 비밀번호 변경\nMain# /cfg/sys/access/user/admpw (administrator 비밀번호 변경 시)\nMain# apply\nMain# save\nl Passport\n  Step 1) 비밀번호 설정 확인\n# show config\n  Step 2) switch 접속\n  Step 3) 다음 해당하는 계정에 따라 명령어 실행\n# config cli password ro <계정명>\n# config cli password 11 <계정명>\n# config cli password 12 <계정명>\n# config cli password 13 <계정명>\n# config cli password rw <계정명>\n# config cli password rwa <계정명>\n# config cli password slboper <계정명>\n# config cli password 14oper <계정명>\n# config cli password oper <계정명>\n# config cli password slbadmin <계정명>\n# config cli password 14admin <계정명>\n# config cli password ssladmin <계정명>\nl Juniper Junos\n  Step 1) root authentication 설정 확인\nuser@host> configure\n[edit]\nuser@host# show\n\n\n  Step 2) 루트 사용자 계정의 비밀번호를 변경\nuser@host> configure\n[edit]\nuser@host# set system root-authentication plain-test-passwd\nNew password : <비밀번호>\nretype new password : <비밀번호>\nl Piolink PLOS\n  Step 1) 비밀번호 설정 확인\nswitch# show running-config\n  Step 2) 루트 사용자 계정의 비밀번호를 변경\n# configure terminal\n(config) # password\nChanging password for root\nEnter the new password (minimum of 5, maximum of 8 characters)\nEnter new password: <비밀번호>\nRe-enter new password: <비밀번호>",
       "guide_page": 391,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -54,9 +56,11 @@
       "cases": "l 공통\n  Step 1) 장비에 비밀번호 복잡성 정책을 설정하거나 비밀번호 복잡성 설정 기능이 없는 장비는 기관 정책에 따\n라 비밀번호를 설정하여 사용하는지 확인\n\n\n  Step 2) 기반시설 관리기관의 비밀번호 작성규칙과 관련 법규를 준수하여 비밀번호 복잡성 정책을 설정하고 안\n전한 비밀번호를 사용\n※ 비밀번호 작성규칙 예시\n비밀번호는 다음 사항을 반영하고 숫자·문자·특수문자 등을 혼합하여 안전하게 설정하고 정기적으로 변경·\n사용해야 함\n1. 사용자 계정(아이디)과 동일하지 않은 것\n2. 개인 신상 및 부서 명칭 등과 관계가 없는 것\n3. 일반 사전에 등록된 단어의 사용을 피할 것\n4. 동일한 단어 또는 숫자를 반복하여 사용하지 말 것\n5. 사용된 비밀번호는 재사용하지 말 것\n6. 동일한 비밀번호를 여러 사람이 공유하여 사용하지 말 것\n7. 응용프로그램 등을 이용한 자동 비밀번호 입력기능을 사용하지 말 것\nl Cisco IOS\n  Step 1) 비밀번호 복잡성 관련 설정 확인\nRouter# show running-config\n  Step 2) 비밀번호의 최소 길이 설정(기존 비밀번호는 영향을 받지 않음)\nRouter# config terminal\nRouter(config)#security passwords min-length ?\n<0-16> Minimum length of all user/enable passwords\nRouter(config)# security passwords min-length <길이>",
       "guide_page": 395,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -80,9 +84,11 @@
       "cases": "l Cisco IOS\n  Step 1) enable secret 사용 확인\nRouter# show running-config\n  Step 2) 계정명 secret 사용 확인\nRouter# show running-config\n  Step 3) Password-Encryption 서비스 동작 확인\nRouter# show running-config\n  Step 4) enable secret 설정\nenable secret 명령어를 사용하여 enable 비밀번호를 일방향 암호화 저장\nenable secret 와 enable password 명령어로 각각 비밀번호를 사용하는 경우 enable \nsecret 명령어의 우선순위가 높으며 보안상 비밀번호를 서로 다르게 입력해야 함 \nRouter# config terminal\nRouter(config)# enable secret <비밀번호>\n\n\n  Step 5) username secret 설정\n(config)# username secret 명령어를 사용하여 로컬 사용자 비밀번호를 일방향 암호화 저장\nenable secret과 enable password 명령어로 비밀번호를 설정하여 같이 사용하는 경우 enable secret 명령\n어로 설정한 비밀번호의 우선순위가 높으며 보안상 비밀번호 서로 다르게 입력해야 함 \nRouter# config terminal\nRouter(config)# username <사용자 이름> secret <비밀번호>\n  Step 6) Password-Encryption 서비스 설정\n구성파일(running-config/startup-config)에 평문 비밀번호를 양방향 암호화로 저장하여 노출을 방지, 해\n독 가능한 알고리즘(비즈네르 암호)을 사용하기 때문에 구성정보에서 비밀번호를 제거하고 출력해야 \n하는 경우 show tech-support 명령어를 사용\nRouter# config terminal\nRouter(config)# service password-encryption\nRouter(config)# end\nRouter# show running-config\nenable secret 5 $1$mERr$9WCswBwUv6WeC6M8kNSs8\nenable password 7 0822455D0A1648121C0A0E082F\nl Juniper Junos\n  Step 1) root authentication 설정을 이용하여 [edit system] 레벨에서 비밀번호 암호화 설정\n[edit]\nuser@host#show\n  Step 2) 기본적으로 비밀번호를 암호화 저장하며, encrypted-password 옵션은 이미 암호화된 비밀번호 해시를 \n직접 입력할 때 사용\n[edit]\nuser@host# set system root-authentication encrypted-password <암호화된 비밀번호>",
       "guide_page": 397,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -106,9 +112,11 @@
       "cases": "l Cisco IOS\n  Step 1) 현재 설정된 보안 정책 확인\nRouter# show running-config\n1. login block-for 사용 확인\n2. 로그인 실패 임계값 확인\n  Step 2) 로그인 실패 임계값 설정 확인\nRouter# show login\n로그인 실패 임계값 설정 확인\n  Step 3) 로그인 실패 임계값 초과 후 계정 잠금 설정\nlogin block-for 설정\nRouter# config terminal\nRouter(config)# login block-for <계정 잠금 시간> attempts <로그인 실패 횟수(default: 3)> within <로그\n\n\n인 실패 허용 시간 범위(default: 15)>\nl Juniper\n  Step 1) root authentication 설정을 이용하여 [edit system] 레벨에서 syslog 설정 확인\nuser@host> configure\n[edit]\nuser@host# show version\n  Step 2) 로그인 실패 임계값 설정\nuser@host> configure\n[edit system login retry-options]\nuser@host# set tries-before-disconnect <로그인 실패 횟수(default: 3)>\n  Step 3) 로그인 실패 임계값 초과 후 계정 잠금 시간 설정\nuser@host> configure\n[edit system login retry-options]\nuser@host# set lockout-period <계정 잠금 시간>",
       "guide_page": 399,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -134,7 +142,9 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -158,9 +168,11 @@
       "cases": "l Cisco IOS\n  Step 1) Access List 설정하고 VTY 라인에 적용 여부 확인\nRouter# show running-config\n  Step 2) VTY 접근 허용 IP 설정\nRouter# config terminal\nRouter(config)# access-list <ACL 번호> permit <IP주소> \nRouter(config)# access-list <ACL 번호> deny any log \nRouter(config)# line vty ?\n<0X4> First Line number\n\n\nRouter(config)# line vty 0 4\nRouter(config)# access-class <ACL 번호> in\nl Radware Alteon\n  Step 1) 장비로 접속하여 Telnet 또는 SSH 사용자의 접속 IP 설정 확인(Access Policies)\n  Step 2) # cfg\n# sys\n# access\n# mgmt\n# add\nEnter Management Network Address: <IP주소>\nEnter Management Network Mask: <서브넷마스크>\n# apply\n# save\nl Passport\n  Step 1) 장비로 접속하여 Telnet 또는 SSH 사용자의 접속 IP 설정 확인(Access Policies)\n  Step 2) # config sys access-policy\nconfig/sys/access-policy# enable true\nconfig/sys/access-policy# policy <pid> create\nconfig/sys/access-policy# policy <pid>\nconfig/sys/access-policy/policy/<pid># enable true\nconfig/sys/access-policy/policy/<pid># accesslevel rwa\nconfig/sys/access-policy/policy/<pid># host <ip-addr>\nconfig/sys/access-policy/policy/<pid># service snmp enable\nconfig/sys/access-policy/policy/<pid># service telnet enable\nl Juniper Junos\n  Step 1) firewall filter 설정하고 루프백 인터페이스에 적용 여부 확인\n[edit]\nuser@host# show\n\n\n  Step 2) 관리자 IP 지정\nuser@host> configure\n[edit]\nuser@host# edit policy-options\n[edit policy-options]\nuser@host# set prefix-list <prefix-name> <IP주소>\n  Step 3) SSH 서비스에 관리자 IP 외에 접근을 차단하도록 방화벽 필터를 설정\n[edit]\nuser@host# edit firewall family inet filter <filter-name>\n[edit firewall family inet filter <filter-name>]\nuser@host# edit term <term-name-1>\n[edit firewall family inet filter <filter-name> term <term-name-1>]\nuser@host# set from source-address 0.0.0.0/0\nuser@host# set from source-prefix-list <prefix-name> except\nuser@host# set term from protocol tcp\nuser@host# set from destination-port ssh\nuser@host# set then log\nuser@host# set then discard\n  Step 4) SNMP, ICMP, BGP, OSPF 등 다른 서비스와 프로토콜에 필요한 접근허용 필터를 설정하지 않은 경우 \n방화벽 필터의 영향을 받지 않도록 기본 허용으로 구성을 종료\nuser@host# edit firewall family inet filter <filter-name>\n[edit firewall family inet filter <filter-name>]\nuser@host# set term <term-name-2> then accept\n※ 기본 허용으로 인한 보안 위협이 존재하므로 필요한 서비스와 프로토콜을 허용하고 기본 차단으로 더 강력한 \n보안 필터를 구성할 수 있음\n  Step 5) 루프백 인터페이스에 방화벽 필터를 적용\n[edit]\nuser@host# set interfaces lo0 unit 0 family inet filter input \n<filter-name>\n\n\nl Piolink PLOS\n  Step 1) Security system access policy configuration 설정 확인\n(config)# show running-config\n  Step 2) 시스템 접근 설정 모드에서 SSH 서비스에 ACL 설정\n# configure terminal\n(config)# security\n(config-security)# system\n(config-security-system)# access\n(config-security-system-access)# rule <rule-id>\n(config-security-system-access-rule[id])# protocol tcp \n(config-security-system-access-rule[id])# source-ip <IP주소>\n(config-security-system-access-rule[id])# dest-port 22\n(config-security-system-access-rule[id])# interface any\n(config-security-system-access-rule[id])# policy accept\n(config-security-system-access-rule[id])# apply\n  Step 3) 시스템 접근 제어 기능의 기본 접근 정책을 차단으로 설정\n(config-security-system-access) # default-policy deny\n※ 기본 접근 정책을 차단으로 변경하기 전에 관리용 포트(mgmt)와 네트워크 장비에 SNMP, ICMP 등 다른 서\n비스와 프로토콜에 필요한 접근 허용 규칙을 모두 설정",
       "guide_page": 406,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -184,9 +196,11 @@
       "cases": "l Cisco IOS\n  Step 1) 각 Line Access의 exec-timeout 설정 확인\nRouter# show running-config\n  Step 2) Console\nRouter# config terminal\nRouter(config)# line con 0\nRouter(config-line)# exec-timeout 5 0\n  Step 3) VTY\nRouter# config terminal\nRouter(config)# line vty 0 4\nRouter(config-line)# exec-timeout 5 0\n  Step 4) AUX\nRouter# config terminal\n\n\nRouter(config)# line aux 0\nRouter(config-line)# exec-timeout 5 0\nl Radware Alteon\n  Step 1) idle timeout in minutes 설정 확인\n  Step 2) # cfg\n# sys\n# idle <idle timeout in minutes, affects both console and telnet>\n# apply\n# save\n※ default : 5분 설정\nl Juniper Junos\n  Step 1) idle-timeout 설정 확인\n[edit]\nuser@host#show\n  Step 2) [edit login]\nuser@host#set class <클래스> idle-timeout <분>\nl Piolink PLOS\n  Step 1) terminal timeout 설정 확인\n  Step 2) # configure terminal\n(config)# terminal timeout <분>\n※ 1분에서 60분 사이의 시간을 설정할 수 있음",
       "guide_page": 410,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -210,9 +224,11 @@
       "cases": "l Cisco IOS\n  Step 1) SSH 활성화 확인\nRouter# show ip ssh\nSSH Enabled – version 1.5\nAuthentication timeout: 120 secs; Authentication retries: 3 (활성화)\n%SSH has not been enabled (비 활성화)\n  Step 2) Cisco IOS 이미지 확인\nRouter# show version\nSSHv2 서버를 지원하는 릴리즈별 k9(3DES) 소프트웨어 이미지를 사용하는지 확인\n(예, 7200p-ipbasek9-mz.152-4.M11.bin)\n  Step 3) SSH 설정\nRouter# config terminal\n\n\nRouter(config)# hostname <호스트명>\nRouter(config)# ip domain-name <도메인명>\nRouter(config)# crypto key generate rsa\nHow many bits in the modulus [512]: 2048\nRouter(config)# ip ssh time-out <초> \nRouter(config)# ip ssh version 2 (SSH 버전 2 사용)\nRouter(config)# ip ssh authentication-retries [횟수] <- 재시도 횟수\n  Step 4) VTY 라인에 SSH 사용 설정\nRouter(config)# line vty 0 4\nRouter(config-line)# transport input ssh\nl Radware Alteon\n  Step 1) /sys/sshd에서 SSH 활성화 확인\n  Step 2) SSH 설정 방법\n# cfg\n# /sys/sshd ena\n# /sys/sshd on\n# apply\n# save\nl Juniper Junos\n  Step 1) SSH 버전 확인\nuser@host# set ssh\n  Step 2) SSH 활성화\n[edit]\nroot# set system services ssh\n[edit]\nroot# commit\n  Step 3) Telnet 비활성화\n\n\n[edit]\nroot# delete system services telnet\n[edit]\nroot# commit\nl Piolink PLOS\n  Step 1) SSH 버전 확인\n(config)# management-access\n(config-management-access)# ssh status enable\n  Step 2) SSH 활성화\n(config)# management-access\n(config-management-access)# ssh status enable\n(config-management-access)# apply\n  Step 3) Telnet 비활성화\n(config)# management-access\n(config-management-access)# telnet status disable\n(config-management-access)# apply",
       "guide_page": 412,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -236,9 +252,11 @@
       "cases": "l Cisco IOS\n  Step 1) 불필요한 포트 및 인터페이스 사용 확인\nRouter# show running\n불필요한 보조 입출력 포트의 오른쪽 끝부분에 Up (활성화)\n불필요한 보조 입출력 포트의 오른쪽 끝부분에 Down (비활성화)\n  Step 2) AUX 포트 접속 차단\nRouter# config terminal\nRouter(config)# line aux 0\nRouter(config-line)# no password (어떤 사용자도 접속 금지)\nRouter(config-line)# transport input none (어떤 입력도 받지 않음)\nRouter(config-line)# no exec (어떤 명령도 실행 안 됨)\nRouter(config-line)# exec-timeout 0 1 (1초 지나면 자동 타임아웃)\n\n\nl Juniper Junos\n  Step 1) 불필요한 포트 및 인터페이스 사용 확인\nuser@host>configure\n[edit]\nuser@host#show\nroot authentication 설정을 이용하여 [edit system] 레벨에서 interface 차단 설정 확인\n  Step 2) 보조(AUX) 포트 비활성화 설정\n[edit system ports]\nroot# set auxiliary disable\n[edit system ports]\nroot# commit",
       "guide_page": 415,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -262,9 +280,11 @@
       "cases": "l Cisco IOS\n  Step 1) 배너 설정 내용 확인\nRouter# show running-config\n  Step 2) 배너 설정\nRouter# config terminal\nEnter configuration commands, one per line. End with CNTL/Z.\nRouter(config)# banner motd #\nEnter TEXT message. End with the character '#'.\n<배너 문구 입력> #\nRouter(config)# banner login #\nEnter TEXT message. End with the character '#'.\n<배너 문구 입력> #\nRouter(config)# banner exec #\n\n\nEnter TEXT message. End with the character '#'.\n<배너 문구 입력> #\nRouter(config)#\n※ 바람직한 배너 예시\nThis system have to access authorized user and only use for officially.\nDuring using equipment, privacy of individuals is not guaranteed.\nAll access and usage is monitored and recorded and can be provided evidence as court or related organization.\nUse of this system constitutes consent to monitoring for these purposes.\nl Radware Alteon\n  Step 1) banner <string> 설정 내용 확인\n  Step 2) Banner 설정\n# cfg\n# sys\n# banner <string>\n# apply\n# save\nl Juniper Junos\n  Step 1) edit system login 설정 내용 확인\n  Step 2) [edit system login]\nmessage text",
       "guide_page": 417,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -288,9 +308,11 @@
       "cases": "l Cisco IOS\n  Step 1) Logging 설정 확인\nRouter# show running-config\n  Step 2) Log 정보 확인\nRouter# show logging\n  Step 3) 라우터 로깅 설정\nRouter# config terminal\nRouter(config)# logging on (log를 console 이외도 전달)\nRouter(config)# logging trap informational (severity level 설정)\nRouter(config)# logging 192.168.3.1 (syslog 서버)\nRouter(config)# logging facility local6 (syslog facility 설정)\nRouter(config)# logging source-interface serial 0 (syslog interface)\n\n\n클래스 명\n설명\nOperator\nclear, network, reset, trace, view\nread-only\nview\nSuperuser\nall\nunauthorized\nNone\nl Radware Alteon\n  Step 1) /syslog/host에서 syslog host 설정 확인\n  Step 2) switch로 접속\n  Step 3) # cfg\n  Step 4) # sys\n  Step 5) 다음과 같이 설정할 수 있음\n# /syslog/host: first syslog host의 IP주소 설정\n# /syslog/host2: second syslog host의 IP주소 설정\n  Step 6) # apply\n  Step 7) # save\nl Juniper Junos\n  Step 1) root authentication 설정을 이용하여 [edit system] 레벨에서 syslog 설정 확인\nuser@host> configure\n[edit]\nuser@host# show version\n  Step 2) user@host> configure\n[edit]\nuser@host# edit system syslog\n[edit system syslog]\nuser@host# set system syslog file message any error\nuser@host# set system syslog host 192.168.0.245 any any \nuser@host# set archive files 5 sizes 5m world-readable\n(files 5 – 파일 수를 5개지 표시, 5m – 최대 사이즈를 5m까지 허용)\n\n\nl Piolink PLOS\n  Step 1) configure에서 logging 서버 설정 확인\n  Step 2) #logging server enable\n  Step 3) #logging server <ip address> <event> <level>",
       "guide_page": 419,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -316,7 +338,9 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -340,9 +364,11 @@
       "cases": "l Cisco IOS\n  Step 1) 버퍼 메모리 설정 확인\nRouter> enable\nRouter# show logging 로그에 대한 정보를 확인\n메모리(RAM)에 저장된 로그는 'show logging'으로 확인할 수 있고, 'clear logging'을 실행하거나 RAM\n에 저장된 로그는 전원 종료 시 삭제\n\n\n  Step 2) 버퍼 메모리 설정\nRouter# config terminal\nRouter(config)# logging on (로그를 메모리에 백업)\nRouter(config)# logging buffered 16000 (16KByte 할당)\nRouter(config)# logging buffered information (severity 레벨 설정)\nl Piolink PLOS\n  Step 1) (config)# show logging 로그에 대한 정보를 확인\n  Step 2) (config)#logging buffer <size> (설정 범위 1~1000KB, 기본설정 100KB) \n(config)#logging priority <event> <level>",
       "guide_page": 424,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -366,9 +392,11 @@
       "cases": "l Cisco IOS\n  Step 1) 로그에 대한 정보 확인\nRouter> enable\nRouter# show logging\nl Juniper Junos\n  Step 1) 로그에 대한 정보 확인\nuser@host> configure\n[edit]\nuser@host# show log messages\n\n\nl Cisco IOS, Juniper Junos\n  Step 1) 콘솔 로깅\n콘솔 로그 메시지는 오직 콘솔 포트에서만 보이므로 이 로그를 보기 위해서는 반드시 콘솔 포트에 연결해\n야 함\n  Step 2) Buffered 로깅\nBuffered 로깅은 로그를 라우터의 RAM에 저장하는데 이 버퍼가 가득 차게 되면 오래된 로그는 자동으\n로 새로운 로그에 의해 대체됨\n  Step 3) Terminal 로깅\nTerminal monitor 명령을 사용하여 로깅을 설정하면 라우터에서 발생하는 로그 메시지를 VTY terminal에 \n보냄\n  Step 4) Syslog\n시스코 라우터는 라우터의 로그 메시지가 외부의 syslog 서버에 저장되도록 설정할 수 있음\n  Step 5) SNMP traps\nSNMP trap이 설정되면 SNMP는 특별한 상황을 외부의 SNMP 서버에 전송하도록 설정할 수 있음\n  Step 6) ACL 침입 로깅\n표준 또는, 확장된 액세스 리스트를 설정할 때 특정한 룰에 매칭하였을 경우 해당 패킷 정보를 로그에 \n남기도록 설정할 수 있는데, 이는 액세스 리스트 룰의 끝에 로그나 로그 인풋을 추가하면 됨\n로그 인풋은 로그와는 달리 인터페이스 정보도 함께 남기게 되므로 어떤 인터페이스를 통해 로그가 남\n았는지를 알 수 있음\n※ 라우터에 기본적으로 설정된 로그 파일 설정을 변경하지 않으면 로깅을 효율적으로 사용할 수 없으므로 크게 6\n가지로 이루어진 아래의 방법을 활용해야 함",
       "guide_page": 426,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -392,9 +420,11 @@
       "cases": "l Cisco IOS\n  Step 1) NTP 서버 설정 확인\nRouter# show running-config\n  Step 2) Global Configuration 모드에서 ntp server 명령을 실행\nRouter# config terminal\nRouter(config)# ntp server <NTP 서버 IP>\nl Radware Alteon\n  Step 1) /sys/ntp에서 NTP 서버 설정 확인\n  Step 2) # cfg\n# /sys/ntp\n# on\n# prisrvr [NTP 서버 IP]\n# intrval [동기화 주기]\n\n\ntzone +9:00\n# apply\n# save\nl Juniper Junos\n  Step 1) root authentication 설정을 이용하여 [edit system] 레벨에서 NTP 서비스 설정 확인\nuser@host> configure\n[edit]\nuser@host# show\n  Step 2) NTP 서버와 네트워크 장비가 부팅될 때 시간 동기화를 위한 NTP 부트 서버를 설정\nuser@host> configure\n[edit]\nuser@host# edit system ntp\n[edit system ntp]\nuser@host# set server <NTP 서버 IP>\nuser@host# set boot-server <NTP 부트 서버 IP>\n※ 네트워크 장비와 NTP 서버 간 시간 차이가 1000초 이상 다르면 시간 동기화를 하지 않기 때문에 부팅 단계에서 \n정확한 시간을 확보하도록 부트 서버를 구성",
       "guide_page": 428,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -418,9 +448,11 @@
       "cases": "l Cisco IOS\n  Step 1) service timestamps 설정 확인\nRouter> enable\nRouter# show running-config\n  Step 2) timestamp 로그 설정\n1. 로그 메시지의 타임스탬프를 UTC 시간대로 밀리초 단위까지 표시\nRouter# config terminal\nRouter(config)# service timestamps log datetime msec show-timezone\n2. 로그 메시지의 타임스탬프를 로컬 시간대로 밀리초 단위까지 표시\nRouter(config)# clock timezone KST 9\nRouter(config)# service timestamps log datetime msec localtime show-timezone",
       "guide_page": 430,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -444,9 +476,11 @@
       "cases": "l Cisco IOS\n  Step 1) SNMP 설정 확인\nRouter# show running-config\n\n\n  Step 2) SNMP 서비스 동작 확인\nRouter# show snmp\nSNMP 서비스 비활성화 시 “%SNMP agent not enabled” 문구 출력\n  Step 3) Router# config terminal\nRouter(config)# no snmp-server\nl Radware Alteon\n  Step 1) SNMP 서비스 확인\n>> Main# /cfg/dump\n/c/sys\nsnmp r\n  Step 2) >> Main# /cfg/sys/access/snmp\nCurrent SNMP access: disabled\nEnter new SNMP access (disabled/read-only/read-write) [d/r/w]:\nl Passport\n  Step 1) SNMP 서비스가 불필요하다면 서비스 중지\nl Juniper Junos\n  Step 1) snmp 서비스 설정 확인\nuser@host# show snmp\n  Step 2) user@host> configure\nuser@host# no set snmp community public\nl Piolink PLOS\n  Step 1) SNMP 설정 확인\nswitch# show running-config",
       "guide_page": 431,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -470,9 +504,11 @@
       "cases": "l Cisco IOS\n  Step 1) SNMP 설정 확인\nRouter# show running-config\n  Step 2) Community String 문자열 변경\nRouter# config terminal\nRouter(config)# snmp-server Community <Community String>\nl Radware Alteon / Passport\n  Step 1) SNMP 설정에서 Community String 설정 확인\n\n\n  Step 2) Radware Alteon\n# cfg/sys/ssnmp\n# rcomm - SNMP read community string 을 설정 (최대 32 자, Default String – public)\n# wcomm - SNMP write community string 을 설정 (최대 32 자, Default String – private)\n# apply\n# save\n  Step 3) Passport\n# config snmp-v3 community commname <Comm Idx> new-commname <value>\nl Juniper Junos\n  Step 1) snmp community 설정에서 Community String 확인\n[edit]\nuser@host# show\n  Step 2) [edit]\nuser@host# set snmp community <Community String> authorization read-only \nl Piolink PLOS\n  Step 1) snmp community 설정에서 community string 확인\nswitch# show running-config\n  Step 2) switch# configure\nswitch(config)# snmp\nswitch(config-snmp)# community <Community String>\nswitch(config-snmp)# status enable\nswitch(config-snmp)# apply",
       "guide_page": 433,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -496,9 +532,11 @@
       "cases": "l Cisco IOS\n  Step 1) SNMP 설정 확인\nRouter# show running-config\n  Step 2) Access-List 설정 확인\nRouter# show running-config\n  Step 3) 글로벌 구성 모드에서 snmp-server community 명령어로 ACL 적용\nRouter# config terminal\nRouter(config)# access-list <ACL 번호> permit <IP주소>\nRouter(config)# access-list <ACL 번호> deny any log\nRouter(config)# snmp-server community <Community String> RO <ACL 번호>\n\n\nl Passport\n  Step 1) config snmp-v3 에서 접근목록 설정 확인\n  Step 2) # config snmp-v3 community create <Comm Idx> <name> <security> [tag]\n# config snmp-v3 group-member create <user name> <model>   [<group name>]\n# config snmp-v3 group-access create <group name> <prefix> <model> <level>\n# config snmp-v3 group-access view <group name> <prefix> <model> <level> [read <value>] [write \n<value>] [notify <value>]\nl Juniper Junos\n  Step 1) edit snmp 에서 접근목록 설정 확인\n  Step 2) [edit snmp]\nuser@host# edit client-list <client list name>\n[edit snmp client-list <client list name>] \nuser@host# set default restrict \nuser@host# set <ip address/range>\nuser@host# up\n[edit snmp] \nuser@host# edit community <community name>\n[edit snmp community <community name>] \nuser@host#set client-list-name <client list name>\nl Piolink PLOS\n  Step 1) configuration 모드에서 snmp 접근목록 설정 확인\n  Step 2) 시스템 접근 설정 모드에서 SNMP 서비스에 ACL 설정\n# configure terminal\n(config)# security\n(config-security)# system\n(config-security-system)# access\n(config-security-system-access)# rule <rule-id>\n(config-security-system-access-rule[id])# protocol udp\n(config-security-system-access-rule[id])# source-ip <IP주소>\n\n\n(config-security-system-access-rule[id])# dest-port 161\n(config-security-system-access-rule[id])# interface any\n(config-security-system-access-rule[id])# policy accept\n(config-security-system-access-rule[id])# apply\n  Step 3) 시스템 접근제어 기능의 기본 접근 정책을 차단으로 설정\n(config-security-access)# default-policy deny\n※ 기본 접근 정책을 차단으로 변경하기 전에 관리용 포트(mgmt)와 네트워크 장비의 SSH, ICMP 등 다른 서비스와 \n프로토콜에 필요한 접근허용 규칙을 모두 설정",
       "guide_page": 435,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -522,9 +560,11 @@
       "cases": "l Cisco IOS\n  Step 1) SNMP 설정 확인\nRouter# show running-config\n  Step 2) SNMP Community String 권한 설정(RW 권한 삭제 권고)\nRouter# config terminal\nRouter(config)# snmp-server community <String> RO\nRouter(config)# snmp-server community <String> RW\nl Passport\n  Step 1) config snmp 에서 SNMP community 권한 확인\n  Step 2) SNMP Community String 권한 설정(RW 권한 삭제 권고)\n\n\n# config snmp-v3 community create <Comm Idx> <name> <security> [tag <value>]\n# config snmp-v3 group-member create <user name> <model> [<group name>]\n# config snmp-v3 group-access create <group name> <prefix> <model> <level>\n# config snmp-v3 group-access view <group name> <prefix> <model> <level> [read<value>] [write \n<value>] [notify <value>]\nl Radware Alteon\n  Step 1) >> Main# /cfg/sys/access/snmp\nCurrent SNMP access: read-write\nEnter new SNMP access (disabled/read-only/read-write) [d/r/w]: r\n>> Main# apply\nl Juniper Junos\n  Step 1) root authentication 설정을 이용하여 [edit system] 레벨에서 SNMP community 권한 확인\n[edit]\nuser@host# show\n  Step 2) 읽기 쓰기 권한을 설정한 SNMP Community 삭제\n[edit snmp]\nuser@host# delete community <Community>\n  Step 3) 읽기 전용 권한으로 SNMP Community 설정\n[edit snmp]\nuser@host# set community <Community> authorization read-only\n  Step 4) SNMPv3는 SNMP 그룹에 읽기 쓰기 권한 제거\n[edit snmp v3 vacm access]\nuser@host# delete group <그룹> default-context-prefix security-model <보안모델> security-level \n<보안 레벨> write-view\nl Piolink PLOS\n  Step 1) switch# configure\nswitch(config)# snmp\nswitch(config-snmp)# policy read-only > apply",
       "guide_page": 438,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -548,9 +588,11 @@
       "cases": "l Cisco IOS\n  Step 1) TFTP 설정 정보 확인\nRouter# show running-config\n  Step 2) Router# config terminal\nRouter(config)# no service tftp",
       "guide_page": 440,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -574,9 +616,11 @@
       "cases": "l Cisco IOS\n  Step 1) IP spoofing 방지 설정 확인\nRouter# show running\n  Step 2) 스푸핑 방지 필터링 ACL 구성\naccess-list 번호는 100~199구간을 사용하여 Extended access-list를 사용\nrouter# configure terminal\nrouter(config)# access-list <ACL 번호> deny ip 0.0.0.0 0.255.255.255 any\nrouter(config)# access-list <ACL 번호> deny ip 10.0.0.0 0.255.255.255 any\nrouter(config)# access-list <ACL 번호> deny ip 127.0.0.0 0.255.255.255 any\nrouter(config)# access-list <ACL 번호> deny ip 169.254.0.0 0.0.255.255 any\nrouter(config)# access-list <ACL 번호> deny ip 172.16.0.0 0.15.255.255 any\nrouter(config)# access-list <ACL 번호> deny ip 192.0.2.0 0.0.0.255 any\nrouter(config)# access-list <ACL 번호> deny ip 192.168.0.0 0.0.255.255 any\n\n\nrouter(config)# access-list <ACL 번호> deny ip 224.0.0.0 15.255.255.255 any\nrouter(config)# access-list <ACL 번호> permit ip any any\n  Step 3) 서비스제공업체(SP)와 연결된 인터페이스에 ACL 적용\nrouter(config)# interface serial <인터페이스>\nrouter(config-if)# ip access-group <ACL 번호> in\nl Juniper Junos\n  Step 1) Configure Firewall Filters와 Apply Firewall Filters 설정 확인\n  Step 2) 스푸핑 방지 필터링 Firewall Filters 구성\n  Step 3) IP 대역 지정\nuser@host> configure\n[edit]\nuser@host# edit policy-options\n[edit policy-options]\nuser@host# set prefix-list <prefix-name> 0.0.0.0/8\nuser@host# set prefix-list <prefix-name> 10.0.0.0/8\nuser@host# set prefix-list <prefix-name> 127.0.0.0/8\nuser@host# set prefix-list <prefix-name> 169.254.0.0/16\nuser@host# set prefix-list <prefix-name> 172.16.0.0/12\nuser@host# set prefix-list <prefix-name> 192.0.2.0/24\nuser@host# set prefix-list <prefix-name> 192.168.0.0/16\nuser@host# set prefix-list <prefix-name> 224.0.0.0/4\n  Step 4) 방화벽 필터 설정\n[edit]\nuser@host# edit firewall family inet filter <filter-name>\n[edit firewall family inet filter <filter-name>]\nuser@host# edit term <term-name-1>\n[edit firewall family inet filter <filter-name> term <term-name-1>]\nuser@host# set from source-address <prefix-name>\nuser@host# set then discard\nuser@host# up\n\n\n[edit firewall family inet filter <filter-name>]\nuser@host# set term <term-name-2> then accept\n  Step 5) 서비스제공업체(SP)와 연결된 인터페이스에 방화벽 필터를 적용\n[edit]\nuser@host# set interfaces <인터페이스> unit <유닛> family <패밀리> \nfilter input <filter-name>\nl 공통\n  Step 1) 특수 용도 주소 차단(RFC 6890 참조)\n0.0.0.0/8 자체 네트워크(This host on this network, RFC1122)\n10.0.0.0/8 사설 네트워크(Private-Use, RFC1918)\n127.0.0.0/8 루프백(Loopback, RFC1122)\n169.254.0.0/16 링크 로컬(Link Local, RFC3927)\n172.16.0.0/12 사설 네트워크(Private-Use, RFC1918)\n192.0.2.0/24 예제 등 문서에서 사용(TEST-NET-1, RFC5737)\n192.168.0.0/16 사설 네트워크(Private-Use, RFC1918)\n224.0.0.0/4 멀티캐스트(Multicast, RFC5771)",
       "guide_page": 441,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -602,7 +646,9 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -626,9 +672,11 @@
       "cases": "l Cisco IOS\n  Step 1) 사용하지 않는 인터페이스 확인\nRouter# show interface\n비활성화한 인터페이스는 Administratively down으로 표시\n  Step 2) 사용하지 않는 인터페이스 비활성화(shutdown)\nRouter# config terminal\nRouter(config)# interface <인터페이스>\nRouter(config-line)# shutdown\nl Radware Alteon\n  Step 1) 사용하지 않는 인터페이스 확인\n>> Main# /cfg/dump\n\n\n>> Main# /info/link\n  Step 2) 사용하지 않는 인터페이스 비활성화(dis)\n>> Main# /cfg/port <포트>/dis\n>> Main# apply\nl Juniper Junos\n  Step 1) 사용하지 않는 인터페이스 확인\n[edit]\nuser@host# show interface terse\n비활성화한 인터페이스는 admin열을 down으로 표시\n  Step 2) 사용하지 않는 인터페이스 비활성화(disable)\n[edit]\nuser@host# edit interfaces\n[edit interfaces]\nuser@host# set <인터페이스> disable\nl Piolink PLOS\n  Step 1) 사용하지 않는 인터페이스 확인\nswitch# show running-config\nswitch# show port\n  Step 2) 사용하지 않는 인터페이스 비활성화(status disable)\nswitch# configure\nswitch(config)# port <포트> status disable\nswitch(config)# apply",
       "guide_page": 446,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -652,9 +700,11 @@
       "cases": "l Cisco IOS\n  Step 1) TCP Keepalive 서비스 설정 확인\nRouter# show running-config\n  Step 2) 네트워크 장비로 들어오는 TCP 연결에 TCP Keepalive 서비스를 설정\nRouter# config terminal\nRouter(config) service tcp-keepalives-in\n  Step 3) 네트워크 장비에서 나가는 TCP 연결에 TCP Keepalive 서비스를 설정\nRouter# config terminal\nRouter(config) service tcp-keepalives-out",
       "guide_page": 448,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -678,9 +728,11 @@
       "cases": "l Cisco IOS\n  Step 1) Finger 서비스 설정 확인 (12.1(5) 및 12.1(5)T 이상은 기본적으로 비활성화)\nRouter# show running-config\n  Step 2) Finger 서비스 비활성화\nRouter# config terminal\nRouter(config)# no service finger (이전)\nRouter(config)# no ip finger\n※ 최근 출시되는 IOS는 no service finger 명령 대신 no ip finger 명령을 사용하기도 함\n\n\nl Juniper Junos\n  Step 1) root authentication 설정을 이용하여 [edit system] 레벨에서 Finger 서비스 설정 확인\nuser@host> configure\n[edit]\nuser@host# show\n  Step 2) Finger 서비스 비활성화\nuser@host> configure\n[edit]\nuser@host# edit system services\n[edit system services]\nuser@host# delete finger\n[edit system services]\nuser@host# commit",
       "guide_page": 449,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -704,9 +756,11 @@
       "cases": "l Cisco IOS\n  Step 1) 불필요한 웹서비스 확인\nRouter# show running-config 웹 서비스 설정 확인\n  Step 2) 불필요한 웹서비스 관련 설정\nRouter# config terminal\nRouter(config)# no ip http server\nRouter(config)# no ip http secure-server\nRouter# config terminal\nRouter(config)# ip http active-session-modules exclude_webexec\nRouter(config)# ip http secure-active-session-modules exclude_webexec\n\n\nl Radware Alteon\n  Step 1) 불필요한 웹서비스 확인\n>> Main# /cfg/dump\n>> Main# /info/link\n  Step 2) 불필요한 웹서비스 관련 설정\n>> Main# /cfg/sys/access/https/https dis\n>> Main# /cfg/sys/access/http dis (HTTP는 Alteon 29.5 버전부터 지원하지 않음)\n>> Main# apply\nl Juniper Junos\n  Step 1) 불필요한 웹서비스 확인\n[edit]\nuser@host# show interface terse\n비활성화한 인터페이스는 admin열을 down으로 표시\n  Step 2) 불필요한 웹서비스 관련 설정\n[edit] \nuser@host# delete system services web-management\nl Piolink PLOS\n  Step 1) 불필요한 웹서비스 확인\nswitch# show running-config\nswitch# show port\n  Step 2) 불필요한 웹서비스 관련 설정\nswitch# configure\n(config)# management-access\n(config-management-access)# http status disable\n(config-management-access)# https status disable",
       "guide_page": 451,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -730,9 +784,11 @@
       "cases": "l Cisco IOS\n  Step 1) no service tcp-small-servers 및 no service tcp-small-servers 설정 확인\nRouter# show running-config\n  Step 2) Global Configuration 모드에서 TCP/UDP Small 서비스를 비활성화 설정\nRouter# config terminal\nRouter(config)# no service tcp-small-servers\nRouter(config)# no service udp-small-servers\nRouter(config)# end",
       "guide_page": 453,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -756,9 +812,11 @@
       "cases": "l Cisco IOS\n  Step 1) ip bootp server 설정 확인\nRouter# show running-config\n  Step 2) BOOTP 차단 설정\nRouter# config terminal\nRouter(config)# no ip bootp server\n또는\nDHCP 서비스(DHCP 서버 및 릴레이)는 유지하고 BOOTP만 차단하는 경우\nRouter(config)# ip dhcp bootp ignore\n※ 라우터를 자동 재부팅하는 취약점이 존재하므로 서비스를 차단하여 방어하기를 권고함\n\n\nl Radware Alteon\n  Step 1) #bootp disable 설정 확인\n  Step 2) BOOTP 차단 설정(dis)\n>> Main# /cfg/sys/bootp dis\n>> Main# apply\nl Juniper Junos\n  Step 1) bootp 서비스 설정 확인\nuser@switch>show configuration & show interfaces detail\n  Step 2) DHCP 서버 IP주소와 서버가 연결된 스위치에 대한 인터페이스 지정 옵션 제거\nuser@switch> configure\n[edit]\nuser@switchr# edit forwarding-options helpers bootp\n[edit forwarding-options helpers bootp]\nuser@switch# no set interface <인터페이스 포트> server <주소>",
       "guide_page": 454,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -782,9 +840,11 @@
       "cases": "l Cisco IOS\n  Step 1) cdp run, global cdp 설정 확인\nRouter# show running-config\nRouter# show cdp\n  Step 2) cdp 서비스 차단 설정\nRouter# config terminal\nRouter(config)# no cdp run\nRouter(config)# interface FastEthernet0/1\nRouter(config-if)# no cdp enable\n※ CDP를 라우터 전체에서 사용하지 못하도록 하기 위해서는 no cdp run 명령어가 사용되며, 특정 인터페이스\n에서 사용하지 못하도록 하려면 no cdp enable 명령어를 사용함",
       "guide_page": 456,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -808,9 +868,11 @@
       "cases": "l Cisco IOS\n  Step 1) Directed-Broadcast 설정 확인\nRouter# show running-config\n  Step 2) Interface Configuration 모드에서 no ip directed-broadcast 명령을 실행하여 비활성화\nRouter# config terminal\nRouter(config)# interface <인터페이스>\nRouter(config-if)# no ip directed-broadcast\nl Radware Alteon\n  Step 1) dirbr에서 disable 설정 확인\n  Step 2) dirbr 서비스 비활성화\n# cfg/l3/frwd\n\n\n# dirbr disable\n# apply\n# save\nl Passport\n  Step 1) config에서 ip directed-broadcast 설정 확인\n  Step 2) directed-broadcast 서비스 비활성화\n# config vlan <vid> ip directed-broadcast\n# disable",
       "guide_page": 457,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "partial",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -834,9 +896,11 @@
       "cases": "l Cisco IOS\n  Step 1) Global Configuration 모드에서 no ip source-route 명령어를 실행하여 비활성화\nRouter# config terminal\nRouter(config)# no ip source-route\nl Juniper Junos\n  Step 1) ip source route 설정 확인\nuser@host# show route\n  Step 2) [edit]\nuser@host# set chassis no-source-route\n※ Junos 8.5 버전 이후부터 기본적으로 IPv4 소스 라우팅 비활성화 상태",
       "guide_page": 459,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -860,9 +924,11 @@
       "cases": "l Cisco IOS\n  Step 1) Interface Configuration 모드에서 no ip proxy-arp 명령어를 실행하여 비활성화\nRouter# config terminal\nRouter(config)# interface <인터페이스>\nRouter(config-if)# no ip proxy-arp\nl Juniper Junos\n  Step 1) 각 인터페이스에서 proxy-arp 설정을 확인\nuser@host# show\n  Step 2) [edit interfaces <인터페이스> unit <유닛>]\nuser@host# delete proxy-arp",
       "guide_page": 460,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -886,9 +952,11 @@
       "cases": "l Cisco IOS\n  Step 1) 각 인터페이스에서 no ip unreachables과 no ip redirects 설정을 확인\nRouter> enable\nRouter# show running-config\n※ Global Configuration 모드의 ip icmp redirects 명령어는 ICMP redirection 메시지 유형을 호스트 또는 서브넷으\n로 지정하는 명령어로 ICMP redirection 차단과 무관\n\n\n  Step 2) Interface Configuration 모드에서 no ip unreachables과 no ip redirects 명령어를 실행\nRouter# config terminal\nRouter(config)# interface <인터페이스>\nRouter(config-if)# no ip unreachables\nRouter(config-if)# no ip redirects\nRouter(config-if)# end\n※ Null Interface는 no ip unreachables 외 다른 모든 명령어는 무시됨\nl Juniper Junos\n  Step 1) ICMP unreachables , ICMP redirects 적용 확인\nuser@host# show\n  Step 2) ICMP redirect 차단\n전체 장비에서 ICMP redirect 비활성화\n[edit system]\nuser@host#set no-redirects\n또는 특정 인터페이스에서 ICMP Redirect 비활성화\n[edit interfaces] \nuser@host#set <인터페이스> unit <유닛> family <패밀리> no-redirects",
       "guide_page": 461,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -912,9 +980,11 @@
       "cases": "l Cisco IOS\n  Step 1) identd 서비스 확인\nRouter> enable\nRouter# show running-config\n  Step 2) Global Configuration 모드에서 no ip identd 명령어를 실행하여 비활성화\nRouter# config terminal\nRouter(config)# no ip identd\n※ 기본적으로 ip identd 설정을 별도로 설정하지 않으면 비활성화 상태이며, 구성에서 no ip identd 명령어가 표시되\n지 않음",
       "guide_page": 463,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -938,9 +1008,11 @@
       "cases": "l Cisco IOS\n  Step 1) no ip domain-lookup 설정을 확인\nRouter> enable\nRouter# show running-config\n  Step 2) Global Configuration 모드에서 no ip domain lookup 명령어를 실행\nRouter# config terminal\nRouter(config)# no ip domain lookup\n또는\nRouter(config)# no ip domain-lookup\n※ IOS 12.2 버전부터 ip domain-lookup을 ip domain lookup로 변경하고 두 명령어 모두 지원",
       "guide_page": 464,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -964,9 +1036,11 @@
       "cases": "l Cisco IOS\n  Step 1) no service pad 설정을 확인\nRouter> enable\nRouter# show running-config\n  Step 2) Global Configuration 모드에서 no service pad 명령어를 사용하여 비활성화\nRouter# config terminal\nRouter(config)# no service pad",
       "guide_page": 465,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     },
     {
@@ -990,9 +1064,11 @@
       "cases": "l Cisco IOS\n  Step 1) mask-reply 차단 여부 확인\nRouter# show running-config\n  Step 2) show ip interface 실행 결과에서 ICMP Address mask-reply 차단 여부 확인\nRouter# show ip interface\nSerial1/0 is up, line protocol is up (connected)\nICMP mask replies are never sent\n  Step 3) Interface Configuration 모드에서 no ip mask-reply 명령어를 사용하여 비활성화 \nRouter# config terminal\nRouter(config)# interface <인터페이스>\nRouter(config-if)# no ip mask-reply\n※ 기본적으로 ip mask-reply 명령은 비활성화 상태이기 때문에 구성 내용에서 no ip mask-reply 명령이 표시되지 않음",
       "guide_page": 466,
       "guide_version": "2026",
-      "automation": "manual",
+      "automation": "auto",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "cisco_ios"
+      ],
       "deviation": null
     }
   ]

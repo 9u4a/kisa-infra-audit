@@ -6,9 +6,8 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 
 > ⚠️ 이 저장소는 **개발 진행 중**(SemVer 0.x)입니다. 현재는 Unix(67항목, Linux 대상), Windows
 > Server(64항목), Web(26항목, Apache/Nginx/Tomcat), PC(18항목, Windows 10/11), DBMS(26항목,
-> MySQL/PostgreSQL/Oracle/MSSQL 대상) 카테고리가 실제 진단 로직으로 구현되어 있고, 나머지
-> 카테고리는 가이드 추출·정리본(`guide.json`/`guide.md`)까지만 준비된 상태입니다. 로드맵은
-> 아래를 참고하세요.
+> MySQL/PostgreSQL/Oracle/MSSQL 대상), Network(38항목 중 Cisco IOS 대상) 카테고리가 실제 진단
+> 로직으로 구현되어 있습니다. 로드맵은 아래를 참고하세요.
 
 ## 핵심 원칙
 1. **가이드 원문 우선** — 항목명·판단기준·조치방법은 가이드 원문 그대로 사용, 자동화에 꼭 필요한
@@ -26,7 +25,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | [`01_unix`](./01_unix) | U | 1. UNIX 서버 | 67 | 🟢 67/67 구현 (Linux) |
 | [`02_windows`](./02_windows) | W | 2. Windows 서버 | 64 | 🟢 64/64 구현 |
 | [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 구현 (Apache/Nginx/Tomcat) |
-| [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | ⚪ 정리본만 |
+| [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟡 Cisco IOS 구현 (Juniper/Alteon/Passport/Piolink 는 이후) |
 | [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 구현 |
 | [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟢 MySQL/PostgreSQL/Oracle/MSSQL 구현 (Altibase/Tibero/Cubrid 는 이후) |
 
@@ -80,6 +79,17 @@ sh 08_dbms/run.sh -l                                # 항목 목록 확인 (26�
 명시 지정 필요). MSSQL은 단일 엔진이라 `run.ps1`에 `-e`가 없습니다. 비밀번호는 CLI 인자가 아닌
 `DB_PASSWORD` 환경변수로만 전달합니다.
 
+### Network (Cisco IOS, 오프라인 설정파일 분석)
+```sh
+python 05_network/run.py -f running-config.txt              # 벤더 자동 판별 후 전체 분석
+python 05_network/run.py -f running-config.txt -v cisco_ios  # 벤더 수동 지정
+python 05_network/run.py -d configs/                         # 디렉터리 내 다수 장비 일괄 분석
+python 05_network/run.py -f running-config.txt -i N-01,N-06  # 특정 항목만
+python 05_network/run.py -l                                  # 항목 목록 확인 (38항목 전체)
+```
+다른 카테고리와 달리 대상 장비에는 아무것도 배치하지 않습니다 — 미리 `show running-config` 등으로
+수집한 설정 텍스트 파일을 분석자 PC에서 Python으로 분석합니다.
+
 모든 카테고리는 동일한 CLI 옵션 문자(`-l/-i/-g/-o/-h`)를 사용합니다 (`CLAUDE.md` "CLI 옵션 문자
 통일" 참고). 결과는 언어에 관계없이 `output/<host>_<카테고리번호>_<시각>/` 아래 동일한 구조로
 생성됩니다:
@@ -105,7 +115,7 @@ python lib/extract_guide.py --only 01_unix
 | 0.5.0 ✅ | Web 26항목 (Apache/Nginx/Tomcat; IIS/JEUS/WebtoB 는 이후) |
 | 0.6.0 ✅ | DBMS 26항목 중 MySQL/PostgreSQL |
 | 0.6.1 ✅ | DBMS: Oracle(sqlplus)/MSSQL(sqlcmd, run.ps1) 추가 (Altibase/Tibero/Cubrid 는 이후) |
-| 0.7.0 | Network 38항목 |
+| 0.7.0 ✅ | Network 38항목 중 Cisco IOS (Juniper/Alteon/Passport/Piolink 는 이후) |
 | 0.8.0 | 자동 조치(fix) 공통 인프라 + Unix/Windows/PC |
 | 0.9.0 | Web/DBMS fix, Network 조치 스크립트, 통합 런처, 다중 호스트 보고서 병합 |
 | 1.0.0 | 6개 카테고리 완성·검증 |
