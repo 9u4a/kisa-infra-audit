@@ -23,10 +23,10 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | 폴더 | 코드 | 가이드 장 | 항목 수 | 상태 |
 |---|---|---|---|---|
 | [`01_unix`](./01_unix) | U | 1. UNIX 서버 | 67 | 🟢 67/67 진단 + 58/67 조치(fix) 구현 (Linux) |
-| [`02_windows`](./02_windows) | W | 2. Windows 서버 | 64 | 🟢 64/64 구현 |
+| [`02_windows`](./02_windows) | W | 2. Windows 서버 | 64 | 🟢 64/64 진단 + 48/64 조치(fix) 구현 |
 | [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 구현 (Apache/Nginx/Tomcat), IIS 23/26 구현 (JEUS/WebtoB 는 이후) |
 | [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟡 Cisco IOS 구현 (Juniper/Alteon/Passport/Piolink 는 이후) |
-| [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 구현 |
+| [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 진단 + 11/18 조치(fix) 구현 |
 | [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟢 MySQL/PostgreSQL/Oracle/MSSQL 구현 (Altibase/Tibero/Cubrid 는 이후) |
 
 ## 빠른 시작
@@ -52,6 +52,13 @@ sh 01_unix/fix.sh --rollback output/<host>_01_fix_<시각>/                 # �
 .\02_windows\run.ps1 -i W-01,W-04           # 특정 항목만
 .\02_windows\run.ps1 -g 1                   # 특정 하위분류만 (1=계정 관리 ... 5=보안 관리)
 ```
+자동 조치(진단과 완전히 분리된 별도 진입점, 기본은 dry-run):
+```powershell
+.\02_windows\fix.ps1 -ResultJson output\<host>_02_<시각>\result.json          # dry-run(미리보기만)
+.\02_windows\fix.ps1 -ResultJson <result.json> -Items W-02,W-18 -Apply        # 지정 항목만 실제 적용
+.\02_windows\fix.ps1 -ResultJson <result.json> -Apply -Yes                    # auto 등급 일괄 적용(confirm은 항상 개별 확인)
+.\02_windows\fix.ps1 -Rollback output\<host>_02_fix_<시각>\                    # 백업에서 원복
+```
 
 ### PC (Windows 10/11)
 ```powershell
@@ -59,6 +66,12 @@ sh 01_unix/fix.sh --rollback output/<host>_01_fix_<시각>/                 # �
 .\07_pc\run.ps1                             # 전체 진단 (관리자 권한 권장)
 .\07_pc\run.ps1 -i PC-01,PC-05              # 특정 항목만
 .\07_pc\run.ps1 -g 1                        # 특정 하위분류만 (1=계정 관리 ... 4=보안 관리)
+```
+자동 조치(02_windows/fix.ps1 과 동일한 CLI/흐름):
+```powershell
+.\07_pc\fix.ps1 -ResultJson output\<host>_07_<시각>\result.json               # dry-run(미리보기만)
+.\07_pc\fix.ps1 -ResultJson <result.json> -Items PC-01,PC-15 -Apply           # 지정 항목만 실제 적용
+.\07_pc\fix.ps1 -Rollback output\<host>_07_fix_<시각>\                        # 백업에서 원복
 ```
 
 ### Web (Apache/Nginx/Tomcat: sh, IIS: PowerShell)
@@ -130,7 +143,7 @@ python lib/extract_guide.py --only 01_unix
 | 0.7.0 ✅ | Network 38항목 중 Cisco IOS (Juniper/Alteon/Passport/Piolink 는 이후) |
 | 0.8.0 ✅ | 자동 조치(fix) 공통 인프라 + Unix 58/67항목 |
 | 0.8.1 ✅ | Web: IIS 23/26항목 (JEUS/WebtoB 는 이후) |
-| 0.8.x | Windows/PC 자동 조치(fix) |
+| 0.8.2 ✅ | Windows 48/64, PC 11/18 자동 조치(fix) |
 | 0.9.0 | Web/DBMS fix, Network 조치 스크립트, 통합 런처, 다중 호스트 보고서 병합 |
 | 1.0.0 | 6개 카테고리 완성·검증 |
 

@@ -5,6 +5,44 @@
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-29
+### Added
+- **Windows/PC 자동 조치(fix) 구현**: `02_windows/fix.ps1`, `07_pc/fix.ps1` 신규(01_unix/fix.sh
+  와 동일한 CLI·흐름 — dry-run 기본, `-Apply`/`-Apply -Yes`/`-Rollback`). `lib/Common.psm1`에
+  Windows 계열 전용 fix 공통 인프라 추가: `New-FixOutputDir`, `Get-ResultVulnCodes`,
+  레지스트리(`Backup-/Restore-/Set-/Remove-FixRegistryValue`), 서비스(`Backup-FixServiceState`,
+  `Disable-FixService`), 로컬 계정(`Set-FixLocalAccountDisabled`), NTFS ACL(`Remove-FixAclIdentity`),
+  SMB 공유(`Revoke-FixShareEveryone`), IIS/FTP 서버 설정(`Set-FixWebConfigProperty`), 방화벽
+  프로필(`Backup-/Restore-FixFirewallProfiles`), 보안 정책 secedit(`Set-FixSecPolicyValue`,
+  `Set-FixSecPrivilege` — 값 하나 단위 원복이 불가능한 전역 상태라 실행 1회당 스냅샷 1개만
+  백업하고 `--Rollback` 전체 원복에서만 재적용), 항목/전체 원복(`Restore-FixItem`,
+  `Invoke-FixRollbackAll`).
+- `02_windows/fixes/W-xx.ps1` 48개, `07_pc/fixes/PC-xx.ps1` 11개 구현. fix 등급(auto/confirm/
+  manual)은 01_unix 와 동일하게 가이드 '조치 시 영향' 필드를 기계적으로 분류(정확히 "일반적인
+  경우 영향 없음"만 auto, 그 외 confirm, 진단이 manual이면 fix도 manual)한 뒤, U-28과 같은
+  구조의 문제(스크립트가 안전한 값을 스스로 결정할 수 없거나 비가역적 위험이 있는 조치)가 있는
+  6개 항목을 manual로 override 했다: W-12(LSA 정책 객체라 secedit/레지스트리로 조작 불가),
+  W-14(원격 접속용 "별도 계정 생성"에 계정명/비밀번호 invent 필요), W-24(허용 IP 목록 invent
+  필요), W-45(백신 "설치" 자체는 자동화 불가), W-61/PC-07(FAT→NTFS 변환은 재부팅·데이터 손상
+  위험이 있는 비가역적 작업), PC-08(멀티부팅 시 제거 대상 OS 판단 불가). W-64/PC-15(방화벽
+  켜기)는 가이드 문구상 기계적으로는 auto 이지만 이 스크립트가 실행 중인 원격 관리 세션(RDP/
+  WinRM)을 끊을 수 있는 lockout 위험이 있어 confirm 으로 재분류하고, 켜기 전 원격 데스크톱/
+  원격 관리 사전정의 방화벽 규칙 그룹을 먼저 활성화하도록 구현했다(deviation 필드에 각 사유
+  기록). check가 VULN을 절대 반환하지 않아 fix가 트리거될 일이 없는 8개(W-01/06/19/26/35/47,
+  PC-16/17)는 U-45와 동일한 이유로 fix 스크립트를 작성하지 않았다.
+
+### Testing
+- **실제 Windows 11 호스트에 `--Apply` 실제 적용은 수행하지 않음(사용자 확인)** — 레지스트리/
+  서비스/보안정책/방화벽을 실제로 바꾸는 위험 때문에, 01_unix 처럼 Docker로 안전하게 실기검증할
+  방법이 마땅치 않은 Windows 스택 특성상 로직/구문 검증까지만 수행하기로 명시적으로 선택했다.
+  `[System.Management.Automation.Language.Parser]::ParseFile`로 전체 62개 신규/수정 `.ps1`
+  파일(`lib/Common.psm1`, 두 `fix.ps1`, `fixes/*.ps1`) 파싱 오류 0건 확인, UTF-8 BOM 누락분
+  전량 보정, `Invoke-ScriptAnalyzer`(Error 심각도) 이슈 0건 확인, 더미 `result.json`으로
+  `fix.ps1` dry-run 실행 경로(VULN 코드 추출 → guide.json 등급 조회 → manual/auto 분기 →
+  guide.json 에 없는 미지 코드의 안전한 기본 처리)까지 실제로 실행해 확인했다. 레지스트리/
+  서비스/secedit 등 cmdlet 자체의 실제 동작은 검증하지 못했다 — 02_windows·07_pc/CLAUDE.md 에
+  이 한계를 명시했다.
+
 ## [0.8.1] - 2026-09-29
 ### Added
 - **Web 카테고리 IIS 지원 추가**: 별도 진입점 `03_web/run.ps1`(PowerShell 5.1, `-i/-g/-l/-o/-h`,

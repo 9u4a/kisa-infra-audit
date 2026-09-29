@@ -29,7 +29,7 @@
       "guide_page": 555,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "win10",
         "win11"
@@ -58,7 +58,7 @@
       "guide_page": 557,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -87,7 +87,7 @@
       "guide_page": 559,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -116,7 +116,7 @@
       "guide_page": 561,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -145,7 +145,7 @@
       "guide_page": 566,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -174,7 +174,7 @@
       "guide_page": 570,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -208,7 +208,7 @@
         "win10",
         "win11"
       ],
-      "deviation": null
+      "deviation": "W-61(02_windows)과 동일한 이유 - FAT->NTFS 파일 시스템 변환은 재부팅을 요구할 수 있고 실패 시 데이터 손상 위험이 있는 비가역적 시스템 수준 작업이라 manual로 재분류함."
     },
     {
       "code": "PC-08",
@@ -237,7 +237,7 @@
         "win10",
         "win11"
       ],
-      "deviation": null
+      "deviation": "가이드 조치 방법이 \"하나의 OS만 설치하여 운영\"으로, 어떤 부트 로더 항목을 제거해야 하는지(다른 OS의 삭제 가능 여부)를 스크립트가 안전하게 판단할 수 없어(U-28과 같은 구조의 문제) manual로 재분류함."
     },
     {
       "code": "PC-09",
@@ -339,7 +339,7 @@
       "guide_page": 580,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -368,7 +368,7 @@
       "guide_page": 582,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -397,7 +397,7 @@
       "guide_page": 584,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -426,12 +426,12 @@
       "guide_page": 585,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "win10",
         "win11"
       ],
-      "deviation": null
+      "deviation": "가이드 원문 '조치 시 영향'은 \"일반적인 경우 영향 없음\"이라 기계적으로는 auto 등급이지만, 02_windows W-64와 동일한 이유(침입차단 기능을 켜는 행위 자체가 이 스크립트가 실행 중인 원격 관리 세션을 차단할 수 있음)로 confirm으로 재분류함. fixes/PC-15.ps1 도 W-64와 동일하게 원격 데스크톱/원격 관리 사전정의 규칙 그룹을 먼저 활성화한다."
     },
     {
       "code": "PC-16",
@@ -455,7 +455,7 @@
       "guide_page": 587,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -484,7 +484,7 @@
       "guide_page": 589,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "win10",
         "win11"
@@ -513,7 +513,7 @@
       "guide_page": 591,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "win10",
         "win11"
