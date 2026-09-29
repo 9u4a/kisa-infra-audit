@@ -2,6 +2,12 @@
 # 판단 기준(가이드 원문): 양호 = 홈 디렉토리 소유자가 해당 계정이고 타 사용자 쓰기 권한이 없는 경우
 #                        취약 = 그 외
 # 전 Unix 계열 공통 로직: 로그인 가능한 계정 기준으로 검사.
+# 주의(실기 테스트로 발견한 버그): $7(쉘)이 "nologin"/"false"로 끝나지 않는다고 해서 실사용
+# 로그인 계정인 것은 아니다 — sync/shutdown/halt 등은 관례적으로 쉘 필드에 /bin/sync,
+# /sbin/shutdown 같은 "실행 유틸리티"를 넣고 홈 디렉터리도 /sbin 처럼 여러 계정이 공유하는
+# 시스템 디렉터리로 지정한다. 이런 공유 시스템 디렉터리를 "개인 홈"으로 취급해 소유자를
+# 특정 계정으로 바꾸려 하면 실제 시스템 디렉터리(예: /usr/sbin)의 소유자를 망가뜨릴 위험이
+# 있다. 홈이 공유 시스템 디렉터리인 계정은 애초에 대상에서 제외한다.
 
 run_check() {
     passwd_file="/etc/passwd"
@@ -12,7 +18,14 @@ run_check() {
         return
     fi
 
-    accounts=$(awk -F: '$7 !~ /(nologin|false)$/ {print $1":"$6}' "$passwd_file")
+    accounts=$(awk -F: '
+        $7 !~ /(nologin|false)$/ {
+            home = $6
+            if (home == "/sbin" || home == "/usr/sbin" || home == "/bin" || \
+                home == "/usr/bin" || home == "/" || home == "") next
+            print $1":"home
+        }
+    ' "$passwd_file")
     violations=""
     evidence=""
     checked=0

@@ -5,6 +5,56 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-29
+### Added
+- **자동 조치(fix) 공통 인프라** — 진단(`run.*`)과 완전히 분리된 `fix.*` 진입점을 처음 도입.
+  `lib/common.sh`: `result_list_vuln_codes`(result.json에서 VULN 코드만 추출), `fix_prepare_dir`
+  (백업/로그 디렉터리 준비), `fix_backup`/`fix_rollback_item`/`fix_rollback_all`(파일·디렉터리
+  백업 및 원복 — 디렉터리는 메타데이터만, 신규 생성 파일은 WAS_ABSENT 마커로 추적), 재사용
+  헬퍼 `fix_set_owner_perm`(check_owner_perm과 짝), `fix_service_disable`/`fix_xinetd_disable`
+  (check_service_disabled과 짝, xinetd는 reload까지 수행).
+- `01_unix/fix.sh`: `-r <result.json>` 로 진단 결과를 읽어 VULN 항목만 대상으로 하며, 기본은
+  dry-run이다. `--apply`로 실제 적용, `--apply --yes`는 auto 등급만 자동 적용하고 confirm
+  등급은 항상 개별 y/N 확인(비대화형 환경에서는 안전하게 자동 거부), `--rollback <dir>`로
+  백업에서 원복. 적용 직후 해당 check를 재실행해 VULN/ERROR 를 벗어났는지 재검증하고, 실패 시
+  자동 원복한다.
+- `01_unix/fixes/U-01.sh` ~ `U-67.sh` 중 58개 구현(가이드 원문 '조치 방법'/'점검 및 조치 사례'
+  그대로 적용). 조치 등급(`fix` 필드: auto/confirm/manual)은 가이드 원문의 '조치 시 영향' 필드를
+  근거로 기계적으로 분류했다 — "일반적인 경우 영향 없음"이면 auto, 그 외 어떤 단서라도 있으면
+  confirm, 진단 자체가 MANUAL인 항목은 fix도 manual. U-28(접속 IP 제한)은 예외적으로 confirm이
+  아닌 manual로 재분류했다(관리자가 허용 IP를 직접 정해야 하며, 잘못 자동 적용 시 관리 세션까지
+  포함한 전체 원격 접속 lockout 위험이 있어 안전한 자동 조치가 원천적으로 불가능함 — `deviation`
+  필드에 근거 기록). U-45(메일 버전 점검)는 check가 VULN을 전혀 내지 않는 설계라 fix 스크립트가
+  트리거될 일이 없어 작성하지 않음.
+- **Docker 컨테이너(rockylinux:9)에서 fix.sh 전체 흐름(dry-run→적용→재검증→원복) 실기 검증**:
+  실제 진단으로 얻은 VULN 12건에 대해 dry-run, `--apply --yes` 실제 적용(파일 기반 auto 항목
+  4건 전부 재검증 양호 확인), `--rollback` 으로 원본 상태 완전 복원(파일 내용·권한·신규 생성
+  파일 삭제 모두 확인)까지 end-to-end로 검증. systemd 가 PID 1 이 아닌 컨테이너 특성상
+  `systemctl`기반 서비스 시작/비활성화 조치(예: U-65 NTP)는 스크립트가 "실패를 정직하게
+  ERROR로 보고하고 원복"하는 것까지는 확인했으나 실제 서비스 기동 성공까지는 검증하지 못함
+  (실제 systemd 환경에서는 정상 동작 — 컨테이너 테스트 환경의 한계로 명시).
+
+### Fixed
+- **U-31(홈 디렉토리)/U-24(환경변수 파일) 실제 버그**: `sync`/`shutdown`/`halt` 처럼 쉘 필드에
+  실행 유틸리티 경로(`/bin/sync` 등)를 쓰고 홈 디렉터리를 `/sbin`(여러 계정이 공유하는 시스템
+  디렉터리)으로 지정하는 표준 관례적 계정을, "로그인 가능한 일반 계정"으로 잘못 분류해 홈
+  디렉터리 소유자를 해당 계정으로 바꾸려 시도하는 버그를 Docker 실기 테스트로 발견 — 실제로
+  적용됐다면 `/usr/sbin`(시스템 바이너리 디렉터리)의 소유자가 바뀌는 심각한 손상으로 이어질
+  뻔했다(다행히 이 테스트 환경에서는 chown이 조용히 실패해 실제 손상은 없었음). 홈이 공유
+  시스템 디렉터리(`/sbin`, `/usr/sbin`, `/bin`, `/usr/bin`, `/`)인 계정은 대상에서 제외하도록
+  checks/fixes 양쪽 모두 수정. **거의 모든 Linux 시스템에 sync/shutdown/halt 계정이 표준으로
+  존재하므로, 이 버그는 v0.2.0부터 존재해온 U-31/U-24의 실제 오탐(false VULN) 원인이었다.**
+- **fix.sh 의 confirm 확인 프롬프트가 비대화형 환경에서 크래시**: `/dev/tty` 가 파일로는
+  "존재"해도(`-r` 테스트 통과) 제어 터미널이 없는 실행 환경(`docker exec`, cron 등)에서는 실제
+  읽기 시도 시 "No such device or address" 로 실패하는데, 이때 `set -u` 환경에서 변수가 아예
+  할당되지 않아 "unbound variable" 로 스크립트 전체가 죽는 버그를 Docker 실기 테스트로 발견.
+  읽기 실패를 명시적으로 흡수하고 항상 안전한 기본값(미확인=거부)으로 폴백하도록 수정.
+- **재검증 성공 기준이 너무 엄격함**: U-66처럼 판정 기준 자체가 조직 정책 대조를 요구해
+  아무리 올바르게 조치해도 check가 `MANUAL` 까지만 반환하고 절대 `GOOD` 에 도달할 수 없는
+  항목이 있는데, 재검증 성공 조건을 `CHECK_STATUS = GOOD` 으로만 판정해 이런 항목은 항상
+  "실패"로 오판해 불필요하게 원복되는 문제를 발견. 성공 기준을 "VULN/ERROR 를 벗어났는가"로
+  완화(GOOD/MANUAL/NA 모두 성공으로 인정)하도록 수정.
+
 ## [0.7.0] - 2026-09-28
 ### Added
 - `05_network` 네트워크 장비 38개 항목(N-01~N-38) 중 Cisco IOS 진단 로직 구현, Python 3.10+

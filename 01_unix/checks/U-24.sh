@@ -17,7 +17,16 @@ run_check() {
     evidence=""
     checked=0
 
-    accounts=$(awk -F: '$7 !~ /(nologin|false)$/ {print $1":"$6}' "$passwd_file")
+    # sync/shutdown/halt 등은 홈이 /sbin 같은 공유 시스템 디렉터리라 제외한다(U-31 버그 사례와
+    # 동일한 원인 — 실사용 로그인 계정이 아님에도 $7 이 nologin/false 로 끝나지 않을 수 있음).
+    accounts=$(awk -F: '
+        $7 !~ /(nologin|false)$/ {
+            home = $6
+            if (home == "/sbin" || home == "/usr/sbin" || home == "/bin" || \
+                home == "/usr/bin" || home == "/" || home == "") next
+            print $1":"home
+        }
+    ' "$passwd_file")
     # 서브셸 while-read 로는 상위 변수(violations 등) 갱신이 안 되므로 for 루프 사용
     old_ifs=$IFS; IFS='
 '

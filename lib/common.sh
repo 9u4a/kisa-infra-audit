@@ -638,3 +638,152 @@ prepare_output_dir() {
     RUN_LOG="$OUT_DIR/run.log"
     : > "$RUN_LOG"
 }
+
+# ============================================================================
+# ---- 자동 조치(fix) 공통 (§자동 조치, 루트 CLAUDE.md 참고) -------------------
+# ============================================================================
+# 진단(run.*)과 완전히 분리된 fix.* 전용 헬퍼. run.* 는 절대 이 함수들을 쓰지 않는다.
+
+# result.json(진단 결과)에서 status=VULN 인 코드 목록만 추출한다. result_add() 가 만드는
+# 포맷은 guide.json 과 달리 항목당 한 줄에 compact JSON(들여쓰기 없음)으로 저장되므로
+# guide_field() 와는 다른 파서가 필요하다.
+result_list_vuln_codes() {
+    _json=$1
+    grep '"status":"VULN"' "$_json" | grep -o '"code":"[A-Z]*-[0-9]*"' | sed -E 's/.*"([A-Z]+-[0-9]+)".*/\1/'
+}
+
+# fix_prepare_dir <base_dir> <category_num> -> FIX_OUT_DIR/FIX_BACKUP_DIR/FIX_LOG 설정
+fix_prepare_dir() {
+    _base=$1; _cat_num=$2
+    _host=$(hostname 2>/dev/null || echo unknown-host)
+    _ts=$(date '+%Y%m%d-%H%M%S')
+    FIX_OUT_DIR="${_base}/${_host}_${_cat_num}_fix_${_ts}"
+    FIX_BACKUP_DIR="$FIX_OUT_DIR/backup"
+    mkdir -p "$FIX_BACKUP_DIR"
+    FIX_LOG="$FIX_OUT_DIR/changes.log"
+    : > "$FIX_LOG"
+}
+
+# fix_backup <파일경로> — 항목별(FIX_CODE) 백업 디렉터리에 원본을 상대경로 구조로 보존한다.
+# 파일이 원래 존재하지 않았으면(조치가 "새로 생성"인 경우) .WAS_ABSENT 마커만 남겨
+# 원복 시 삭제해야 함을 표시한다. fixes/<코드>.sh 는 파일을 고치기 전에 반드시 이 함수를 부른다.
+fix_backup() {
+    _f=$1
+    _rel=$(printf '%s' "$_f" | sed 's#^/##')
+    _dest="$FIX_BACKUP_DIR/$FIX_CODE/$_rel"
+    mkdir -p "$(dirname "$_dest")"
+    if [ -d "$_f" ]; then
+        # 디렉터리는 내용 전체를 복사하지 않고(대부분의 조치는 디렉터리 자체의 소유자/권한만
+        # 바꾸므로) 메타데이터(소유자·권한)만 기록해 원복 시 재적용한다.
+        _owner=$(stat -c '%U:%G' "$_f" 2>/dev/null)
+        _perm=$(stat -c '%a' "$_f" 2>/dev/null)
+        printf '%s\n%s\n' "$_owner" "$_perm" > "$_dest.DIRMETA"
+    elif [ -e "$_f" ]; then
+        cp -p "$_f" "$_dest" 2>/dev/null
+    else
+        : > "$_dest.WAS_ABSENT"
+    fi
+}
+
+# fix_rollback_item <코드> — 해당 항목에서 fix_backup 한 모든 파일/디렉터리를 원상 복구한다.
+fix_rollback_item() {
+    _code=$1
+    _dir="$FIX_BACKUP_DIR/$_code"
+    [ -d "$_dir" ] || return 0
+    find "$_dir" -type f | while IFS= read -r _bak; do
+        case "$_bak" in
+            *.WAS_ABSENT)
+                _orig="/${_bak#"$_dir"/}"
+                _orig="${_orig%.WAS_ABSENT}"
+                rm -f "$_orig"
+                ;;
+            *.DIRMETA)
+                _orig="/${_bak#"$_dir"/}"
+                _orig="${_orig%.DIRMETA}"
+                if [ -d "$_orig" ]; then
+                    _owner=$(sed -n '1p' "$_bak")
+                    _perm=$(sed -n '2p' "$_bak")
+                    chown "$_owner" "$_orig" 2>/dev/null
+                    chmod "$_perm" "$_orig" 2>/dev/null
+                fi
+                ;;
+            *)
+                _orig="/${_bak#"$_dir"/}"
+                cp -p "$_bak" "$_orig" 2>/dev/null
+                ;;
+        esac
+    done
+}
+
+# fix_set_owner_perm <파일> <소유자> <권한> — check_owner_perm 과 짝을 이루는 조치 헬퍼.
+# 소유자는 인자로 받은 값 그대로(여러 후보 중 첫 번째를 호출부에서 선택해 전달), 권한은
+# 정확히 그 값으로 설정한다(check_owner_perm 은 "이하"를 허용하지만 조치는 가이드 권고값으로 고정).
+fix_set_owner_perm() {
+    _f=$1; _owner=$2; _perm=$3
+    if [ ! -e "$_f" ]; then
+        FIX_STATUS="ERROR"; FIX_DETAIL="$_f 파일이 존재하지 않음"; FIX_EVIDENCE=""
+        return 1
+    fi
+    fix_backup "$_f"
+    chown "$_owner" "$_f" 2>/dev/null
+    chmod "$_perm" "$_f" 2>/dev/null
+    FIX_STATUS="APPLIED"
+    FIX_DETAIL="$_f 소유자를 $_owner, 권한을 $_perm 로 설정함"
+    FIX_EVIDENCE="$(ls -l "$_f" 2>/dev/null)"
+}
+
+# fix_service_disable <systemd 유닛...> — check_service_disabled 와 짝을 이루는 조치 헬퍼.
+# 실행 중인 서비스를 정지(stop)하고 비활성화(disable)한다. 유닛이 하나라도 처리되면 0을 반환.
+fix_service_disable() {
+    _ok=0
+    if command -v systemctl >/dev/null 2>&1; then
+        for _u in "$@"; do
+            systemctl list-unit-files "$_u" >/dev/null 2>&1 || continue
+            systemctl stop "$_u" 2>/dev/null
+            systemctl disable "$_u" 2>/dev/null && _ok=1
+        done
+    fi
+    [ "$_ok" -eq 1 ] && return 0 || return 1
+}
+
+# fix_xinetd_disable <xinetd.d 파일...> — "disable = no" 로 명시된 서비스를 "disable = yes" 로
+# 강제한다(값이 아예 없는 파일은 배포판 기본값을 신뢰해 건드리지 않는다). 하나라도 바꾸면 xinetd를
+# reload(가능한 경우)해 즉시 반영하고 0을 반환한다 — 일부 항목(U-38 등)은 check가 listening 포트
+# 상태(ss/netstat)를 직접 확인하므로, 설정 파일만 고치고 reload 하지 않으면 재검증이 통과하지 않는다.
+# sshd 등 관리 세션에 영향을 줄 수 있는 서비스는 절대 자동 재시작하지 않는다는 원칙과 달리,
+# xinetd reload는 관리자 세션에 영향이 없어 안전하다.
+fix_xinetd_disable() {
+    _changed=0
+    for _f in "$@"; do
+        [ -f "$_f" ] || continue
+        grep -qE '^[[:space:]]*disable[[:space:]]*=[[:space:]]*no' "$_f" || continue
+        fix_backup "$_f"
+        sed -i -E 's/^([[:space:]]*disable[[:space:]]*=[[:space:]]*)no/\1yes/' "$_f"
+        _changed=1
+    done
+    if [ "$_changed" -eq 1 ]; then
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl try-reload-or-restart xinetd 2>/dev/null
+        elif command -v service >/dev/null 2>&1; then
+            service xinetd reload 2>/dev/null
+        fi
+        return 0
+    fi
+    return 1
+}
+
+# fix_rollback_all <fix-run-dir> — fix.sh --rollback 용: 해당 실행의 백업 전체를 원복한다.
+fix_rollback_all() {
+    _run_dir=$1
+    _backup_dir="$_run_dir/backup"
+    if [ ! -d "$_backup_dir" ]; then
+        log_error "$_backup_dir 를 찾을 수 없습니다."
+        return 1
+    fi
+    for _code_dir in "$_backup_dir"/*/; do
+        [ -d "$_code_dir" ] || continue
+        _code=$(basename "$_code_dir")
+        FIX_BACKUP_DIR="$_backup_dir" fix_rollback_item "$_code"
+        echo "원복 완료: $_code"
+    done
+}
