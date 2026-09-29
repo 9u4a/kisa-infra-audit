@@ -5,6 +5,33 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-29
+### Added
+- **Web 카테고리 IIS 지원 추가**: 별도 진입점 `03_web/run.ps1`(PowerShell 5.1, `-i/-g/-l/-o/-h`,
+  단일 엔진이라 `-e` 없음)과 `03_web/checks/iis/WEB-xx.ps1` 23개 구현. 가이드 원문 "대상" 필드
+  기준으로 IIS가 대상인 WEB-02~16, WEB-18~22, WEB-24~26 만 구현했고(WEB-01/17/23은 IIS 비대상),
+  `guide.json`의 각 항목 `envs` 필드에 `"iis"`를 추가했다.
+- `lib/Common.psm1`에 IIS 연동 헬퍼 추가: `Test-IisAvailable`(WebAdministration 모듈 가용성을
+  프로세스당 1회만 확인해 `$Global:IisAvailableCache`에 캐시), `Get-IisSiteNames`,
+  `Get-IisSitePhysicalPath`, `Get-IisConfigValue`(`Get-WebConfigurationProperty` 래퍼 — 사이트별/
+  서버 전역 설정을 동일한 방식으로 조회).
+- IIS 다중 사이트 판정 정책: 사이트 하나라도 VULN이면 전체 VULN, 전부 GOOD이면 GOOD, 판정
+  불가/규칙 존재만으로 확정 못 하는 경우(WEB-21 URL Rewrite 등)는 MANUAL — 기존 Unix 계열
+  Web(Apache/Nginx/Tomcat) 다중 엔진 집계 정책(03_web/CLAUDE.md)과 동일한 원칙을 사이트 단위로
+  적용했다.
+- WEB-02(관리자 비밀번호)·WEB-24(업로드 경로)는 IIS에 표준화된 설정 키가 없어 항상 MANUAL,
+  WEB-25(패치 관리)는 다른 엔진과 동일하게 조직 정책 판단이 필요해 항상 MANUAL로 응답한다
+  (버전 정보만 증적 제공).
+
+### Testing
+- **실제 IIS 미설치 — 로직/구문 검증만 수행**(사용자 확인 후 결정, 실제 Windows 11 호스트에
+  IIS 기능을 설치하지 않음): `[System.Management.Automation.Language.Parser]::ParseFile`로 전체
+  25개 신규/수정 `.ps1` 파일(`lib/Common.psm1`, `03_web/run.ps1`, `checks/iis/*.ps1`) 파싱 오류
+  0건 확인, UTF-8 BOM 누락분 전량 보정, `Invoke-ScriptAnalyzer`(Error/Warning) 실행 결과 새 IIS
+  체크 파일에서는 경고 0건(기존 파일의 `Write-Host`/`Global` 변수 경고는 프로젝트 기존 관례). 단,
+  대상 호스트에 실제 IIS가 없어 `WebAdministration`/`Get-WebConfigurationProperty` 등 cmdlet의
+  실제 동작은 검증하지 못했다.
+
 ## [0.8.0] - 2026-09-29
 ### Added
 - **자동 조치(fix) 공통 인프라** — 진단(`run.*`)과 완전히 분리된 `fix.*` 진입점을 처음 도입.

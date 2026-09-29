@@ -63,7 +63,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -93,7 +94,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -123,7 +125,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -153,7 +156,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -183,7 +187,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -213,7 +218,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -243,7 +249,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -273,7 +280,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -303,7 +311,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -333,7 +342,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -363,7 +373,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -393,7 +404,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -423,7 +435,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -450,7 +463,9 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "iis"
+      ],
       "deviation": null
     },
     {
@@ -479,7 +494,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -539,7 +555,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -569,7 +586,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -599,7 +617,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -629,7 +648,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -659,7 +679,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     },
@@ -716,7 +737,9 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "iis"
+      ],
       "deviation": null
     },
     {
@@ -742,7 +765,9 @@
       "guide_version": "2026",
       "automation": "manual",
       "fix": "manual",
-      "envs": [],
+      "envs": [
+        "iis"
+      ],
       "deviation": null
     },
     {
@@ -771,7 +796,8 @@
       "envs": [
         "apache",
         "nginx",
-        "tomcat"
+        "tomcat",
+        "iis"
       ],
       "deviation": null
     }

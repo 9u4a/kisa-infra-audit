@@ -5,7 +5,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 가능한 항목은 자동 조치(fix)까지 지원합니다.
 
 > ⚠️ 이 저장소는 **개발 진행 중**(SemVer 0.x)입니다. 현재는 Unix(67항목, Linux 대상), Windows
-> Server(64항목), Web(26항목, Apache/Nginx/Tomcat), PC(18항목, Windows 10/11), DBMS(26항목,
+> Server(64항목), Web(26항목, Apache/Nginx/Tomcat/IIS), PC(18항목, Windows 10/11), DBMS(26항목,
 > MySQL/PostgreSQL/Oracle/MSSQL 대상), Network(38항목 중 Cisco IOS 대상) 카테고리가 실제 진단
 > 로직으로 구현되어 있습니다. 로드맵은 아래를 참고하세요.
 
@@ -24,7 +24,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 |---|---|---|---|---|
 | [`01_unix`](./01_unix) | U | 1. UNIX 서버 | 67 | 🟢 67/67 진단 + 58/67 조치(fix) 구현 (Linux) |
 | [`02_windows`](./02_windows) | W | 2. Windows 서버 | 64 | 🟢 64/64 구현 |
-| [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 구현 (Apache/Nginx/Tomcat) |
+| [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 구현 (Apache/Nginx/Tomcat), IIS 23/26 구현 (JEUS/WebtoB 는 이후) |
 | [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟡 Cisco IOS 구현 (Juniper/Alteon/Passport/Piolink 는 이후) |
 | [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 구현 |
 | [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟢 MySQL/PostgreSQL/Oracle/MSSQL 구현 (Altibase/Tibero/Cubrid 는 이후) |
@@ -61,12 +61,17 @@ sh 01_unix/fix.sh --rollback output/<host>_01_fix_<시각>/                 # �
 .\07_pc\run.ps1 -g 1                        # 특정 하위분류만 (1=계정 관리 ... 4=보안 관리)
 ```
 
-### Web (Apache/Nginx/Tomcat)
+### Web (Apache/Nginx/Tomcat: sh, IIS: PowerShell)
 ```sh
 sh 03_web/run.sh -l                # 항목 목록 확인
 sh 03_web/run.sh                   # 설치된 엔진 자동 탐지 후 일괄 진단 (여러 엔진 동시 가능)
 sh 03_web/run.sh -e nginx          # 특정 엔진으로 제한 (apache|nginx|tomcat)
 sh 03_web/run.sh -i WEB-01,WEB-04  # 특정 항목만
+```
+```powershell
+.\03_web\run.ps1                     # IIS 설치된 사이트 전체 진단 (관리자 권한 권장)
+.\03_web\run.ps1 -i WEB-04,WEB-09    # 특정 항목만
+.\03_web\run.ps1 -l                  # 항목 목록 확인 (26항목 전체, IIS 미대상 항목은 실행 시 NA)
 ```
 
 ### DBMS (MySQL/PostgreSQL/Oracle: sh, MSSQL: PowerShell)
@@ -124,6 +129,7 @@ python lib/extract_guide.py --only 01_unix
 | 0.6.1 ✅ | DBMS: Oracle(sqlplus)/MSSQL(sqlcmd, run.ps1) 추가 (Altibase/Tibero/Cubrid 는 이후) |
 | 0.7.0 ✅ | Network 38항목 중 Cisco IOS (Juniper/Alteon/Passport/Piolink 는 이후) |
 | 0.8.0 ✅ | 자동 조치(fix) 공통 인프라 + Unix 58/67항목 |
+| 0.8.1 ✅ | Web: IIS 23/26항목 (JEUS/WebtoB 는 이후) |
 | 0.8.x | Windows/PC 자동 조치(fix) |
 | 0.9.0 | Web/DBMS fix, Network 조치 스크립트, 통합 런처, 다중 호스트 보고서 병합 |
 | 1.0.0 | 6개 카테고리 완성·검증 |

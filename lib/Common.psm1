@@ -227,4 +227,55 @@ function Invoke-MssqlQuery {
     }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery -Variable ToolVersion, GuideVersion
+# ---- IIS 연동 (03_web IIS) --------------------------------------------------------
+# WebAdministration 모듈은 IIS 관리 콘솔(IIS-WebServerManagementTools)이 설치된 Windows에만
+# 존재한다. 모듈이 없으면 IIS 자체가 없다는 뜻이므로 모든 IIS check 는 NA 로 응답해야 한다.
+# 가용 여부를 매 check 마다 다시 계산하지 않도록 프로세스 1회만 캐시한다.
+function Test-IisAvailable {
+    if ($null -ne $Global:IisAvailableCache) { return $Global:IisAvailableCache }
+    try {
+        Import-Module WebAdministration -ErrorAction Stop
+        $Global:IisAvailableCache = (Test-Path "IIS:\Sites")
+    } catch {
+        $Global:IisAvailableCache = $false
+    }
+    return $Global:IisAvailableCache
+}
+
+function Get-IisSiteNames {
+    <# 구성된 사이트 이름 목록 (IIS 미설치/사이트 없음이면 빈 배열) #>
+    if (-not (Test-IisAvailable)) { return @() }
+    try { return @(Get-Website -ErrorAction Stop | ForEach-Object { $_.Name }) } catch { return @() }
+}
+
+function Get-IisSitePhysicalPath {
+    <# 사이트의 실제 경로(환경변수 展開 완료). 조회 실패 시 $null #>
+    param([Parameter(Mandatory)][string]$SiteName)
+    try {
+        $p = (Get-Website -Name $SiteName -ErrorAction Stop).physicalPath
+        if (-not $p) { return $null }
+        return [System.Environment]::ExpandEnvironmentVariables($p)
+    } catch { return $null }
+}
+
+function Get-IisConfigValue {
+    <# Get-WebConfigurationProperty 래퍼 - 사이트 지정 시 IIS:\Sites\<site>, 미지정 시 서버 전체
+       기본값(MACHINE/WEBROOT/APPHOST)에서 설정값을 조회. 속성이 없거나 조회 실패 시 $null #>
+    param(
+        [Parameter(Mandatory)][string]$Filter,
+        [Parameter(Mandatory)][string]$Name,
+        [string]$SiteName = ""
+    )
+    try {
+        if ($SiteName) {
+            $v = Get-WebConfigurationProperty -PSPath "IIS:\Sites\$SiteName" -Filter $Filter -Name $Name -ErrorAction Stop
+        } else {
+            $v = Get-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" -Filter $Filter -Name $Name -ErrorAction Stop
+        }
+        if ($null -eq $v) { return $null }
+        if ($v.PSObject.Properties.Name -contains "Value") { return $v.Value }
+        return $v
+    } catch { return $null }
+}
+
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue -Variable ToolVersion, GuideVersion
