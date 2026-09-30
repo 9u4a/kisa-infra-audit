@@ -470,6 +470,65 @@ function Set-FixLocalAccountDisabled {
     }
 }
 
+# ---- 경로 전체 백업 후 삭제/원복 (03_web WEB-07/WEB-12: "삭제 자체가 조치") -----------
+# 01_unix의 fix_backup_remove_path(tar)와 같은 역할의 PowerShell 버전. Windows PowerShell
+# 5.1에는 tar가 항상 있다는 보장이 없어(Windows 10 1803+ 는 bsdtar 포함이지만 Server는 버전에
+# 따라 다름) Copy-Item -Recurse 로 내용을 통째로 복사해 보존한다.
+function Backup-FixPathAndRemove {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    $dir = Join-Path (Get-FixItemBackupDir) "remove"
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $safe = ($Path -replace '[\\:]', '_')
+    $dest = Join-Path $dir $safe
+    Copy-Item -LiteralPath $Path -Destination $dest -Recurse -Force
+    Set-Content -Path "$dest.origpath.txt" -Value $Path -Encoding UTF8
+    Remove-Item -LiteralPath $Path -Recurse -Force
+}
+
+function Restore-FixPathRemoveBackup {
+    param([Parameter(Mandatory)][string]$MetaFile)
+    $orig = (Get-Content -Raw -Path $MetaFile).Trim()
+    $src = $MetaFile -replace '\.origpath\.txt$', ''
+    if (-not (Test-Path -LiteralPath $src)) { return }
+    $parent = Split-Path -Parent $orig
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+    Copy-Item -LiteralPath $src -Destination $orig -Recurse -Force
+}
+
+# ---- IIS 애플리케이션 풀 identity 백업/설정/원복 (WEB-09) --------------------------
+function Backup-FixAppPoolIdentity {
+    param([Parameter(Mandatory)][string]$PoolName)
+    $dir = Join-Path (Get-FixItemBackupDir) "apppool"
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $file = Join-Path $dir "$PoolName.json"
+    $current = (Get-ItemProperty "IIS:\AppPools\$PoolName" -Name processModel.identityType -ErrorAction SilentlyContinue).Value
+    [PSCustomObject]@{ PoolName = $PoolName; IdentityType = "$current" } | ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
+    return $file
+}
+
+function Restore-FixAppPoolIdentityBackup {
+    param([Parameter(Mandatory)][string]$File)
+    $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
+    if (-not $o.IdentityType) { return }
+    try { Set-ItemProperty "IIS:\AppPools\$($o.PoolName)" -Name processModel.identityType -Value $o.IdentityType -ErrorAction SilentlyContinue } catch { }
+}
+
+function Set-FixAppPoolIdentity {
+    param([Parameter(Mandatory)][string]$PoolName, [Parameter(Mandatory)][string]$IdentityType)
+    Backup-FixAppPoolIdentity -PoolName $PoolName | Out-Null
+    try {
+        Set-ItemProperty "IIS:\AppPools\$PoolName" -Name processModel.identityType -Value $IdentityType -ErrorAction Stop
+        $Global:FixStatus = "APPLIED"
+        $Global:FixDetail = "애플리케이션 풀 '$PoolName' identityType 을 $IdentityType 로 설정함"
+        $Global:FixEvidence = ""
+    } catch {
+        $Global:FixStatus = "ERROR"
+        $Global:FixDetail = "애플리케이션 풀 '$PoolName' identityType 설정 실패: $($_.Exception.Message)"
+        $Global:FixEvidence = ""
+    }
+}
+
 # ---- IIS/FTP 서버 설정(WebAdministration) 값 백업/설정/원복 ------------------------
 # W-23(FTP 익명 인증) 등 레지스트리가 아니라 applicationHost.config 기반 설정을 바꾸는 소수
 # 항목 전용. 03_web(IIS)의 Get-IisConfigValue 와 달리 여기서는 값을 직접 바꿔야 하므로 별도
@@ -692,6 +751,10 @@ function Restore-FixItem {
         ForEach-Object { Restore-FixWebConfigPropertyBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "firewall") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixFirewallProfilesBackup -File $_.FullName }
+    Get-ChildItem -Path (Join-Path $dir "remove") -Filter *.origpath.txt -ErrorAction SilentlyContinue |
+        ForEach-Object { Restore-FixPathRemoveBackup -MetaFile $_.FullName }
+    Get-ChildItem -Path (Join-Path $dir "apppool") -Filter *.json -ErrorAction SilentlyContinue |
+        ForEach-Object { Restore-FixAppPoolIdentityBackup -File $_.FullName }
 }
 
 function Invoke-FixRollbackAll {
@@ -722,4 +785,4 @@ function Invoke-FixRollbackAll {
         }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Get-FixItemBackupDir, Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Get-FixItemBackupDir, Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

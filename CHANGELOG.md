@@ -5,6 +5,32 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-30
+### Added
+- **Web 카테고리 IIS 대상 자동 조치(fix) 구현**: `03_web/fix.ps1` 신규(02_windows/fix.ps1 과
+  완전히 동일한 dry-run 기반 흐름·CLI). `fixes/iis/WEB-xx.ps1` 17개 구현(WEB-03/04/05/06/07/
+  08/09/10/12/13/14/16/18/19/21/22/26 — WEB-02는 IIS 진단이 절대 VULN을 반환하지 않아 제외,
+  WEB-11/15/20/24/25는 guide.json에서 이미 manual).
+- `lib/Common.psm1`에 IIS 전용 fix 헬퍼 추가: 경로 전체 백업 후 삭제(`Backup-FixPathAndRemove`/
+  `Restore-FixPathRemoveBackup` — 01_unix `fix_backup_remove_path`의 PowerShell 버전,
+  Copy-Item -Recurse로 내용을 통째로 보존), 애플리케이션 풀 identity(`Set-FixAppPoolIdentity`).
+  `Set-FixWebConfigProperty`(0.8.2에서 FTP용으로 추가된 헬퍼)를 그대로 재사용해 대부분의 IIS
+  설정 값 변경을 구현했다.
+- WEB-09(프로세스 권한)는 LocalSystem 애플리케이션 풀을 ApplicationPoolIdentity(IIS가 풀마다
+  자동 관리하는 전용 최소 권한 가상 계정)로 전환한다 — 특정 사용자 계정을 새로 만들 필요가
+  없어 W-14류의 "계정 생성 필요" 문제에 해당하지 않는다. WEB-21(HTTPS 리다이렉트)은 https
+  바인딩이 있는 사이트만 sslFlags에 Ssl을 추가해 평문 접근을 차단하고, 바인딩이 없는 사이트는
+  인증서가 없어 안전하게 조치할 수 없으므로 건드리지 않고 오류로 안내한다(WEB-20과 동일한
+  이유). WEB-13/WEB-19는 hiddenSegments/handlers 컬렉션 원소 추가·제거라 표준 webconfig
+  백업/원복 대상이 아니라는 한계를 CLAUDE.md에 기록했다.
+
+### Testing
+- **실제 IIS 미설치 — 로직/구문 검증만 수행**(0.8.1/0.8.2와 동일한 이유로 사용자가 이미 확인한
+  범위를 그대로 적용): `ParseFile` 파싱 오류 0건, UTF-8 BOM 보정, `Invoke-ScriptAnalyzer`
+  (Error 심각도) 이슈 0건, 더미 result.json으로 `fix.ps1` dry-run 실행 경로까지 확인했다.
+  `WebAdministration` cmdlet 자체의 실제 동작(Add-/Remove-WebConfigurationProperty 컬렉션
+  조작 포함)은 검증하지 못했다.
+
 ## [0.9.0] - 2026-09-30
 ### Added
 - **Web 카테고리(Apache/Nginx/Tomcat) 자동 조치(fix) 구현**: `03_web/fix.sh` 신규(01_unix/fix.sh
