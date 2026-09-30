@@ -5,6 +5,59 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-30
+### Added
+- **Web 카테고리(Apache/Nginx/Tomcat) 자동 조치(fix) 구현**: `03_web/fix.sh` 신규(01_unix/fix.sh
+  와 완전히 동일한 dry-run 기반 흐름·CLI — IIS는 별도 `fix.ps1` 예정, 이번 범위 아님).
+  `fixes/WEB-xx.sh` 18개 구현(WEB-01/02/03/04/06/07/08/09/12/13/14/16/18/19/21/22/23/26).
+  `lib/common.sh`에 `fix_backup_remove_path`(삭제가 조치 자체인 항목 전용 - tar로 전체 내용을
+  백업한 뒤 삭제, `.TARBALL.tgz` 마커를 `fix_rollback_item`이 인식해 원복 시 압축 해제로 완전
+  복원) 추가.
+- fix 등급은 다른 카테고리와 동일하게 가이드 '조치 시 영향' 필드를 기계적으로 분류한 뒤, U-28과
+  같은 구조의 문제가 있는 3개 항목을 manual로 override: WEB-11(DocumentRoot 분리는 실제 콘텐츠
+  이전이 필요해 단순 값 변경이 아님), WEB-20(SSL/TLS 활성화에는 유효한 인증서가 필요해 스크립트가
+  발급할 수 없음), WEB-02는 confirm 유지(무작위 강력 비밀번호는 안전하게 생성 가능하나 기존
+  운영 자동화가 의존할 수 있어 confirm). WEB-21(HTTP 리다이렉션)도 confirm으로 재분류했고,
+  fix 스크립트 자체도 Apache는 ServerName 을 확보했을 때만 안전하게 리다이렉트를 추가하며,
+  Nginx는 올바른 server{} 블록을 텍스트 치환만으로 특정할 수 없어 자동 조치 대상에서 제외하고
+  수동 안내로 남긴다. WEB-09(프로세스 권한)는 Apache/Nginx의 무중단 graceful reload/reload가
+  기존 연결을 끊지 않는다는 점에 근거해(xinetd reload와 동일한 안전성 논리) 설정 변경 직후
+  함께 수행하도록 구현했다 — checks/WEB-09.sh가 /proc 기반 "실행 중" 프로세스를 직접 확인하는
+  유일한 항목이라 재시작 없이는 재검증을 통과할 수 없기 때문. check가 VULN을 절대 반환하지
+  않는 3개(WEB-05/10/17)는 fix 스크립트를 작성하지 않았다(U-45와 동일한 패턴).
+
+### Fixed
+- **`fix_rollback_all`(전체 원복) 순서 버그**: 여러 항목이 같은 파일을 순차 수정한 경우(예:
+  WEB-04→WEB-08→WEB-16→WEB-22가 모두 같은 httpd.conf를 수정), 원복을 적용 순서(정순)대로
+  처리하면 나중에 적용된 항목의 백업(이미 앞 항목의 변경이 반영된 스냅샷)이 마지막에 덮어써
+  앞 항목의 조치만 원복 후에도 남아있는 버그가 있었다. `lib/common.sh`(sh)와
+  `lib/Common.psm1`(PowerShell) 양쪽 모두 코드 내림차순(적용 역순)으로 처리하도록 수정 —
+  이 버그는 01_unix/02_windows/07_pc에도 잠재해 있었으나(공용 함수), 여러 항목이 동일 파일을
+  건드리는 경우가 그동안 우연히 없어서 발견되지 못했다. Web fix 실기 테스트(Docker, 한 config
+  파일에 4개 이상의 auto 항목이 동시에 적용되는 상황)에서 처음 발견됨.
+- **`checks/WEB-19.sh`(SSI 사용 제한) 실제 버그**: Apache의 "Options ... Includes" 검색에서
+  WEB-04/WEB-12와 달리 `-Includes`(비활성화 표기) 를 제외하는 필터가 빠져 있어, 조치 후
+  "Options -Includes" 상태도 여전히 "Includes 활성"으로 오탐(거짓 VULN)하는 버그가 있었다.
+  WEB-04/WEB-12와 동일한 `grep -v '\-Includes'` 필터를 추가해 수정 — fix 스크립트를 실기
+  테스트하는 과정에서 발견(진단 전용 테스트로는 이 조치-후 상태를 지나가 본 적이 없었음).
+- **Tomcat Connector 다중 라인 태그에 속성을 삽입하는 sed 패턴 버그(WEB-08/WEB-16)**: 실제
+  tomcat:10 기본 `server.xml`의 `<Connector ...>` 태그는 속성이 여러 줄에 걸쳐 있어, 닫는
+  `>`가 같은 줄에 있다고 가정한 sed 치환이 매칭되지 않아 조용히 아무 일도 하지 않는 버그가
+  있었다(재검증에서 VULN으로 남아 정상적으로 실패·원복 처리되긴 했으나 의도한 조치 자체가
+  적용되지 않음). `<Connector` 토큰 바로 뒤에 속성을 삽입하는 awk 방식으로 변경해 태그가
+  여러 줄에 걸쳐 있어도 안전하게 동작하도록 수정(check(WEB-16)의 판정 로직도 "Connector"와
+  "server=" 가 같은 줄에 있는지로 판정하므로 이 방식이 check와도 일치함).
+
+### Testing
+- **Docker(공식 httpd:2.4/nginx:latest/tomcat:10 이미지)에서 fix.sh 전체 흐름 실기 검증**:
+  세 엔진 모두에서 dry-run → `--apply --yes`(auto 즉시 적용, confirm 은 비대화형에서 안전하게
+  거부) → 재검증(GOOD 전환 확인) → 개별 항목 직접 호출(confirm 항목의 실제 로직 검증) →
+  `--rollback`(여러 항목이 같은 파일을 수정한 경우의 정확한 역순 복원 포함) 까지 end-to-end로
+  확인. 18개 fix 스크립트 전부 최소 1개 엔진에서 실제 적용→재검증 GOOD 까지 확인했다(WEB-09
+  프로세스 권한 전환만 두 이미지 모두 기본값이 이미 non-root라 VULN 상태를 인위적으로 만들지
+  못해 코드 리뷰로만 검증 — 나머지는 필요 시 설정을 인위적으로 취약하게 만들어(예: Tomcat
+  allowLinking=true 주입) 실제 VULN→적용→GOOD 경로를 확인함).
+
 ## [0.8.2] - 2026-09-29
 ### Added
 - **Windows/PC 자동 조치(fix) 구현**: `02_windows/fix.ps1`, `07_pc/fix.ps1` 신규(01_unix/fix.sh

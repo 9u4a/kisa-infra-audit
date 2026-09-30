@@ -685,6 +685,24 @@ fix_backup() {
     fi
 }
 
+# fix_backup_remove_path <경로> — 파일/디렉터리를 완전히 삭제하기 전에 내용 전체를 tar로
+# 보존한다. fix_backup() 의 디렉터리 처리(소유자/권한 메타데이터만 저장)와 달리, 이 함수는
+# "삭제 자체가 조치"인 항목(WEB-07 기본 샘플/매뉴얼 디렉터리 제거 등) 전용으로 내용 전체를
+# 백업해 원복 시 삭제 이전 상태로 완전히 복원할 수 있게 한다.
+fix_backup_remove_path() {
+    _f=$1
+    if [ ! -e "$_f" ] && [ ! -L "$_f" ]; then
+        return 0
+    fi
+    _rel=$(printf '%s' "$_f" | sed 's#^/##')
+    _dest="$FIX_BACKUP_DIR/$FIX_CODE/$_rel"
+    mkdir -p "$(dirname "$_dest")"
+    _parent=$(dirname "$_f")
+    _base=$(basename "$_f")
+    (cd "$_parent" 2>/dev/null && tar czf "$_dest.TARBALL.tgz" "$_base") 2>/dev/null
+    rm -rf "$_f"
+}
+
 # fix_rollback_item <코드> — 해당 항목에서 fix_backup 한 모든 파일/디렉터리를 원상 복구한다.
 fix_rollback_item() {
     _code=$1
@@ -706,6 +724,13 @@ fix_rollback_item() {
                     chown "$_owner" "$_orig" 2>/dev/null
                     chmod "$_perm" "$_orig" 2>/dev/null
                 fi
+                ;;
+            *.TARBALL.tgz)
+                _orig="/${_bak#"$_dir"/}"
+                _orig="${_orig%.TARBALL.tgz}"
+                _origparent=$(dirname "$_orig")
+                mkdir -p "$_origparent"
+                (cd "$_origparent" 2>/dev/null && tar xzf "$_bak")
                 ;;
             *)
                 _orig="/${_bak#"$_dir"/}"
@@ -773,6 +798,11 @@ fix_xinetd_disable() {
 }
 
 # fix_rollback_all <fix-run-dir> — fix.sh --rollback 용: 해당 실행의 백업 전체를 원복한다.
+# 여러 항목이 같은 파일을 순차적으로 수정한 경우, 원복은 적용의 역순(나중에 바뀐 항목부터)으로
+# 처리해야 최종 상태가 "전부 적용 전"으로 정확히 돌아간다. 정순으로 처리하면 뒤에 적용된 항목의
+# 백업(이미 앞 항목의 변경이 반영된 상태의 스냅샷)이 마지막에 덮어써 앞 항목의 조치만 남는 버그가
+# 있었다(Web WEB-04/08/16/22가 같은 httpd.conf 를 순차 수정하는 실기 테스트로 실제로 발견 —
+# 코드가 U-01~U-67 처럼 전부 2자리 zero-padding 이라 사전식 역순 정렬이 곧 적용 역순과 같다).
 fix_rollback_all() {
     _run_dir=$1
     _backup_dir="$_run_dir/backup"
@@ -780,9 +810,14 @@ fix_rollback_all() {
         log_error "$_backup_dir 를 찾을 수 없습니다."
         return 1
     fi
+    _codes=""
     for _code_dir in "$_backup_dir"/*/; do
         [ -d "$_code_dir" ] || continue
-        _code=$(basename "$_code_dir")
+        _codes="$_codes
+$(basename "$_code_dir")"
+    done
+    _codes=$(printf '%s\n' "$_codes" | grep -v '^$' | sort -r)
+    for _code in $_codes; do
         FIX_BACKUP_DIR="$_backup_dir" fix_rollback_item "$_code"
         echo "원복 완료: $_code"
     done

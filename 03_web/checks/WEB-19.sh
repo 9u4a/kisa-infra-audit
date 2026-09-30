@@ -14,7 +14,7 @@ run_check() {
         hit=""
         for f in $files; do
             [ -f "$f" ] || continue
-            l=$(grep -nE '^[^#]*Options[^#]*\bIncludes\b' "$f" 2>/dev/null)
+            l=$(grep -nE '^[^#]*Options[^#]*\bIncludes\b' "$f" 2>/dev/null | grep -v '\-Includes')
             [ -n "$l" ] && hit="$hit
 $f: $l"
         done

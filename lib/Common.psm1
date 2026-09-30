@@ -710,8 +710,12 @@ function Invoke-FixRollbackAll {
         Write-Host "보안 정책(secedit) 스냅샷 전체 원복 완료"
     }
     $Global:FixBackupDir = $backupDir
+    # 여러 항목이 같은 파일을 순차적으로 수정했을 수 있으므로 적용 역순(코드 내림차순)으로
+    # 원복한다 - 정순으로 처리하면 뒤에 적용된 항목의 백업이 마지막에 덮어써 앞 항목의 조치만
+    # 남는 버그가 있다(03_web(sh) 쪽 실기 테스트로 실제로 발견해 lib/common.sh 와 함께 수정).
     Get-ChildItem -Path $backupDir -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -ne "_secpolicy" } |
+        Sort-Object Name -Descending |
         ForEach-Object {
             Restore-FixItem -Code $_.Name
             Write-Host "원복 완료: $($_.Name)"

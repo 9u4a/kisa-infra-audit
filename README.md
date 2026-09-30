@@ -24,7 +24,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 |---|---|---|---|---|
 | [`01_unix`](./01_unix) | U | 1. UNIX 서버 | 67 | 🟢 67/67 진단 + 58/67 조치(fix) 구현 (Linux) |
 | [`02_windows`](./02_windows) | W | 2. Windows 서버 | 64 | 🟢 64/64 진단 + 48/64 조치(fix) 구현 |
-| [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 구현 (Apache/Nginx/Tomcat), IIS 23/26 구현 (JEUS/WebtoB 는 이후) |
+| [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 진단 + 18/26 조치(fix) (Apache/Nginx/Tomcat), IIS 진단 23/26 (JEUS/WebtoB 는 이후) |
 | [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟡 Cisco IOS 구현 (Juniper/Alteon/Passport/Piolink 는 이후) |
 | [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 진단 + 11/18 조치(fix) 구현 |
 | [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟢 MySQL/PostgreSQL/Oracle/MSSQL 구현 (Altibase/Tibero/Cubrid 는 이후) |
@@ -86,6 +86,14 @@ sh 03_web/run.sh -i WEB-01,WEB-04  # 특정 항목만
 .\03_web\run.ps1 -i WEB-04,WEB-09    # 특정 항목만
 .\03_web\run.ps1 -l                  # 항목 목록 확인 (26항목 전체, IIS 미대상 항목은 실행 시 NA)
 ```
+자동 조치(Apache/Nginx/Tomcat 대상, 진단과 완전히 분리된 별도 진입점, 기본은 dry-run — IIS는
+아직 fix 미구현):
+```sh
+sh 03_web/fix.sh -r output/<host>_03_<시각>/result.json                 # dry-run(미리보기만)
+sh 03_web/fix.sh -r <result.json> -i WEB-04,WEB-16 --apply               # 지정 항목만 실제 적용
+sh 03_web/fix.sh -r <result.json> --apply --yes                          # auto 등급 일괄 적용(confirm은 항상 개별 확인)
+sh 03_web/fix.sh --rollback output/<host>_03_fix_<시각>/                  # 백업에서 원복
+```
 
 ### DBMS (MySQL/PostgreSQL/Oracle: sh, MSSQL: PowerShell)
 ```sh
@@ -144,7 +152,8 @@ python lib/extract_guide.py --only 01_unix
 | 0.8.0 ✅ | 자동 조치(fix) 공통 인프라 + Unix 58/67항목 |
 | 0.8.1 ✅ | Web: IIS 23/26항목 (JEUS/WebtoB 는 이후) |
 | 0.8.2 ✅ | Windows 48/64, PC 11/18 자동 조치(fix) |
-| 0.9.0 | Web/DBMS fix, Network 조치 스크립트, 통합 런처, 다중 호스트 보고서 병합 |
+| 0.9.0 ✅ | Web(Apache/Nginx/Tomcat) 18/26 자동 조치(fix) |
+| 0.9.x | Web(IIS) fix, DBMS fix, Network 조치 스크립트, 통합 런처, 다중 호스트 보고서 병합 |
 | 1.0.0 | 6개 카테고리 완성·검증 |
 
 ## 라이선스 · 출처
