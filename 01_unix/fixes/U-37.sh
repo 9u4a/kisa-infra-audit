@@ -4,7 +4,7 @@ run_fix() {
 
     for bin in /usr/bin/crontab /usr/bin/at; do
         [ -e "$bin" ] || continue
-        perm=$(stat -c '%a' "$bin" 2>/dev/null)
+        perm=$(stat -L -c '%a' "$bin" 2>/dev/null)
         suid=$(find "$bin" -perm -4000 2>/dev/null)
         if { [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null; } || [ -n "$suid" ]; then
             fix_backup "$bin"
@@ -27,7 +27,7 @@ run_fix() {
 
     for f in /etc/cron.allow /etc/cron.deny /etc/at.allow /etc/at.deny; do
         [ -f "$f" ] || continue
-        perm=$(stat -c '%a' "$f" 2>/dev/null)
+        perm=$(stat -L -c '%a' "$f" 2>/dev/null)
         [ -n "$perm" ] && [ "$perm" -gt 640 ] 2>/dev/null || continue
         fix_backup "$f"
         chmod 640 "$f" 2>/dev/null

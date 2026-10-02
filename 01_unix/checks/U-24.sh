@@ -39,7 +39,7 @@ run_check() {
             f="$home/$df"
             [ -e "$f" ] || continue
             checked=$((checked + 1))
-            owner=$(stat -c '%U' "$f" 2>/dev/null)
+            owner=$(stat -L -c '%U' "$f" 2>/dev/null)
             evidence="$evidence
 $(ls -l "$f" 2>/dev/null)"
             if [ "$owner" != "root" ] && [ "$owner" != "$name" ]; then

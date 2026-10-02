@@ -13,8 +13,12 @@ run_check() {
     _perm_detail=$CHECK_DETAIL
     CHECK_EVIDENCE="[$f] $_perm_detail
 $restrict"
+    # "=" 과 값 사이에 공백이 있는 표준 listener.ora 표기(예: "ADMIN_RESTRICTIONS_LISTENER = ON",
+    # 이 파일의 DEFAULT_SERVICE_LISTENER 항목과 같은 스타일)도 인식해야 한다 - 공백 없는 "=ON"
+    # 만 찾는 패턴이라 정상 포맷으로 설정해도 거짓 VULN이 나는 버그가 있었다(Oracle Docker
+    # 실기 테스트로 발견, fixes/oracle/D-15.sh 가 쓰는 출력 형식과 맞춰 수정).
     _restrict_on=0
-    printf '%s' "$restrict" | grep -qi '=ON' && _restrict_on=1
+    printf '%s' "$restrict" | grep -qiE '=[[:space:]]*ON\b' && _restrict_on=1
     if [ "$_perm_status" = "GOOD" ] && [ "$_restrict_on" -eq 1 ]; then
         CHECK_STATUS="GOOD"; CHECK_DETAIL="listener.ora 권한이 적절하고 ADMIN_RESTRICTIONS 옵션도 설정되어 있음"
     else

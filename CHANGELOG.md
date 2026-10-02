@@ -5,6 +5,62 @@
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-10-02
+### Added
+- **DBMS 카테고리(MySQL/PostgreSQL/Oracle/MSSQL) 자동 조치(fix) 구현**: `08_dbms/fix.sh`(sh
+  3엔진, `-e` 로 엔진 지정) + `08_dbms/fix.ps1`(MSSQL) 신규. `fixes/<engine>/D-xx.{sh,ps1}`
+  총 35개 구현(MySQL 7/PostgreSQL 6/Oracle 15/MSSQL 7, D-01~D-26 중 20개 코드 — D-02/04/06/13/
+  20/25는 전 엔진 공통으로 여전히 manual).
+- DB 상태는 파일이 아니라 SQL 실행 결과라 `lib/common.sh`에 `fix_db_queue_rollback`(원복용 SQL
+  문 자체를 큐에 저장 — 01_unix 의 파일 기반 `fix_backup`과 다른 메커니즘), `lib/Common.psm1`에
+  `Add-FixDbRollback`/`Restore-FixDbSqlBackup`(MSSQL) 신규 추가. `fix_rollback_item`/
+  `Restore-FixItem` 양쪽에 이 SQL 큐 처리를 통합.
+- fix 등급은 다른 카테고리와 동일하게 가이드 '조치 시 영향' 필드를 기계적으로 분류한 뒤 U-28과
+  같은 구조의 문제가 있는 항목을 재분류했다: D-10(MySQL/PostgreSQL/Oracle은 허용 IP 목록을
+  스크립트가 알 수 없어 미구현, MSSQL만 W-64/PC-15와 동일한 방식으로 방화벽 활성화 자동화),
+  D-07/D-19/D-26(각각 mysqld 재시작, Oracle 정적 파라미터 재시작, PostgreSQL/Oracle 정적 파라미터
+  재시작이 필요 — DB 클라이언트 연결만 영향, 이 스크립트의 OS 세션에는 영향 없어 confirm 등급에서
+  재시작까지 수행하도록 구현). D-01(기본 계정 비밀번호)/D-08(MySQL 해시 알고리즘 전환)은 WEB-02와
+  동일한 이유로 비밀번호를 무작위로 재설정하며 원문을 증적에 남기지 않는다.
+
+### Fixed
+- **`check_owner_perm`(lib/common.sh) 심볼릭 링크 오탐**: `stat`에 `-L`(역참조) 없이 호출해
+  심볼릭 링크 자체의 겉보기 권한(항상 777)을 읽어, 실제로는 안전한 대상 파일도 거짓 VULN으로
+  판정하는 버그가 있었다. Oracle Free 23ai+ 가 `listener.ora`/`sqlnet.ora`를 `oradata/dbconfig/`
+  의 실제 파일에 대한 심볼릭 링크로 배치하는 실제 레이아웃에서 Docker 실기 테스트로 발견(D-14/
+  D-15). 같은 패턴을 쓰던 01_unix(U-24/27/31/37/40/46)와 03_web(WEB-14)의 인라인 `stat -c`
+  호출, 그리고 이번에 추가한 08_dbms 의 모든 `stat -c` 호출에도 전부 `-L`을 추가해 일괄 수정.
+- **`checks/postgres/D-03.sh` 근본적으로 틀린 판정 방법**: `passwordcheck`는 SQL 함수가 없는
+  순수 C 훅 모듈이라 `.control` 파일이 없고 `CREATE EXTENSION`/`pg_extension`으로는 설치도
+  확인도 할 수 없다(공식 `postgres:16` 이미지에 `.so`는 있지만 `.control`이 없어 실제로
+  "extension은 사용할 수 없음" 오류가 남을 Docker 실기 테스트로 확인). `shared_preload_libraries`
+  GUC 로 판정하도록 수정.
+- **`checks/oracle/D-15.sh` 공백 포맷 미인식**: `ADMIN_RESTRICTIONS_LISTENER = ON`(표준 listener.ora
+  표기, `=`와 값 사이 공백 포함)을 `=ON`(공백 없음) 패턴만 찾는 정규식이 인식하지 못해, 정상
+  설정해도 거짓 VULN이 나는 버그. `=[[:space:]]*ON` 으로 수정.
+- **`fixes/mssql/D-26.ps1` 원복 순서 버그**: `SERVER AUDIT SPECIFICATION`이 참조 중인
+  `SERVER AUDIT`를 먼저 `DROP`하려 해 조용히 실패, 원복이 전혀 되지 않는 문제. 참조하는
+  SPECIFICATION을 먼저 비활성화·삭제한 뒤 AUDIT를 삭제하도록 순서 수정.
+- **`fixes/oracle/D-03/D-05/D-09/D-22.sh` 원복 부정확**: `ALTER PROFILE ... LIMIT ... DEFAULT`
+  로 원복하면 Oracle의 "내장 기본값"으로 돌아가는데, 최신 버전(23ai/26ai)의 실제 내장 기본값이
+  가이드가 가정한 UNLIMITED/NULL이 아닐 수 있어 조치 이전 값을 정확히 복원하지 못하는 문제가
+  있었다. 조치 전 실제 현재 값을 조회해 그 값 그대로 원복 SQL을 구성하도록 수정.
+
+### Testing
+- **Docker(MySQL 8/PostgreSQL 16/gvenzl Oracle-Free 23ai/26ai, MSSQL은 별도 PowerShell
+  컨테이너에서 sqlcmd 원격 접속)에서 fix 전체 흐름 실기 검증**: dry-run → `--apply`(auto 즉시,
+  confirm은 비대화형에서 안전 거부 또는 직접 호출로 로직 검증) → 재검증 → `--rollback`까지
+  엔진별로 최소 1개 이상의 실제 VULN→적용→GOOD/MANUAL 경로 확인(MySQL 7/7, PostgreSQL 5/6,
+  Oracle 15/15, MSSQL 3/7 직접 검증 — 나머지는 기본 이미지가 이미 GOOD 상태라 인위적 VULN
+  재현이 어려워 코드 리뷰로만 확인, D-10(MSSQL 방화벽)은 Linux 컨테이너에 `Get-NetFirewallProfile`
+  이 없어 Windows/PC fix와 동일한 수준(로직 검증만)).
+- **재시작이 필요한 항목(D-07/D-19/D-26)은 Docker 단일 프로세스 컨테이너의 한계를 실기로 확인**:
+  PostgreSQL/MySQL 공식 이미지는 DB 서버 프로세스 자체가 컨테이너 PID 1이라, `pg_ctl restart`로
+  재시작하면 컨테이너 자체가 종료된다(실제 systemd 환경/VM에서는 발생하지 않는 Docker 특유의
+  제약). Oracle(gvenzl 이미지)은 별도 supervisor가 PID 1이라 재시작이 컨테이너를 죽이지 않아
+  D-26 Oracle은 재시작 포함 전체 경로를 실제로 끝까지 검증했다. PostgreSQL은 SPFILE/GUC 설정
+  변경까지만 확인, 재시작 자체는 코드 리뷰로만 검증(U-65 NTP 서비스 기동과 같은 종류의 한계).
+
 ## [0.9.1] - 2026-09-30
 ### Added
 - **Web 카테고리 IIS 대상 자동 조치(fix) 구현**: `03_web/fix.ps1` 신규(02_windows/fix.ps1 과

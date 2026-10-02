@@ -11,7 +11,7 @@ run_check() {
     for bin in /usr/bin/crontab /usr/bin/at; do
         [ -e "$bin" ] || continue
         checked=1
-        perm=$(stat -c '%a' "$bin" 2>/dev/null)
+        perm=$(stat -L -c '%a' "$bin" 2>/dev/null)
         evidence="$evidence
 $(ls -l "$bin" 2>/dev/null)"
         if [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null; then
@@ -34,7 +34,7 @@ $d: $(ls -l "$d" 2>/dev/null | tr '\n' ' ')"
         checked=1
         for f in /etc/cron.allow /etc/cron.deny /etc/at.allow /etc/at.deny; do
             [ -f "$f" ] || continue
-            perm=$(stat -c '%a' "$f" 2>/dev/null)
+            perm=$(stat -L -c '%a' "$f" 2>/dev/null)
             evidence="$evidence
 $(ls -l "$f" 2>/dev/null)"
             [ -n "$perm" ] && [ "$perm" -gt 640 ] 2>/dev/null && violations="$violations $f(perm=$perm)"

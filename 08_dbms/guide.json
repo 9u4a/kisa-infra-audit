@@ -29,7 +29,7 @@
       "guide_page": 596,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "mysql",
         "postgres",
@@ -91,7 +91,7 @@
       "guide_page": 603,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "mysql",
         "postgres",
@@ -153,7 +153,7 @@
       "guide_page": 613,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "oracle"
       ],
@@ -212,12 +212,12 @@
       "guide_page": 619,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "mysql",
         "oracle"
       ],
-      "deviation": null
+      "deviation": "가이드 문구상 기계적으로는 auto이지만, root가 아닌 계정으로 전환하려면 mysqld/Oracle 인스턴스 재시작이 필요해(설정 파일만 바꿔서는 이미 떠 있는 프로세스의 실행 계정이 바뀌지 않음) confirm으로 재분류함. 이 재시작은 Windows/PC의 '관리 세션 자체를 끊는' 재시작(RDP/WinRM)과는 성격이 달라(DB 클라이언트 연결만 영향, 이 스크립트가 실행 중인 OS 세션에는 영향 없음) 사람이 명시적으로 동의한 confirm 등급에서는 수행 가능하다고 판단함."
     },
     {
       "code": "D-08",
@@ -241,14 +241,14 @@
       "guide_page": 621,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "mysql",
         "postgres",
         "oracle",
         "mssql"
       ],
-      "deviation": null
+      "deviation": "MySQL은 계정의 인증 플러그인을 SHA-256 이상으로 바꾸려면 비밀번호를 새로 설정해야 해(기존 해시를 그대로 재사용할 수 없음) 사실상 비밀번호를 회전(rotate)하게 된다 - WEB-02와 동일한 이유로 기존 운영 자동화가 의존할 수 있어 confirm으로 재분류함(값 자체는 안전하게 무작위 생성 가능해 U-28류 문제는 아님). Oracle/PostgreSQL 은 전역 설정값 변경만으로 충족되어 이 위험이 없지만, 등급은 항목 단위로 공유되므로 confirm으로 통일함."
     },
     {
       "code": "D-09",
@@ -272,7 +272,7 @@
       "guide_page": 625,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "oracle"
       ],
@@ -300,14 +300,14 @@
       "guide_page": 628,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "mysql",
         "postgres",
         "oracle",
         "mssql"
       ],
-      "deviation": null
+      "deviation": "MySQL/PostgreSQL/Oracle 은 가이드 조치 방법이 \"허용된 IP만 접속하도록 제한\"이라 스크립트가 안전한 허용 IP 목록을 스스로 알 수 없어(U-28과 동일한 구조) 세 엔진은 자동 조치를 구현하지 않았다(fixes/<engine>/D-10.sh 없음, SKIPPED로 응답). MSSQL 만 가이드 사례가 Windows 방화벽 활성화 여부를 다뤄 W-64/PC-15와 동일한 방식(원격 관리 규칙 사전 활성화 후 방화벽 켜기)으로 confirm 등급 자동 조치를 구현했다."
     },
     {
       "code": "D-11",
@@ -331,7 +331,7 @@
       "guide_page": 633,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "mysql",
         "postgres",
@@ -362,7 +362,7 @@
       "guide_page": 635,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "oracle"
       ],
@@ -418,7 +418,7 @@
       "guide_page": 639,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "mysql",
         "postgres",
@@ -448,7 +448,7 @@
       "guide_page": 642,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "oracle"
       ],
@@ -476,7 +476,7 @@
       "guide_page": 644,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "mssql"
       ],
@@ -504,7 +504,7 @@
       "guide_page": 646,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "oracle"
       ],
@@ -532,7 +532,7 @@
       "guide_page": 648,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "oracle"
       ],
@@ -560,11 +560,11 @@
       "guide_page": 650,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "oracle"
       ],
-      "deviation": null
+      "deviation": "Oracle 전용. os_roles/remote_os_authent/remote_os_roles 는 정적(static) 파라미터라 SPFILE 값을 바꿔도 인스턴스를 재시작해야 적용된다 - D-07과 동일한 논리로 confirm 등급에서 재시작까지 수행한다(이 스크립트의 OS 세션에는 영향 없이 DB 클라이언트 연결만 재접속 필요)."
     },
     {
       "code": "D-20",
@@ -617,7 +617,7 @@
       "guide_page": 654,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "mysql",
         "oracle"
@@ -646,7 +646,7 @@
       "guide_page": 656,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "oracle"
       ],
@@ -674,7 +674,7 @@
       "guide_page": 657,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "mssql"
       ],
@@ -702,7 +702,7 @@
       "guide_page": 661,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "auto",
       "envs": [
         "mssql"
       ],
@@ -761,13 +761,13 @@
       "guide_page": 666,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "confirm",
       "envs": [
         "postgres",
         "oracle",
         "mssql"
       ],
-      "deviation": null
+      "deviation": "가이드 문구상 기계적으로는 auto이지만, PostgreSQL의 logging_collector 와 Oracle의 audit_trail 은 둘 다 정적 파라미터라 재시작이 필요해(D-07/D-19와 동일한 논리로 confirm 등급에서 재시작까지 수행) confirm으로 재분류함. MSSQL 의 서버 감사(Server Audit) 생성/활성화는 재시작이 필요 없어 더 안전하지만, 등급은 항목 단위로 공유되므로 동일하게 confirm으로 둔다."
     }
   ]
 }

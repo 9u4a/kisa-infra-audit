@@ -21,7 +21,7 @@ run_fix() {
         for df in $dotfiles; do
             f="$home/$df"
             [ -e "$f" ] || continue
-            owner=$(stat -c '%U' "$f" 2>/dev/null)
+            owner=$(stat -L -c '%U' "$f" 2>/dev/null)
             other_write=$(find "$f" -perm -0002 2>/dev/null)
             if [ "$owner" != "root" ] && [ "$owner" != "$name" ]; then
                 fix_backup "$f"; chown "$name" "$f" 2>/dev/null

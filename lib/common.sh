@@ -278,10 +278,16 @@ check_owner_perm() {
         return
     fi
 
-    _owner=$(stat -c '%U' "$_file" 2>/dev/null)
-    [ -z "$_owner" ] && _owner=$(stat -f '%Su' "$_file" 2>/dev/null)
-    _perm=$(stat -c '%a' "$_file" 2>/dev/null)
-    [ -z "$_perm" ] && _perm=$(stat -f '%OLp' "$_file" 2>/dev/null)
+    # -L(심볼릭 링크 역참조)을 반드시 써야 한다: 링크 자체의 권한 비트는 커널이 전혀 사용하지
+    # 않고(항상 777 처럼 보임) 실제 접근 제어는 가리키는 대상 파일의 소유자/권한으로 결정된다.
+    # Oracle Free 23ai+ 가 listener.ora/sqlnet.ora 를 oradata/dbconfig/ 의 실제 파일에 대한
+    # 심볼릭 링크로 배치하는 것처럼 설정 파일이 링크인 경우가 실제로 있다 - -L 없이 stat 하면
+    # 링크의 겉보기 777을 그대로 읽어 실제로는 안전한 644 대상 파일도 거짓 VULN으로 오판한다
+    # (D-14/D-15 Oracle Docker 실기 테스트로 발견).
+    _owner=$(stat -L -c '%U' "$_file" 2>/dev/null)
+    [ -z "$_owner" ] && _owner=$(stat -L -f '%Su' "$_file" 2>/dev/null)
+    _perm=$(stat -L -c '%a' "$_file" 2>/dev/null)
+    [ -z "$_perm" ] && _perm=$(stat -L -f '%OLp' "$_file" 2>/dev/null)
 
     _owner_ok=0
     for _o in $_allowed_owners; do
@@ -708,8 +714,27 @@ fix_rollback_item() {
     _code=$1
     _dir="$FIX_BACKUP_DIR/$_code"
     [ -d "$_dir" ] || return 0
+
+    # DBMS SQL 원복은 파일 원복과 메커니즘이 완전히 달라(DB_* 접속 환경변수를 이용해 실제 SQL을
+    # 재실행) 별도로 먼저 처리한다. 같은 항목 안에서 여러 SQL을 순서대로 큐에 넣었을 수 있으므로
+    # (예: 계정 3개를 순서대로 잠금) 적용 역순(번호 내림차순)으로 실행한다.
+    _sqldir="$_dir/dbsql"
+    if [ -d "$_sqldir" ]; then
+        for _sqlfile in $(ls "$_sqldir" 2>/dev/null | sort -r); do
+            _sql=$(cat "$_sqldir/$_sqlfile")
+            case "$_sqlfile" in
+                *.mysql.sql) mysql_query "$_sql" >/dev/null 2>&1 ;;
+                *.postgres.sql) psql_query "$_sql" >/dev/null 2>&1 ;;
+                *.oracle.sql) oracle_query "$_sql" >/dev/null 2>&1 ;;
+            esac
+        done
+    fi
+
     find "$_dir" -type f | while IFS= read -r _bak; do
         case "$_bak" in
+            */dbsql/*)
+                : # 위에서 이미 처리함
+                ;;
             *.WAS_ABSENT)
                 _orig="/${_bak#"$_dir"/}"
                 _orig="${_orig%.WAS_ABSENT}"
@@ -795,6 +820,19 @@ fix_xinetd_disable() {
         return 0
     fi
     return 1
+}
+
+# ---- DBMS 전용: SQL 기반 원복 (08_dbms) -------------------------------------
+# DB 상태는 파일이 아니라 SQL 실행 결과이므로, 파일 기반 fix_backup 과 달리 "원복용 SQL 문
+# 자체"를 백업 위치에 기록해 두고 fix_rollback_item 이 그 SQL 을 다시 실행하는 방식으로
+# 원복한다. fixes/<engine>/D-xx.sh 는 실제 변경 전에 반드시 이 함수로 원복 SQL 을 큐에 넣는다.
+fix_db_queue_rollback() {
+    _engine=$1; _sql=$2
+    _dir="$FIX_BACKUP_DIR/$FIX_CODE/dbsql"
+    mkdir -p "$_dir"
+    _n=1
+    while [ -f "$_dir/$(printf '%04d' "$_n").$_engine.sql" ]; do _n=$((_n + 1)); done
+    printf '%s\n' "$_sql" > "$_dir/$(printf '%04d' "$_n").$_engine.sql"
 }
 
 # fix_rollback_all <fix-run-dir> — fix.sh --rollback 용: 해당 실행의 백업 전체를 원복한다.

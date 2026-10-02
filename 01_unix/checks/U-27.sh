@@ -28,8 +28,8 @@ run_check() {
     check_file_plus() {
         _f=$1
         [ -f "$_f" ] || return
-        owner=$(stat -c '%U' "$_f" 2>/dev/null)
-        perm=$(stat -c '%a' "$_f" 2>/dev/null)
+        owner=$(stat -L -c '%U' "$_f" 2>/dev/null)
+        perm=$(stat -L -c '%a' "$_f" 2>/dev/null)
         plus=$(grep -c '^[[:space:]]*+' "$_f" 2>/dev/null)
         evidence="$evidence
 $(ls -l "$_f" 2>/dev/null) / '+' 설정 라인 수: $plus"

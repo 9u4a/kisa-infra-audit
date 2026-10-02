@@ -13,7 +13,7 @@ run_check() {
         checked=1
         conf=$(apache_conf_path)
         if [ -f "$conf" ]; then
-            perm=$(stat -c '%a' "$conf" 2>/dev/null)
+            perm=$(stat -L -c '%a' "$conf" 2>/dev/null)
             evidence="$evidence
 [Apache] $conf perm=$perm"
             [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null && violations="$violations apache"
@@ -24,7 +24,7 @@ run_check() {
         checked=1
         conf=$(nginx_conf_path)
         if [ -f "$conf" ]; then
-            perm=$(stat -c '%a' "$conf" 2>/dev/null)
+            perm=$(stat -L -c '%a' "$conf" 2>/dev/null)
             evidence="$evidence
 [Nginx] $conf perm=$perm"
             [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null && violations="$violations nginx"
@@ -36,7 +36,7 @@ run_check() {
         home=$(tomcat_home)
         f="$home/conf/web.xml"
         if [ -f "$f" ]; then
-            perm=$(stat -c '%a' "$f" 2>/dev/null)
+            perm=$(stat -L -c '%a' "$f" 2>/dev/null)
             evidence="$evidence
 [Tomcat] $f perm=$perm"
             [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null && violations="$violations tomcat"

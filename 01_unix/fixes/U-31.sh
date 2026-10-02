@@ -20,7 +20,7 @@ run_fix() {
         name=${entry%%:*}
         home=${entry#*:}
         [ -d "$home" ] || continue
-        owner=$(stat -c '%U' "$home" 2>/dev/null)
+        owner=$(stat -L -c '%U' "$home" 2>/dev/null)
         other_write=$(find "$home" -maxdepth 0 -perm -0002 2>/dev/null)
         if [ "$owner" != "$name" ]; then
             fix_backup "$home"; chown "$name" "$home" 2>/dev/null

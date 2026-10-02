@@ -38,7 +38,7 @@ run_check() {
         home=${entry#*:}
         [ -d "$home" ] || continue
         checked=$((checked + 1))
-        owner=$(stat -c '%U' "$home" 2>/dev/null)
+        owner=$(stat -L -c '%U' "$home" 2>/dev/null)
         evidence="$evidence
 $(ls -ld "$home" 2>/dev/null)"
         other_write=$(find "$home" -maxdepth 0 -perm -0002 2>/dev/null)

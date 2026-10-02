@@ -730,6 +730,27 @@ function Restore-FixSecPolicyBackup {
     Remove-Item -Path $db -Force -ErrorAction SilentlyContinue
 }
 
+# ---- DBMS(MSSQL) 전용: SQL 기반 원복 (08_dbms) -------------------------------------
+# lib/common.sh 의 fix_db_queue_rollback 과 같은 역할 - DB 상태는 파일이 아니라 SQL 실행
+# 결과이므로 "원복용 SQL 문 자체"를 백업 위치에 기록해 두고 Restore-FixItem 이 재실행한다.
+function Add-FixDbRollback {
+    param([Parameter(Mandatory)][string]$Sql)
+    $dir = Join-Path (Get-FixItemBackupDir) "dbsql"
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $n = 1
+    while (Test-Path (Join-Path $dir ("{0:D4}.sql" -f $n))) { $n++ }
+    Set-Content -Path (Join-Path $dir ("{0:D4}.sql" -f $n)) -Value $Sql -Encoding UTF8
+}
+
+function Restore-FixDbSqlBackup {
+    param([Parameter(Mandatory)][string]$Dir)
+    $files = Get-ChildItem -Path $Dir -Filter *.sql -ErrorAction SilentlyContinue | Sort-Object Name -Descending
+    foreach ($f in $files) {
+        $sql = Get-Content -Raw -Path $f.FullName
+        Invoke-MssqlQuery -Sql $sql | Out-Null
+    }
+}
+
 # ---- 항목 단위 / 전체 원복 ---------------------------------------------------------
 function Restore-FixItem {
     <# 해당 코드가 fix_backup 한 registry/service/acl/share 자원을 전부 원복한다. secedit
@@ -755,6 +776,8 @@ function Restore-FixItem {
         ForEach-Object { Restore-FixPathRemoveBackup -MetaFile $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "apppool") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixAppPoolIdentityBackup -File $_.FullName }
+    $dbsqlDir = Join-Path $dir "dbsql"
+    if (Test-Path $dbsqlDir) { Restore-FixDbSqlBackup -Dir $dbsqlDir }
 }
 
 function Invoke-FixRollbackAll {
@@ -785,4 +808,4 @@ function Invoke-FixRollbackAll {
         }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Get-FixItemBackupDir, Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Get-FixItemBackupDir, Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

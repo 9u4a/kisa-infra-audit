@@ -12,7 +12,7 @@ run_check() {
         return
     fi
 
-    perm=$(stat -c '%a' "$exports" 2>/dev/null)
+    perm=$(stat -L -c '%a' "$exports" 2>/dev/null)
     lines=$(grep -vE '^[[:space:]]*(#|$)' "$exports")
     open_lines=$(printf '%s\n' "$lines" | grep -E '(^|[[:space:]])\*(\(|[[:space:]])')
 

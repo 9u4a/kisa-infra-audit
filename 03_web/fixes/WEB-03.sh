@@ -12,7 +12,7 @@ run_fix() {
         FIX_STATUS="ERROR"; FIX_DETAIL="$f 파일을 찾을 수 없음"; FIX_EVIDENCE=""
         return
     fi
-    owner=$(stat -c '%U' "$f" 2>/dev/null)
+    owner=$(stat -L -c '%U' "$f" 2>/dev/null)
     case "$owner" in
         root|tomcat) : ;;
         *) owner="tomcat" ;;

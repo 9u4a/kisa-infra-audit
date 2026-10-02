@@ -19,7 +19,7 @@ sendmail.cf PrivacyOptions: ${line:-미설정}"
 
     if [ -x /usr/sbin/postsuper ]; then
         checked=1
-        perm=$(stat -c '%a' /usr/sbin/postsuper 2>/dev/null)
+        perm=$(stat -L -c '%a' /usr/sbin/postsuper 2>/dev/null)
         evidence="$evidence
 /usr/sbin/postsuper 권한: $perm"
         find /usr/sbin/postsuper -perm -0001 2>/dev/null | grep -q . && violations="$violations postfix(postsuper 일반사용자 실행권한)"
@@ -27,7 +27,7 @@ sendmail.cf PrivacyOptions: ${line:-미설정}"
 
     if [ -x /usr/sbin/exiqgrep ]; then
         checked=1
-        perm=$(stat -c '%a' /usr/sbin/exiqgrep 2>/dev/null)
+        perm=$(stat -L -c '%a' /usr/sbin/exiqgrep 2>/dev/null)
         evidence="$evidence
 /usr/sbin/exiqgrep 권한: $perm"
         find /usr/sbin/exiqgrep -perm -0001 2>/dev/null | grep -q . && violations="$violations exim(exiqgrep 일반사용자 실행권한)"
