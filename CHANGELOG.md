@@ -5,6 +5,39 @@
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-10-06
+### Added
+- **통합 런처 `audit.sh`(POSIX sh)/`audit.ps1`(PowerShell 5.1) 신규**: 이 호스트에 적용되는
+  모든 카테고리를 한 번에 진단한다 - Unix 계열은 01_unix(항상)+03_web(엔진 자동 감지)+
+  08_dbms(엔진 자동 감지, 실패 시 건너뜀), Windows 계열은 02_windows+07_pc(항상)+03_web(IIS
+  자동 감지)+08_dbms(MSSQL, 연결 실패는 각 항목이 개별 오류로 정직하게 보고). 카테고리별
+  run.*을 그대로 호출해 결과를 모은 뒤 통합 요약을 출력한다 - 각 카테고리의 세부 옵션(`-i`/`-g`
+  등)은 지원하지 않으며, 다른 run.*과 동일하게 대상 설정을 변경하지 않는다(진단 전용).
+- **`lib/merge.py` 신규**: 같은 카테고리를 여러 호스트에서 각각 진단한 result.json 여러 개를
+  모아 호스트별 준수율 순위와 전사(全社) 공통 취약 항목 순위를 보여주는 병합 보고서
+  (`merged.csv`/`merged_summary.txt`/`merged_report.html`)를 생성한다. 분석자 PC 전용, 대상
+  시스템에는 전혀 접근하지 않고 이미 생성된 result.json만 읽는다.
+
+### Testing
+- **1.0.0 전 전체 저장소 정적분석·실기 검증 수행**(사용자 요청에 따른 단위/통합 테스트 게이트):
+  - ShellCheck: 전체 `*.sh` 251개 전수 검사, ERROR 수준 1건 발견·수정(`01_unix/checks/U-38.sh`
+    의 `$port[[:space:]]` 가 배열 인덱싱 문법으로 오인되는 것 - `${port}[[:space:]]`로 수정,
+    이번 세션 작업과 무관한 기존 코드였음). WARNING 수준은 전부 기존부터 알려진 허용 패턴(체크/
+    조치 계약 변수가 run.*/fix.*에 의해 외부에서 쓰이는 것을 ShellCheck가 알 수 없는 SC2034,
+    `proc_pids_by_comm_glob`의 의도된 glob 패턴을 SC2254로 오탐).
+  - PSScriptAnalyzer: 전체 `*.ps1`/`*.psm1` 212개 전수 검사, ERROR 수준 0건. 전체 파일 UTF-8
+    BOM/파싱 재확인도 0건 이상 없음.
+  - Python: 전체 `*.py` 77개 `ast.parse` 전수 통과.
+  - **실기 통합 테스트**: `audit.sh`를 Docker(Debian 12 + nginx)에서 실행해 01_unix(67항목)+
+    03_web(26항목, nginx 자동 감지)+08_dbms(엔진 미감지 시 정상적으로 건너뜀) 전체 플로우를
+    오류 0건으로 확인. `audit.ps1`을 실제 Windows 11 호스트에서 실행해 02_windows(64항목)+
+    07_pc(18항목)+03_web(IIS 미설치로 전체 NA)+08_dbms(로컬 MSSQL 없어 항목별 정직한 오류
+    보고)까지 4개 카테고리 108항목을 스크립트 실패 0건으로 확인. 이 과정에서 01_unix/03_web의
+    이번 세션 `stat -L` 변경(0.9.2 DBMS 작업 중 발견한 심볼릭 링크 버그 수정)이 일반 파일
+    대상에서는 동작이 그대로임(회귀 없음)을 재확인했다.
+  - `lib/merge.py`는 합성 result.json(호스트 3개)으로 호스트별 준수율 정렬, 전사 공통 취약
+    항목 집계, CSV/HTML 출력까지 검증.
+
 ## [0.9.3] - 2026-10-06
 ### Added
 - **Network(Cisco IOS) 조치 명령어 스크립트 생성 구현**: `05_network/fix.py` 신규. 다른

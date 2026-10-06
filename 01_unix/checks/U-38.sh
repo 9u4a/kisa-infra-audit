@@ -16,7 +16,7 @@ run_check() {
     fi
 
     for port in 7 9 13 19; do
-        if printf '%s' "$listen_out" | grep -qE "[:.]$port[[:space:]]"; then
+        if printf '%s' "$listen_out" | grep -qE "[:.]${port}[[:space:]]"; then
             listening="$listening port:$port"
         fi
     done

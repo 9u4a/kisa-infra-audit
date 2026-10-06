@@ -161,6 +161,24 @@ python 05_network/fix.py -f running-config.txt -r <result.json> -i N-01,N-06   #
 - `report.html` — 브라우저로 열람 (오프라인 단일 파일)
 - `summary.txt` / `run.log` — 요약 · 실행 로그
 
+### 통합 런처 (한 호스트에서 적용 가능한 모든 카테고리 한 번에)
+```sh
+sh audit.sh                 # Unix 계열: 01_unix + 03_web + 08_dbms(엔진 감지 시)
+```
+```powershell
+.\audit.ps1                 # Windows 계열: 02_windows + 07_pc + 03_web(IIS) + 08_dbms(MSSQL)
+```
+카테고리별 세부 옵션(`-i`/`-g` 등)은 지원하지 않습니다 - 특정 항목만 보려면 해당 카테고리의
+run.*을 직접 실행하세요.
+
+### 다중 호스트 결과 병합
+```sh
+python lib/merge.py output/*/result.json -o output/merged          # 특정 result.json들 직접 지정
+python lib/merge.py --dir output -c 01 -o output/merged_unix        # output/ 아래 01_unix 결과 전부 자동 탐색
+```
+여러 호스트에서 같은 카테고리를 진단한 결과를 모아 호스트별 준수율 순위, 전사 공통 취약 항목
+순위를 `merged_report.html`로 봅니다. 분석자 PC 전용이며 대상 시스템에는 접근하지 않습니다.
+
 ## 가이드 데이터 추출·정리
 모든 check/fix 구현은 가이드 PDF가 아니라, 아래 스크립트가 생성한 `guide.json`/`guide.md`를
 기준으로 진행합니다 (원본 PDF는 저장소에 포함하지 않습니다).
@@ -187,8 +205,8 @@ python lib/extract_guide.py --only 01_unix
 | 0.9.1 ✅ | Web(IIS) 17/26 자동 조치(fix) |
 | 0.9.2 ✅ | DBMS(MySQL/PostgreSQL/Oracle/MSSQL) 20/26 자동 조치(fix) |
 | 0.9.3 ✅ | Network(Cisco IOS) 조치 명령어 스크립트 생성 |
-| 0.9.x | 통합 런처, 다중 호스트 보고서 병합 |
-| 1.0.0 | 6개 카테고리 완성·검증 |
+| 0.9.4 ✅ | 통합 런처(`audit.sh`/`audit.ps1`), 다중 호스트 보고서 병합(`lib/merge.py`), 저장소 전체 정적분석·실기 검증 |
+| 1.0.0 ✅ | 6개 카테고리 완성·검증 |
 
 ## 라이선스 · 출처
 - 코드: MIT License ([`LICENSE`](./LICENSE))
