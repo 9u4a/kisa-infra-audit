@@ -5,6 +5,25 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-06
+### 6개 카테고리 완성
+루트 `CLAUDE.md`가 정한 6개 카테고리(UNIX/Windows/웹/네트워크/PC/DBMS, 가이드 2026판 기준
+총 239항목)의 진단이 모두 구현되었고, 자동 조치도 성격에 맞는 방식으로 모두 구현되었다
+(Unix/Windows/PC/Web/DBMS는 `fix.*`로 직접 적용·백업·원복, Network는 장비에 접속하지 않는다는
+설계 원칙에 따라 `fix.py`로 조치 명령어 스크립트만 생성). 통합 런처(`audit.sh`/`audit.ps1`)와
+다중 호스트 병합(`lib/merge.py`)까지 더해 0.1.0부터 이어온 로드맵을 완료한다. 이 버전 자체에는
+기능 변경이 없다 - 0.9.4에서 수행한 저장소 전체 정적분석·실기 검증을 통과한 상태를 1.0.0으로
+확정한다.
+
+| 카테고리 | 진단 | 조치 |
+|---|---|---|
+| 01_unix (67항목) | Linux(rhel/debian) 중심, 그 외 환경 MANUAL 폴백 | 58/67 `fix.sh` |
+| 02_windows (64항목) | Windows Server 2012 R2~2022 | `fix.ps1` |
+| 03_web (26항목) | Apache/Nginx/Tomcat(sh)+IIS(PowerShell) | sh/ps1 양쪽 `fix.*` |
+| 05_network (38항목) | Cisco IOS 오프라인 설정파일 분석 | `fix.py` 조치 명령어 스크립트 생성 |
+| 07_pc (18항목) | Windows 10/11 | `fix.ps1` |
+| 08_dbms (26항목) | MySQL/PostgreSQL/Oracle(sh)+MSSQL(PowerShell) | 20/26 `fix.*` |
+
 ## [0.9.4] - 2026-10-06
 ### Added
 - **통합 런처 `audit.sh`(POSIX sh)/`audit.ps1`(PowerShell 5.1) 신규**: 이 호스트에 적용되는

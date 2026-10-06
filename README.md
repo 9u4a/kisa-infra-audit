@@ -4,10 +4,11 @@
 Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고서를 생성하는 도구입니다.
 가능한 항목은 자동 조치(fix)까지 지원합니다.
 
-> ⚠️ 이 저장소는 **개발 진행 중**(SemVer 0.x)입니다. 현재는 Unix(67항목, Linux 대상), Windows
-> Server(64항목), Web(26항목, Apache/Nginx/Tomcat/IIS), PC(18항목, Windows 10/11), DBMS(26항목,
-> MySQL/PostgreSQL/Oracle/MSSQL 대상), Network(38항목 중 Cisco IOS 대상) 카테고리가 실제 진단
-> 로직으로 구현되어 있습니다. 로드맵은 아래를 참고하세요.
+> ✅ v1.0.0 — Unix(67항목, Linux 대상), Windows Server(64항목), Web(26항목, Apache/Nginx/
+> Tomcat/IIS), PC(18항목, Windows 10/11), DBMS(26항목, MySQL/PostgreSQL/Oracle/MSSQL),
+> Network(38항목, Cisco IOS) 6개 카테고리 진단 + 자동 조치(Network는 조치 명령어 스크립트
+> 생성)가 모두 구현되어 있습니다. 세부 환경(Solaris/AIX/HP-UX, JEUS/WebtoB, Altibase/Tibero/
+> Cubrid, Juniper 등)과 통합 런처·다중 호스트 병합의 고도화는 계속 진행합니다.
 
 ## 핵심 원칙
 1. **가이드 원문 우선** — 항목명·판단기준·조치방법은 가이드 원문 그대로 사용, 자동화에 꼭 필요한
