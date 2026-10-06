@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import re
+import secrets
+import string
 
 
 def detect(text: str) -> bool:
@@ -74,3 +76,37 @@ class Ctx:
             if re.search(r"^\s*ip address \d", body, re.M) and not re.search(r"^\s*shutdown\s*$", body, re.M):
                 out.append(body)
         return out
+
+
+def iface_name(block_text: str) -> str:
+    """interface/line 블록(문자열, 첫 줄이 헤더)에서 이름만 추출. 예: "interface GigabitEthernet0/1" -> "GigabitEthernet0/1"."""
+    first = block_text.splitlines()[0]
+    parts = first.split(None, 1)
+    return parts[1] if len(parts) > 1 else first
+
+
+SNMP_DEFAULT_COMMUNITIES = {"public", "private"}
+
+
+def snmp_community_weak(s: str) -> bool:
+    """checks/cisco_ios/N-18.py 와 동일한 복잡성 기준(3종류 이상 조합, 8자리 이상). N-18/19/20의
+    fixes/cisco_ios/N-xx.py 가 같은 SNMP community 라인을 서로 다른 조건(문자열 취약/ACL 없음/RW)
+    으로 동시에 건드려 재발급 명령이 서로를 덮어쓰는 문제가 있었다(실기 테스트로 발견, N-19/N-20
+    주석 참고) - 이 헬퍼로 "문자열이 약한 라인은 N-18이 전담"하도록 책임을 명확히 나눈다."""
+    if s.lower() in SNMP_DEFAULT_COMMUNITIES:
+        return True
+    if len(s) < 8:
+        return True
+    classes = sum(bool(re.search(p, s)) for p in (r"[A-Z]", r"[a-z]", r"\d", r"[^A-Za-z0-9]"))
+    return classes < 3
+
+
+def gen_secret(length: int = 16) -> str:
+    """fixes/cisco_ios/N-xx.py 가 조치 명령어 스크립트에 쓸 임의의 강력한 문자열을 생성한다
+    (D-01/WEB-02 의 "모르는 값은 무작위로 새로 설정" 원칙과 동일 - 단, 이 카테고리는 실제 장비에
+    적용하지 않고 사람이 검토할 스크립트 파일에만 담기므로 값 자체를 파일에 남겨도 된다)."""
+    alphabet = string.ascii_uppercase + string.ascii_lowercase + string.digits
+    while True:
+        s = "".join(secrets.choice(alphabet) for _ in range(length))
+        if (any(c.isupper() for c in s) and any(c.islower() for c in s) and any(c.isdigit() for c in s)):
+            return s + secrets.choice("!@#$%")

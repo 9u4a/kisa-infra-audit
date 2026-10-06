@@ -5,6 +5,36 @@
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-10-06
+### Added
+- **Network(Cisco IOS) 조치 명령어 스크립트 생성 구현**: `05_network/fix.py` 신규. 다른
+  카테고리의 `fix.sh`/`fix.ps1`과 달리 `--apply`/`--rollback`이 없다 — 05_network/CLAUDE.md의
+  원칙("장비에 접속해 변경하지 않고 조치 명령어 스크립트만 생성") 그대로, VULN 판정 항목에 대해
+  실제 적용 가능한 Cisco IOS 명령어를 모아 `remediation_<host>.txt` 한 개를 생성만 하고 장비에는
+  아무것도 하지 않는다.
+- `fixes/cisco_ios/N-xx.py` 32개(VULN이 나올 수 있는 모든 코드) 구현 — checks/와 동일한
+  "1항목=1파일" 규칙으로 각 파일이 `generate(ctx) -> list[str]`(IOS 명령어 목록)을 제공한다.
+  관리 IP 대역·로그/NTP 서버 주소처럼 설정 텍스트만으로 알 수 없는 값은 `<placeholder>`로 남기고
+  "주의:" 문구로 교체 필요성을 경고한다(N-06 VTY ACL/N-08 SSH 전환처럼 placeholder를 그대로
+  적용하면 원격 관리 접근이 끊길 수 있는 항목은 더 명확히 경고). N-01(enable/VTY 비밀번호)/
+  N-18(SNMP Community String)은 실제 값을 알 수 없어 무작위로 새 값을 생성해 스크립트에 담는다
+  (08_dbms D-01/03_web WEB-02와 동일 원칙 — deviation 필드에 기록).
+- `parsers/cisco_ios.py`에 `gen_secret()`(무작위 강력한 문자열 생성), `iface_name()`(인터페이스/
+  라인 블록에서 이름 추출), `snmp_community_weak()`(N-18/19/20 공유 복잡성 판정) 헬퍼 추가.
+
+### Fixed
+- **같은 SNMP community 설정 라인을 N-18/19/20 이 각자 독립적으로 재발급해 서로 덮어쓰는 버그**:
+  한 라인이 세 항목 모두 VULN인 경우(기본값 문자열 + ACL 없음 + RW), 생성된 스크립트를 위에서
+  아래로 순서대로 적용하면 뒤에 실행되는 항목이 앞선 항목의 변경을 모른 채 옛 값으로 다시
+  재발급해 ACL이나 RO 전환이 되살려지는 문제가 있었다(생성된 스크립트를 실제로 순서대로
+  적용해보는 테스트로 발견). 문자열이 약한 라인은 N-18이 ACL+RO까지 한 번에 전담하고, N-19/N-20
+  은 해당 라인을 건너뛰며 "N-18에 포함됨" 안내만 출력하도록 소유권을 분리해 해결했다.
+- **`fixes/cisco_ios/N-19.py`의 오프바이원 토큰 슬라이싱 버그**: ACL 판정을 위해
+  `"snmp-server community <string> RW".split()[2:]`로 "snmp-server"/"community" 2개만
+  건너뛴다고 썼으나 실제로는 community 문자열 자신까지 "토큰"으로 남아 ACL이 없는 가장 흔한
+  취약 사례에서 "ACL이 이미 있다"고 오판해 아무 명령도 생성하지 못했다(생성된 스크립트가 항상
+  비어있는 것을 보고 발견). `[3:]`로 수정.
+
 ## [0.9.2] - 2026-10-02
 ### Added
 - **DBMS 카테고리(MySQL/PostgreSQL/Oracle/MSSQL) 자동 조치(fix) 구현**: `08_dbms/fix.sh`(sh

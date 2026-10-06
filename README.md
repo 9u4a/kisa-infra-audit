@@ -25,7 +25,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | [`01_unix`](./01_unix) | U | 1. UNIX 서버 | 67 | 🟢 67/67 진단 + 58/67 조치(fix) 구현 (Linux) |
 | [`02_windows`](./02_windows) | W | 2. Windows 서버 | 64 | 🟢 64/64 진단 + 48/64 조치(fix) 구현 |
 | [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 진단 + 18/26 조치(fix) (Apache/Nginx/Tomcat), IIS 진단 23/26 + 조치 17/26 (JEUS/WebtoB 는 이후) |
-| [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟡 Cisco IOS 구현 (Juniper/Alteon/Passport/Piolink 는 이후) |
+| [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟢 Cisco IOS 진단 + 조치 명령어 생성 구현 (Juniper/Alteon/Passport/Piolink 는 이후) |
 | [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 진단 + 11/18 조치(fix) 구현 |
 | [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟢 MySQL/PostgreSQL/Oracle/MSSQL 진단 + 조치(fix) 구현 (Altibase/Tibero/Cubrid 는 이후) |
 
@@ -145,6 +145,15 @@ python 05_network/run.py -l                                  # 항목 목록 확
 다른 카테고리와 달리 대상 장비에는 아무것도 배치하지 않습니다 — 미리 `show running-config` 등으로
 수집한 설정 텍스트 파일을 분석자 PC에서 Python으로 분석합니다.
 
+조치도 장비에 직접 적용하지 않고, 검토용 명령어 텍스트 파일만 생성합니다(`--apply`/`--rollback`
+없음):
+```sh
+python 05_network/fix.py -f running-config.txt -r output/<host>_05_<시각>/result.json
+python 05_network/fix.py -f running-config.txt -r <result.json> -i N-01,N-06   # 특정 항목만
+```
+생성된 `remediation_<host>.txt`는 사람이 검토하고 `<placeholder>` 값(관리 IP 대역, 로그/NTP
+서버 주소 등)을 실제 값으로 교체한 뒤 콘솔로 직접 입력하는 참고용 스크립트입니다.
+
 모든 카테고리는 동일한 CLI 옵션 문자(`-l/-i/-g/-o/-h`)를 사용합니다 (`CLAUDE.md` "CLI 옵션 문자
 통일" 참고). 결과는 언어에 관계없이 `output/<host>_<카테고리번호>_<시각>/` 아래 동일한 구조로
 생성됩니다:
@@ -177,7 +186,8 @@ python lib/extract_guide.py --only 01_unix
 | 0.9.0 ✅ | Web(Apache/Nginx/Tomcat) 18/26 자동 조치(fix) |
 | 0.9.1 ✅ | Web(IIS) 17/26 자동 조치(fix) |
 | 0.9.2 ✅ | DBMS(MySQL/PostgreSQL/Oracle/MSSQL) 20/26 자동 조치(fix) |
-| 0.9.x | Network 조치 스크립트, 통합 런처, 다중 호스트 보고서 병합 |
+| 0.9.3 ✅ | Network(Cisco IOS) 조치 명령어 스크립트 생성 |
+| 0.9.x | 통합 런처, 다중 호스트 보고서 병합 |
 | 1.0.0 | 6개 카테고리 완성·검증 |
 
 ## 라이선스 · 출처
