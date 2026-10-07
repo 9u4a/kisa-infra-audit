@@ -1,0 +1,71 @@
+Building configuration...
+
+Current configuration : 1234 bytes
+!
+version 15.2
+no service tcp-small-servers
+no service udp-small-servers
+no service finger
+service password-encryption
+service timestamps log datetime msec localtime show-timezone
+service tcp-keepalives-in
+service tcp-keepalives-out
+!
+hostname TestRouter
+!
+enable secret StrongPass9!
+security passwords min-length 10
+login block-for 120 attempts 3 within 60
+!
+username admin privilege 15 secret StrongAdmin9!
+!
+no ip bootp server
+no ip identd
+no ip domain-lookup
+no cdp run
+no ip source-route
+no service pad
+!
+logging on
+logging buffered 32768
+logging host 10.1.1.5
+logging trap informational
+ntp server 10.1.1.10
+!
+banner motd ^C
+WARNING: Unauthorized access prohibited.
+^C
+!
+no ip http server
+no ip http secure-server
+!
+interface GigabitEthernet0/0
+ ip address 203.0.113.1 255.255.255.0
+ no ip proxy-arp
+ no ip unreachables
+ no ip redirects
+!
+access-list 100 deny ip 10.0.0.0 0.255.255.255 any
+access-list 100 deny ip 127.0.0.0 0.255.255.255 any
+access-list 100 deny ip 172.16.0.0 0.15.255.255 any
+access-list 100 deny ip 192.168.0.0 0.0.255.255 any
+access-list 100 permit ip any any
+!
+snmp-server community K9x$mPz2qLw8 RO 10
+access-list 10 permit 10.1.1.0 0.0.0.255
+!
+ip domain-name example.com
+crypto key generate rsa modulus 2048
+ip ssh version 2
+line con 0
+ exec-timeout 5 0
+line aux 0
+ transport input none
+ no exec
+line vty 0 4
+ access-class 10 in
+ exec-timeout 10 0
+ login local
+ transport input ssh
+!
+end

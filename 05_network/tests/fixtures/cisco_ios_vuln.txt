@@ -1,0 +1,51 @@
+Building configuration...
+
+Current configuration : 2345 bytes
+!
+version 15.2
+service tcp-small-servers
+service udp-small-servers
+service finger
+!
+hostname TestRouter
+!
+boot-start-marker
+boot-end-marker
+!
+enable password cisco123
+!
+username admin privilege 15
+!
+ip tftp-server flash:config.txt
+ip bootp server
+ip identd
+ip domain-lookup
+!
+no ip ssh version 2
+!
+interface GigabitEthernet0/0
+ ip address 203.0.113.1 255.255.255.0
+ ip mask-reply
+!
+interface GigabitEthernet0/1
+ ip address 10.0.0.1 255.255.255.0
+!
+interface GigabitEthernet0/2
+ shutdown
+!
+snmp-server community public RW
+snmp-server community private2024 RO 5
+!
+line con 0
+line aux 0
+ login
+line vty 0 4
+ password telnetpass
+ login
+ transport input all
+!
+cdp run
+ip source-route
+ip http server
+!
+end

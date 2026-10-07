@@ -61,3 +61,13 @@ jobs:
             python3 -c "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read())" "$f" || { echo "FAIL: $f"; err=1; }
           done < <(find . -name "*.py" -not -path "./output/*" -not -path "*/__pycache__/*" -not -path "./.git/*")
           exit $err
+
+  network:
+    # 05_network 는 오프라인 설정파일 분석이라 Docker/실제 장비가 필요 없다 - Cisco IOS
+    # vuln/hardened 픽스처 2종으로 38항목 전체 판정 로직을 회귀 테스트한다(05_network/
+    # CLAUDE.md "실제 장비 출력을 검증한 게 아니라 판정 로직을 단위 테스트한 것"임을 그대로
+    # 승계 - 영구 픽스처로 고정했을 뿐 검증 엄밀성 수준 자체는 바뀌지 않는다).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 05_network/tests/run_tests.py
