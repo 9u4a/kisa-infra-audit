@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      bootstrap_windows:
+        description: "windows-integration 을 -Bootstrap 모드로 실행해 expected_*.json 기준값을 새로 생성(수동 트리거 전용)"
+        type: boolean
+        default: false
 
 jobs:
   static-analysis:
@@ -83,3 +88,37 @@ jobs:
       - run: sh 01_unix/tests/run_tests.sh
       - run: sh 03_web/tests/run_tests.sh
       - run: sh 08_dbms/tests/run_tests.sh
+
+  windows-integration:
+    # windows-latest(매 job마다 새로 생성되는 휘발성 VM)에서 02_windows/07_pc 를 실제로
+    # 레지스트리까지 바꿔가며 회귀 테스트한다 - 이전까지는 Windows 레지스트리/보안정책을 실제로
+    # 바꾸는 Docker 동급 격리 환경이 없어 "파싱/BOM/PSScriptAnalyzer만, 실제 --Apply 미실행"
+    # 수준으로만 검증했는데(02_windows·07_pc/CLAUDE.md "실제 검증 범위" 참고), windows-latest
+    # Actions 러너가 그 역할을 대신할 수 있다 - 휘발성이라 끝나면 버려지므로 로컬 개발자 PC에서는
+    # 절대 이 스크립트(fixtures/apply.ps1)를 직접 실행하지 말 것. 02_windows는 W-15(개인키
+    # 암호 보호), 07_pc는 PC-12(자동 로그인)만 명시적으로 vuln/hardened를 가르고 나머지는 이
+    # 러너 이미지의 기본값을 반영한다. IIS(03_web)/MSSQL(08_dbms)은 아직 포함하지 않았다(후속
+    # 작업 - 추가 기능/서비스 설치가 필요해 범위를 분리했다).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 02_windows 회귀 테스트
+        shell: pwsh
+        run: |
+          $bootstrap = '${{ github.event.inputs.bootstrap_windows }}' -eq 'true'
+          if ($bootstrap) { .\02_windows\tests\run_tests.ps1 -Bootstrap } else { .\02_windows\tests\run_tests.ps1 }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 07_pc 회귀 테스트
+        shell: pwsh
+        run: |
+          $bootstrap = '${{ github.event.inputs.bootstrap_windows }}' -eq 'true'
+          if ($bootstrap) { .\07_pc\tests\run_tests.ps1 -Bootstrap } else { .\07_pc\tests\run_tests.ps1 }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: bootstrap 산출물 업로드
+        if: ${{ github.event.inputs.bootstrap_windows == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-expected-json
+          path: |
+            02_windows/tests/fixtures/expected_*.json
+            07_pc/tests/fixtures/expected_*.json
