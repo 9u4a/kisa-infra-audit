@@ -6,6 +6,52 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-07
+### 방향 전환: 환경/벤더 확장 중단, 테스트·유지보수로 전환
+사용자 결정에 따라 더 이상 새 환경/벤더로 확장하지 않는다(Solaris/AIX/HP-UX 추가 항목,
+03_web의 JEUS/WebtoB, 08_dbms의 Altibase/Tibero/Cubrid, 05_network의 Juniper 등은 전부
+보류). 대신 이미 구현된 실사용 대상(Unix=Linux rhel/debian, Windows Server, Web=Apache/
+Nginx/Tomcat/IIS, PC=Windows 10/11, DBMS=MySQL/PostgreSQL/Oracle/MSSQL, Network=Cisco
+IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한다. 지금까지의 모든 검증은
+세션 중 임시 Docker 컨테이너/수기 테스트로 이루어져 세션이 끝나면 사라졌다(재현·회귀 감지
+불가능) — 이번 버전부터 영구 자산으로 만들고 매 push/PR마다 자동 실행한다.
+
+### Added
+- **`.github/workflows/test.yml` 신규** — 4개 job:
+  - `static-analysis`(ubuntu-latest): 전체 `*.sh` ShellCheck, 전체 `*.ps1`/`*.psm1`
+    PSScriptAnalyzer(pwsh가 크로스플랫폼이라 Windows 러너 불필요), 전체 `*.py` ast.parse.
+  - `network`(ubuntu-latest, Docker 불필요): 05_network Cisco IOS vuln/hardened 픽스처.
+    05_network/CLAUDE.md가 예전부터 언급하던 "임시 픽스처 2종"을 처음으로 영구 커밋했다
+    (이전엔 세션마다 만들고 버려져 커밋된 적이 없었다).
+  - `linux-integration`(ubuntu-latest + Docker): 01_unix(Debian 12, ~20항목 명시적 vuln/
+    hardened) + 03_web(공식 httpd:2.4/nginx:latest/tomcat:10, WEB-04만 명시적) + 08_dbms
+    (공식 mysql:8/postgres:16, D-11만 명시적, DB서버-클라이언트 분리된 원격 접속 토폴로지).
+  - `windows-integration`(windows-latest): 02_windows(W-15만 명시적) + 07_pc(PC-12만
+    명시적) — Windows 레지스트리/보안정책을 Docker처럼 격리해 바꿔볼 방법이 없어 지금까지는
+    파싱/BOM/PSScriptAnalyzer 수준으로만 검증했는데, windows-latest의 휘발성 VM이 그 역할을
+    대신한다는 점을 처음으로 활용했다(이전 0.8.x 수준의 "로직/구문 검증만"에서 실제 실행
+    검증으로 격상 — 단, IIS/MSSQL은 추가 서비스 설치가 필요해 이번엔 범위에서 제외했다).
+  - 모든 `expected_*.json`은 이상적으로 예측한 값이 아니라 실제로 run.*를 돌려서 나온 결과를
+    그대로 고정한 것이다(05_network부터 시작해 전 카테고리에 동일하게 적용한 방식). 각
+    카테고리마다 "일부러 판정 하나를 뒤집어 테스트가 실제로 잡아내는지 확인 후 원복"하는
+    탐지력 검증도 거쳤다.
+- Oracle(무거운 이미지)과 01_unix의 rhel 계열은 이번 범위에 포함하지 않았다(후속 작업).
+
+### Fixed
+- **`check_owner_perm`(lib/common.sh)의 실제 운영 중단 버그**: 1.1.0의 Solaris/AIX/HP-UX
+  확장에서 `"$OS_FAMILY"`를 그냥 참조하는 코드를 추가했는데, 03_web(WEB-03/13)과 08_dbms
+  (D-14/mysql·postgres·oracle, D-15/oracle)도 이 공용 함수를 쓰면서 OS_FAMILY를 전혀
+  설정하지 않는다(엔진 기반 카테고리라 OS 계열 개념이 없음). `set -u` 환경에서 "parameter
+  not set"으로 **run.sh 전체가 죽는** 회귀였다 — 1.1.0을 쓰는 모든 사용자가 WEB-03/13이나
+  D-14/15를 포함해 진단하면 항상 크래시했다. `${OS_FAMILY:-}`로 안전하게 참조하도록 수정.
+  03_web Docker 회귀 테스트를 만드는 과정에서 발견했다 — 테스트/유지보수 전환이 왜
+  필요했는지를 보여주는 바로 그 사례다.
+- 01_unix 테스트 구축 중 발견한 버그 2건: U-30(UMASK) 테스트에서 debian:12 기본
+  `/etc/login.defs`에 이미 활성 `UMASK 022` 줄이 있어 `/etc/profile`에만 값을 덧붙이면
+  나중에 읽는 login.defs 값에 덮어써 VULN이 재현되지 않는 문제(픽스처 수정), Docker
+  Desktop(Windows)에서 한글이 포함된 호스트 경로로 바인드 마운트하면 조용히 빈 디렉터리가
+  마운트되는 문제(바인드 마운트 대신 `docker cp` 방식으로 전환).
+
 ## [1.1.0] - 2026-10-07
 ### Added
 - **01_unix: Solaris/AIX/HP-UX 전용 진단 로직 7개 항목 구현** — U-01(root 원격 접속 제한),
