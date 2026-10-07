@@ -129,6 +129,10 @@ for code in $SELECTED; do
         fi
         unset -f run_check 2>/dev/null || true
     fi
+    # Solaris/AIX/HP-UX 는 Docker 등으로 실기 검증할 수 없는 환경이라(lib/common.sh
+    # append_unverified_note 주석 참고) 판정 결과마다 "미검증" 안내를 투명하게 덧붙인다 - 개별
+    # check 파일 67개 전부에 중복 작성하지 않고 여기 한 곳에서 일괄 처리한다.
+    append_unverified_note
 
     progress_show "$_n" "$TOTAL" "$code" "$title" "$CHECK_STATUS"
     log_to_file "$code [$CHECK_STATUS] $CHECK_DETAIL"

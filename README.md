@@ -23,7 +23,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 ## 카테고리 (가이드 장 번호 기준)
 | 폴더 | 코드 | 가이드 장 | 항목 수 | 상태 |
 |---|---|---|---|---|
-| [`01_unix`](./01_unix) | U | 1. UNIX 서버 | 67 | 🟢 67/67 진단 + 58/67 조치(fix) 구현 (Linux) |
+| [`01_unix`](./01_unix) | U | 1. UNIX 서버 | 67 | 🟢 67/67 진단(Linux 전체 + Solaris/AIX/HP-UX 7항목, 미검증) + 58/67 조치(Linux) |
 | [`02_windows`](./02_windows) | W | 2. Windows 서버 | 64 | 🟢 64/64 진단 + 48/64 조치(fix) 구현 |
 | [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 진단 + 18/26 조치(fix) (Apache/Nginx/Tomcat), IIS 진단 23/26 + 조치 17/26 (JEUS/WebtoB 는 이후) |
 | [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟢 Cisco IOS 진단 + 조치 명령어 생성 구현 (Juniper/Alteon/Passport/Piolink 는 이후) |
@@ -208,6 +208,8 @@ python lib/extract_guide.py --only 01_unix
 | 0.9.3 ✅ | Network(Cisco IOS) 조치 명령어 스크립트 생성 |
 | 0.9.4 ✅ | 통합 런처(`audit.sh`/`audit.ps1`), 다중 호스트 보고서 병합(`lib/merge.py`), 저장소 전체 정적분석·실기 검증 |
 | 1.0.0 ✅ | 6개 카테고리 완성·검증 |
+| 1.1.0 ✅ | 01_unix Solaris/AIX/HP-UX 진단 7항목 확장(문서 기준, 미검증) |
+| 1.x | 03_web JEUS/WebtoB, 08_dbms Altibase/Tibero/Cubrid, 05_network Juniper 등 세부 환경 확장 계속 |
 
 ## 라이선스 · 출처
 - 코드: MIT License ([`LICENSE`](./LICENSE))

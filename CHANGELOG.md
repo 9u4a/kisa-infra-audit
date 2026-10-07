@@ -1,9 +1,42 @@
 # Changelog
 
 이 프로젝트는 [Keep a Changelog](https://keepachangelog.com/ko/1.1.0/) 형식과
-[시맨틱 버저닝](https://semver.org/lang/ko/)(0.x 개발 단계)을 따릅니다.
+[시맨틱 버저닝](https://semver.org/lang/ko/)을 따릅니다. 1.0.0(6개 카테고리 완성) 이후는
+일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-10-07
+### Added
+- **01_unix: Solaris/AIX/HP-UX 전용 진단 로직 7개 항목 구현** — U-01(root 원격 접속 제한),
+  U-02(비밀번호 관리정책), U-03(계정 잠금 임계값), U-04(비밀번호 파일 보호), U-06(su 기능
+  제한), U-18(/etc/shadow 권한), U-67(로그 디렉터리 권한). 기존에는 이 7개 항목이 Linux 이외
+  환경에서 전부 `MANUAL`로만 응답했다. 예: U-01 Solaris는 `/etc/default/login` CONSOLE=,
+  AIX는 `/etc/security/user` root 스탠자의 `rlogin` 속성, HP-UX는 `/etc/securetty` 로
+  "원격 터미널로 root 직접 로그인 차단" 여부를 판정. U-03 AIX는 `loginretries`가 미설정이면
+  기본값 0(무제한)이라는, 가이드 원문이 아니라 AIX 공식 문서가 명시한 기본값을 근거로 판정.
+- **"미검증" 투명성 메커니즘**: Solaris/AIX/HP-UX는 SPARC/POWER/PA-RISC 전용이라 x86 Docker로
+  실기 검증이 불가능하다(05_network의 오프라인 설정파일 분석과 같은 종류의 제약). `lib/
+  common.sh`의 `append_unverified_note`를 `01_unix/run.sh`·`fix.sh`의 디스패치 루프에 한
+  번만 연결해, 이 3개 환경의 모든 판정 결과(새로 구현한 7개 항목뿐 아니라 OS_FAMILY 분기가
+  없는 기존 60개 "공통 로직" 항목 포함)에 "[미검증: 문서 기준 구현...]" 안내를 자동으로
+  덧붙인다. fix(조치)는 이 불확실성 위에서 실제로 파일을 바꾸는 것이라 위험이 더 크므로
+  의도적으로 구현하지 않았다 — 이 3개 환경의 `fixes/U-xx.sh`는 여전히 "자동 조치 미구현"을
+  반환한다.
+
+### Fixed
+- **`check_owner_perm`(lib/common.sh)이 Solaris/AIX/HP-UX에서 `stat` 실패를 거짓 VULN으로
+  처리하던 문제**: GNU(`-c`)/BSD(`-f`) stat 포맷이 모두 실패하면 소유자/권한이 빈 문자열로
+  남는데, 기존 로직은 이를 "기준 미충족(VULN)"으로 오판했다. 이 3개 환경에서는 애초에 `stat`을
+  시도하지 않고 `ls -ldL` 파싱(신규 `_mode_str_to_octal` 헬퍼)으로 전환했고, 그래도 소유자/
+  권한을 못 구하면 VULN이 아니라 `ERROR`로 보고하도록 고쳤다.
+- **`check_service_disabled`(lib/common.sh)가 `pgrep` 부재 시 "비활성화(양호)"로 단정하던
+  문제**: pgrep이 없는 극히 드문 환경에서 실제로 서비스가 떠 있어도 거짓 양호가 날 수 있었다.
+  `ps -ef | grep -E` 폴백을 추가했고, pgrep/ps 둘 다 없을 때만 `ERROR`로 보고한다(U-34/36/39/
+  41/42/43/44/52/54/58 공용 헬퍼 — 8개 항목 전부에 영향).
+- **U-67의 `find -maxdepth` GNU/BSD 확장 의존성 제거**: Solaris/AIX/HP-UX 네이티브 find가
+  `-maxdepth`를 지원하는지 신뢰할 수 없어(실기 검증 불가), 실패 시 조용히 빈 결과로 이어져
+  거짓 양호가 될 위험이 있었다. 셸 글롭(`for f in "$dir"/*`) 기반으로 재작성해 제거했다.
 
 ## [1.0.0] - 2026-10-06
 ### 6개 카테고리 완성

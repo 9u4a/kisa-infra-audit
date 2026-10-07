@@ -156,6 +156,9 @@ for code in $VULN_CODES; do
         run_fix
     fi
     unset -f run_fix 2>/dev/null || true
+    # run.sh 와 동일하게 Solaris/AIX/HP-UX 는 실기 검증 불가 환경이라 조치 결과에도 투명하게
+    # "미검증" 안내를 남긴다(lib/common.sh unverified_note 참고).
+    FIX_DETAIL="${FIX_DETAIL}$(unverified_note)"
 
     CHECK_STATUS="ERROR"; CHECK_DETAIL="check 스크립트 없음"; CHECK_EVIDENCE=""
     if [ -f "$check_file" ]; then
@@ -166,6 +169,7 @@ for code in $VULN_CODES; do
         fi
         unset -f run_check 2>/dev/null || true
     fi
+    append_unverified_note
 
     # 재검증 성공 기준은 "VULN/ERROR 를 벗어났는가"이지 "GOOD 인가"가 아니다 — U-66처럼 판단
     # 기준 자체가 조직 정책 대조를 요구해 아무리 잘 조치해도 check가 MANUAL 까지만 반환하는

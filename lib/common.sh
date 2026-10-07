@@ -106,6 +106,27 @@ prompt_os_family() {
     esac
 }
 
+# Solaris/AIX/HP-UX 는 SPARC/POWER/PA-RISC 전용이라 x86 Docker 컨테이너로 실기 검증할 수 없다
+# (05_network 의 "텍스트 기반 config 분석은 Docker로 검증 불가"와 같은 종류의 제약). 이 세
+# 환경을 대상으로 하는 check 는 공식 문서(Oracle Solaris/IBM AIX/HPE HP-UX 매뉴얼)의 명령/경로
+# 설명을 근거로 작성했을 뿐 실제 장비에서 돌려본 적이 없다는 사실을 보고서에서 숨기지 않는다 -
+# 이 환경이면 CHECK_DETAIL 끝에 공통 문구를 덧붙인다. 개별 check 파일마다 호출하지 않고 각
+# 카테고리 run.*/fix.* 의 디스패치 루프에서 run_check 실행 직후 한 번만 호출한다(01_unix/
+# run.sh·fix.sh 참고) - 67개 파일에 똑같은 호출을 중복해 넣지 않기 위함.
+# FIX_DETAIL 에 붙이려면 unverified_note (문구 자체)를 직접 이어붙일 것 - FIX_DETAIL은
+# run_fix 직후 ~ run_check 재검증 전 사이, CHECK_DETAIL이 아직 이전 항목 값을 들고 있을 수
+# 있는 시점에 쓰이므로 이 함수로 공유하면 엉뚱한 CHECK_DETAIL을 건드릴 위험이 있다.
+unverified_note() {
+    case "$OS_FAMILY" in
+        solaris|aix|hpux)
+            printf ' [미검증: 문서 기준 구현 - Docker 등으로 실기 검증하지 못했으므로 적용 전 실제 장비에서 재확인 권장]'
+            ;;
+    esac
+}
+append_unverified_note() {
+    CHECK_DETAIL="${CHECK_DETAIL}$(unverified_note)"
+}
+
 # ---- 진행 표시 --------------------------------------------------------------
 # progress_show <현재순번> <전체개수> <코드> <항목명> <상태>
 progress_show() {
@@ -264,6 +285,29 @@ write_summary() {
     } > "$_f"
 }
 
+# ls -l 의 권한 문자열(예: "-rwxr-xr-x", 선행 파일타입 문자 포함)을 8진수로 변환한다.
+# Solaris/AIX/HP-UX 는 stat(1) 자체가 없거나 GNU(-c)/BSD(-f) 와 다른 독자 플래그를 쓰는 버전이
+# 섞여 있어(실기 검증 불가 환경이라 신뢰할 수 없음) 신뢰할 수 없다 - ls -l 출력은 모든 Unix
+# 변형에서 수십 년간 형식이 고정되어 있어 더 안전한 공통 분모다. setuid/setgid/sticky(s/S/t/T)
+# 비트는 "실행 비트가 있는지"만 반영하고 선행 특수비트 숫자(4000/2000/1000)는 생략한다 - 이
+# 폴백은 이하(≤) 비교에만 쓰이므로 실제보다 작게 보이는 방향으로는 틀리지 않는다(기본 권한
+# 비트 자체가 기준을 넘으면 특수비트 유무와 무관하게 이미 VULN으로 잡힌다).
+_mode_str_to_octal() {
+    printf '%s' "$1" | awk '{
+        m = substr($0, 2, 9)
+        oct = ""
+        for (i = 1; i <= 9; i += 3) {
+            t = substr(m, i, 3)
+            v = 0
+            if (substr(t,1,1) != "-") v += 4
+            if (substr(t,2,1) != "-") v += 2
+            if (substr(t,3,1) != "-") v += 1
+            oct = oct v
+        }
+        print oct
+    }'
+}
+
 # ---- 파일 소유자/권한 공통 판정 헬퍼 -----------------------------------------
 # "소유자가 X(들 중 하나)이고 권한이 N 이하" 형태의 판단기준이 반복되는 항목(U-16,18,19,20,21,22,29 등)이
 # 공용으로 사용. 실행 후 CHECK_STATUS/CHECK_DETAIL/CHECK_EVIDENCE 를 채운다.
@@ -278,23 +322,46 @@ check_owner_perm() {
         return
     fi
 
-    # -L(심볼릭 링크 역참조)을 반드시 써야 한다: 링크 자체의 권한 비트는 커널이 전혀 사용하지
-    # 않고(항상 777 처럼 보임) 실제 접근 제어는 가리키는 대상 파일의 소유자/권한으로 결정된다.
-    # Oracle Free 23ai+ 가 listener.ora/sqlnet.ora 를 oradata/dbconfig/ 의 실제 파일에 대한
-    # 심볼릭 링크로 배치하는 것처럼 설정 파일이 링크인 경우가 실제로 있다 - -L 없이 stat 하면
-    # 링크의 겉보기 777을 그대로 읽어 실제로는 안전한 644 대상 파일도 거짓 VULN으로 오판한다
-    # (D-14/D-15 Oracle Docker 실기 테스트로 발견).
-    _owner=$(stat -L -c '%U' "$_file" 2>/dev/null)
-    [ -z "$_owner" ] && _owner=$(stat -L -f '%Su' "$_file" 2>/dev/null)
-    _perm=$(stat -L -c '%a' "$_file" 2>/dev/null)
-    [ -z "$_perm" ] && _perm=$(stat -L -f '%OLp' "$_file" 2>/dev/null)
+    _owner=""; _perm=""
+    case "$OS_FAMILY" in
+        solaris|aix|hpux)
+            # stat(1)의 존재/플래그를 신뢰할 수 없는 환경(§카테고리 고유 주의사항) - ls -l 파싱을
+            # 기본으로 쓴다. -L로 심볼릭 링크를 역참조한다(아래 공통 경로와 동일한 이유).
+            _lsout=$(ls -ldL "$_file" 2>/dev/null)
+            if [ -n "$_lsout" ]; then
+                _owner=$(printf '%s' "$_lsout" | awk '{print $3}')
+                _perm=$(_mode_str_to_octal "$(printf '%s' "$_lsout" | awk '{print $1}')")
+            fi
+            ;;
+        *)
+            # -L(심볼릭 링크 역참조)을 반드시 써야 한다: 링크 자체의 권한 비트는 커널이 전혀
+            # 사용하지 않고(항상 777 처럼 보임) 실제 접근 제어는 가리키는 대상 파일의 소유자/
+            # 권한으로 결정된다. Oracle Free 23ai+ 가 listener.ora/sqlnet.ora 를 oradata/
+            # dbconfig/ 의 실제 파일에 대한 심볼릭 링크로 배치하는 것처럼 설정 파일이 링크인
+            # 경우가 실제로 있다 - -L 없이 stat 하면 링크의 겉보기 777을 그대로 읽어 실제로는
+            # 안전한 644 대상 파일도 거짓 VULN으로 오판한다(D-14/D-15 Oracle Docker 실기 테스트로 발견).
+            _owner=$(stat -L -c '%U' "$_file" 2>/dev/null)
+            [ -z "$_owner" ] && _owner=$(stat -L -f '%Su' "$_file" 2>/dev/null)
+            _perm=$(stat -L -c '%a' "$_file" 2>/dev/null)
+            [ -z "$_perm" ] && _perm=$(stat -L -f '%OLp' "$_file" 2>/dev/null)
+            ;;
+    esac
+
+    # 소유자/권한을 끝내 알아내지 못한 경우 VULN으로 단정하지 않는다 - "확인 못 함"과
+    # "위반함"은 다르다(ERROR로 정직하게 보고해야 거짓 VULN을 피할 수 있다).
+    if [ -z "$_owner" ] || [ -z "$_perm" ]; then
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="$_file 의 소유자/권한을 확인하지 못함 (stat/ls 명령 실패 또는 미지원)"
+        CHECK_EVIDENCE=""
+        return
+    fi
 
     _owner_ok=0
     for _o in $_allowed_owners; do
         [ "$_owner" = "$_o" ] && _owner_ok=1
     done
     _perm_ok=0
-    if [ -n "$_perm" ] && [ "$_perm" -le "$_max_perm" ] 2>/dev/null; then
+    if [ "$_perm" -le "$_max_perm" ] 2>/dev/null; then
         _perm_ok=1
     fi
 
@@ -316,11 +383,21 @@ check_owner_perm() {
 check_service_disabled() {
     _label=$1; _proc_pattern=$2; _units=${3:-}
     _found=""
+    _detect_ok=0
 
+    # pgrep 은 원래 Solaris 유래 명령이라(이후 Linux/BSD로 역포팅됨) Solaris/AIX/HP-UX 에도
+    # 보통 존재한다 - 있으면 그대로 쓴다. 혹시 없는 극히 드문 환경을 위해 ps -ef | grep -E
+    # 로 폴백한다(둘 다 없으면 "활성 아님"으로 단정하지 않고 ERROR로 정직하게 보고 - 아래 참고).
     if command -v pgrep >/dev/null 2>&1; then
+        _detect_ok=1
         _p=$(pgrep -f "$_proc_pattern" 2>/dev/null)
         [ -n "$_p" ] && _found="$_found
 프로세스 실행 중(pgrep -f '$_proc_pattern'): $_p"
+    elif command -v ps >/dev/null 2>&1; then
+        _detect_ok=1
+        _p=$(ps -ef 2>/dev/null | grep -E "$_proc_pattern" | grep -v grep)
+        [ -n "$_p" ] && _found="$_found
+프로세스 실행 중(ps -ef | grep -E '$_proc_pattern'): $_p"
     fi
 
     if command -v systemctl >/dev/null 2>&1; then
@@ -330,7 +407,13 @@ systemd 유닛 활성(active): $_u"
         done
     fi
 
-    if [ -n "$_found" ]; then
+    # pgrep/ps 둘 다 없으면 프로세스 상태를 전혀 확인할 수 없다 - "비활성화됨(양호)"으로
+    # 단정하면 거짓 양호가 된다(check_owner_perm의 stat 실패 사례와 같은 종류의 문제).
+    if [ "$_detect_ok" -eq 0 ]; then
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="${_label} 서비스 실행 여부를 확인할 ps/pgrep 명령을 찾지 못함"
+        CHECK_EVIDENCE=""
+    elif [ -n "$_found" ]; then
         CHECK_STATUS="VULN"
         CHECK_DETAIL="${_label} 서비스가 활성화되어 있음"
         CHECK_EVIDENCE="$_found"
