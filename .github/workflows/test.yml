@@ -1,0 +1,63 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static-analysis:
+    # 저장소 전체 sh/ps1/psm1/py 를 대상으로 하는 가장 저렴한 회귀 방어선 - 매 push/PR 마다
+    # 돈다. ubuntu-latest 에 shellcheck 와 pwsh 가 기본 설치되어 있어 Windows 러너 없이도
+    # PSScriptAnalyzer 까지 전부 실행 가능하다(PSScriptAnalyzer 는 PowerShell 자체가
+    # 크로스플랫폼이라 pwsh 코어에서도 동일하게 동작).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck (전체 *.sh)
+        run: |
+          set -e
+          command -v shellcheck >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck)
+          files=$(find . -name "*.sh" -not -path "./output/*" -not -path "./.git/*")
+          echo "검사 대상: $(echo "$files" | wc -l)개"
+          shellcheck -S error -s sh $files
+
+      - name: PSScriptAnalyzer (전체 *.ps1 / *.psm1)
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          $files = Get-ChildItem -Recurse -Include *.ps1,*.psm1 | Where-Object { $_.FullName -notmatch '[\\/]output[\\/]' }
+          Write-Host "검사 대상: $($files.Count)개"
+          $hadError = $false
+          foreach ($f in $files) {
+              $tokens = $null; $errs = $null
+              [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errs)
+              if ($errs.Count -gt 0) {
+                  Write-Host "[PARSE ERROR] $($f.FullName)"
+                  $errs | ForEach-Object { Write-Host "  $_" }
+                  $hadError = $true
+              }
+              $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+              $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+              if (-not $hasBom) {
+                  Write-Host "[NO BOM] $($f.FullName)"
+                  $hadError = $true
+              }
+              $issues = Invoke-ScriptAnalyzer -Path $f.FullName -Severity Error
+              if ($issues) {
+                  $issues | ForEach-Object { Write-Host "[PSSA ERROR] $($f.FullName):$($_.Line) $($_.RuleName) - $($_.Message)" }
+                  $hadError = $true
+              }
+          }
+          if ($hadError) { exit 1 }
+
+      - name: Python 전체 ast.parse
+        run: |
+          set -e
+          err=0
+          while IFS= read -r f; do
+            python3 -c "import ast,sys; ast.parse(open(sys.argv[1], encoding='utf-8').read())" "$f" || { echo "FAIL: $f"; err=1; }
+          done < <(find . -name "*.py" -not -path "./output/*" -not -path "*/__pycache__/*" -not -path "./.git/*")
+          exit $err
