@@ -1,0 +1,6 @@
+.git/
+output/
+**/output/
+.claude/
+__pycache__/
+*.pyc

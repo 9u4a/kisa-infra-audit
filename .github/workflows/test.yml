@@ -71,3 +71,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 05_network/tests/run_tests.py
+
+  linux-integration:
+    # Docker(Debian 12)로 01_unix 를 회귀 테스트한다 - vuln/hardened 두 픽스처로 ~20개 항목은
+    # 명시적으로 취약/강화 상태를 주입하고, 나머지는 이 베이스 이미지의 있는 그대로의 기본값을
+    # 반영한다(완전한 전수 강화 검증이 아님 - 01_unix/CLAUDE.md "테스트 커버리지" 참고).
+    # rhel 계열은 아직 이 픽스처에 없다(후속 작업).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh 01_unix/tests/run_tests.sh
