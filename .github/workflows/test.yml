@@ -82,3 +82,4 @@ jobs:
       - uses: actions/checkout@v4
       - run: sh 01_unix/tests/run_tests.sh
       - run: sh 03_web/tests/run_tests.sh
+      - run: sh 08_dbms/tests/run_tests.sh

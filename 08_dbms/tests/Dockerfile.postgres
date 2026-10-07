@@ -1,0 +1,5 @@
+# 08_dbms/tests/Dockerfile.postgres — postgres:16 이미지를 클라이언트로도 재사용(psql이
+# 이미 들어있음). 실제 DB 서버는 별도 컨테이너로 띄우고 이 이미지는 run.sh를 실행하는 쪽이다.
+FROM postgres:16
+COPY . /infra
+WORKDIR /infra
