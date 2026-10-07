@@ -323,7 +323,14 @@ check_owner_perm() {
     fi
 
     _owner=""; _perm=""
-    case "$OS_FAMILY" in
+    # ${OS_FAMILY:-} 로 안전하게 참조해야 한다: 이 함수는 01_unix 뿐 아니라 03_web(WEB-03/13)·
+    # 08_dbms(D-14/15)도 공유해서 쓰는데, 그 두 카테고리의 run.sh/fix.sh는 OS_FAMILY를 전혀
+    # 설정하지 않는다(엔진 기반이라 OS 계열 개념이 없음) - set -u 환경에서 그냥 "$OS_FAMILY"로
+    # 참조하면 "parameter not set" 으로 스크립트 전체가 죽는 실제 회귀 버그가 있었다(1.1.0의
+    # Solaris/AIX/HP-UX 분기 추가 당시 01_unix만 생각하고 다른 카테고리의 사용처를 놓침 -
+    # 03_web Docker 실기 테스트로 발견). 미설정이면 OS 계열 분기가 아닌 기본(stat 기반) 경로로
+    # 간다.
+    case "${OS_FAMILY:-}" in
         solaris|aix|hpux)
             # stat(1)의 존재/플래그를 신뢰할 수 없는 환경(§카테고리 고유 주의사항) - ls -l 파싱을
             # 기본으로 쓴다. -L로 심볼릭 링크를 역참조한다(아래 공통 경로와 동일한 이유).

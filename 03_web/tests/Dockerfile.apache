@@ -1,0 +1,5 @@
+# 03_web/tests/Dockerfile.apache — 공식 httpd:2.4 이미지 기반 회귀 테스트.
+# 빌드 컨텍스트는 저장소 루트: docker build -f 03_web/tests/Dockerfile.apache -t kisa-web-apache-test .
+FROM httpd:2.4
+COPY . /infra
+WORKDIR /infra

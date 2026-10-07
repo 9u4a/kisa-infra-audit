@@ -1,0 +1,4 @@
+# 03_web/tests/Dockerfile.tomcat — 공식 tomcat:10 이미지 기반 회귀 테스트.
+FROM tomcat:10
+COPY . /infra
+WORKDIR /infra

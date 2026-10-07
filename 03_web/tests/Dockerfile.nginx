@@ -1,0 +1,4 @@
+# 03_web/tests/Dockerfile.nginx — 공식 nginx:latest 이미지 기반 회귀 테스트.
+FROM nginx:latest
+COPY . /infra
+WORKDIR /infra
