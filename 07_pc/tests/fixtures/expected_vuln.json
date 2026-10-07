@@ -1,0 +1,20 @@
+{
+  "PC-01": "GOOD",
+  "PC-02": "VULN",
+  "PC-03": "GOOD",
+  "PC-04": "VULN",
+  "PC-05": "VULN",
+  "PC-06": "GOOD",
+  "PC-07": "GOOD",
+  "PC-08": "GOOD",
+  "PC-09": "MANUAL",
+  "PC-10": "MANUAL",
+  "PC-11": "MANUAL",
+  "PC-12": "VULN",
+  "PC-13": "GOOD",
+  "PC-14": "VULN",
+  "PC-15": "GOOD",
+  "PC-16": "MANUAL",
+  "PC-17": "MANUAL",
+  "PC-18": "VULN"
+}
