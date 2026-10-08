@@ -1,5 +1,5 @@
 #!/bin/sh
-# 03_web/run.sh — 웹 서비스(Apache/Nginx/Tomcat/JEUS/WebtoB) 진단 진입점 (POSIX sh)
+# 03_web/run.sh — 웹 서비스(Apache/Nginx/Tomcat) 진단 진입점 (POSIX sh)
 #
 # 옵션 문자는 전 카테고리와 통일한다 (루트 CLAUDE.md "CLI 옵션 문자 통일" 참고): -l -i -g -e -o -h
 #
@@ -7,7 +7,7 @@
 #   run.sh                  설치된 엔진 자동 탐지 후 전체 항목 일괄 진단 (여러 엔진 동시 가능)
 #   run.sh -i WEB-01,WEB-04 개별(복수) 항목만 진단
 #   run.sh -g 2             하위분류 단위(1=계정관리 ... 4=패치및로그관리) 진단
-#   run.sh -e nginx         특정 엔진으로 제한 (apache|nginx|tomcat|jeus|webtob)
+#   run.sh -e nginx         특정 엔진으로 제한 (apache|nginx|tomcat)
 #   run.sh -l               항목 목록만 출력
 #   run.sh -o <dir>         결과 출력 경로 지정 (기본: ../output)
 #

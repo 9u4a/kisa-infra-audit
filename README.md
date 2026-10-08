@@ -4,12 +4,12 @@
 Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고서를 생성하는 도구입니다.
 가능한 항목은 자동 조치(fix)까지 지원합니다.
 
-> ✅ v1.2.0 — Unix(67항목, Linux 대상), Windows Server(64항목), Web(26항목, Apache/Nginx/
-> Tomcat/IIS), PC(18항목, Windows 10/11), DBMS(26항목, MySQL/PostgreSQL/Oracle/MSSQL),
-> Network(38항목, Cisco IOS) 6개 카테고리 진단 + 자동 조치(Network는 조치 명령어 스크립트
-> 생성)가 모두 구현되어 있습니다. **1.2.0부터 새 환경/벤더 확장(Solaris/AIX/HP-UX 전체,
-> JEUS/WebtoB, Altibase/Tibero/Cubrid, Juniper 등)은 중단하고, 이미 구현된 대상에 대한
-> GitHub Actions CI 기반 회귀 테스트·유지보수에 집중합니다.**
+> ✅ v1.2.0 — Unix(67항목, Linux 대상 + Solaris/AIX/HP-UX 일부), Windows Server(64항목),
+> Web(26항목, Apache/Nginx/Tomcat/IIS), PC(18항목, Windows 10/11), DBMS(26항목, MySQL/
+> PostgreSQL/Oracle/MSSQL), Network(38항목, Cisco IOS) 6개 카테고리 진단 + 자동 조치
+> (Network는 조치 명령어 스크립트 생성)가 구현되어 있습니다. **1.2.0부터 새 환경/벤더
+> 확장은 중단하고, 이미 구현된 대상에 대한 GitHub Actions CI 기반 회귀 테스트·유지보수에
+> 집중합니다.**
 
 ## 핵심 원칙
 1. **가이드 원문 우선** — 항목명·판단기준·조치방법은 가이드 원문 그대로 사용, 자동화에 꼭 필요한
@@ -26,10 +26,10 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 |---|---|---|---|---|
 | [`01_unix`](./01_unix) | U | 1. UNIX 서버 | 67 | 🟢 67/67 진단(Linux 전체 + Solaris/AIX/HP-UX 7항목, 미검증) + 58/67 조치(Linux) |
 | [`02_windows`](./02_windows) | W | 2. Windows 서버 | 64 | 🟢 64/64 진단 + 48/64 조치(fix) 구현 |
-| [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 26/26 진단 + 18/26 조치(fix) (Apache/Nginx/Tomcat), IIS 진단 23/26 + 조치 17/26 (JEUS/WebtoB 는 이후) |
-| [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟢 Cisco IOS 진단 + 조치 명령어 생성 구현 (Juniper/Alteon/Passport/Piolink 는 이후) |
+| [`03_web`](./03_web) | WEB | 3. 웹 서비스 | 26 | 🟢 Apache/Nginx/Tomcat 26/26 진단 + 18/26 조치(fix), IIS 23/26 진단 + 17/26 조치 |
+| [`05_network`](./05_network) | N | 5. 네트워크 장비 | 38 | 🟢 Cisco IOS 38/38 진단 + 조치 명령어 생성 구현 |
 | [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 진단 + 11/18 조치(fix) 구현 |
-| [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟢 MySQL/PostgreSQL/Oracle/MSSQL 진단 + 조치(fix) 구현 (Altibase/Tibero/Cubrid 는 이후) |
+| [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟢 MySQL/PostgreSQL/Oracle/MSSQL 진단 + 조치(fix) 구현 |
 
 ## 빠른 시작
 ### Unix (Linux rhel/debian)
@@ -210,12 +210,12 @@ sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL만, Oracle
 | 0.2.0 ✅ | Unix 67항목 전체 |
 | 0.3.0 ✅ | Windows Server 64항목 |
 | 0.4.0 ✅ | PC 18항목 |
-| 0.5.0 ✅ | Web 26항목 (Apache/Nginx/Tomcat; IIS/JEUS/WebtoB 는 이후) |
+| 0.5.0 ✅ | Web 26항목 (Apache/Nginx/Tomcat) |
 | 0.6.0 ✅ | DBMS 26항목 중 MySQL/PostgreSQL |
-| 0.6.1 ✅ | DBMS: Oracle(sqlplus)/MSSQL(sqlcmd, run.ps1) 추가 (Altibase/Tibero/Cubrid 는 이후) |
-| 0.7.0 ✅ | Network 38항목 중 Cisco IOS (Juniper/Alteon/Passport/Piolink 는 이후) |
+| 0.6.1 ✅ | DBMS: Oracle(sqlplus)/MSSQL(sqlcmd, run.ps1) 추가 |
+| 0.7.0 ✅ | Network 38항목 중 Cisco IOS |
 | 0.8.0 ✅ | 자동 조치(fix) 공통 인프라 + Unix 58/67항목 |
-| 0.8.1 ✅ | Web: IIS 23/26항목 (JEUS/WebtoB 는 이후) |
+| 0.8.1 ✅ | Web: IIS 23/26항목 |
 | 0.8.2 ✅ | Windows 48/64, PC 11/18 자동 조치(fix) |
 | 0.9.0 ✅ | Web(Apache/Nginx/Tomcat) 18/26 자동 조치(fix) |
 | 0.9.1 ✅ | Web(IIS) 17/26 자동 조치(fix) |

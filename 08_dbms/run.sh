@@ -14,8 +14,7 @@
 #   run.sh -o <dir>                               결과 출력 경로 지정 (기본: ../output)
 #
 # 엔진 미지정(-e 생략) 시 로컬에서 구동 중인 DBMS 데몬을 자동 탐지한다(단일 엔진일 때만).
-# MSSQL 은 별도 run.ps1(Windows/PowerShell 5.1)을 사용한다. Oracle/MSSQL/Altibase/Tibero/
-# Cubrid 는 아직 checks/<engine>/ 이 없어 실행 시 전 항목 NA 로 응답한다(로드맵 참고).
+# MSSQL 은 별도 run.ps1(Windows/PowerShell 5.1)을 사용한다.
 # 이 스크립트는 대상 설정을 절대 변경하지 않는다 (진단 전용).
 
 set -u
