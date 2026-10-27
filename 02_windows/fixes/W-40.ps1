@@ -1,4 +1,5 @@
 ﻿# W-40 (중) 정책에 따른 시스템 로깅 설정 [fix: auto]
+# 원복: 불가 — 감사 정책(auditpol)은 자동 원복 경로 없음(변경 전 값은 changes.log)
 # checks/W-40.ps1 과 동일한 5개 하위 범주를 성공/실패 모두 감사하도록 설정한다(각 범주의
 # Need 기준이 "Failure"만 요구하는 경우도 있으나 "Success and Failure"가 상위 호환이다).
 # auditpol 설정은 레지스트리가 아닌 감사 정책 저장소(SecEdit 와 별도)에 저장되어 표준

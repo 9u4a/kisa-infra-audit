@@ -1,4 +1,5 @@
 ﻿# W-34 (중) Telnet 서비스 비활성화 [fix: auto]
+# 원복: 불가 — Telnet 인증 방식(tlntadmn)은 자동 원복 경로 없음
 # checks/W-34.ps1: 취약 = Telnet 구동 중이며 NTLM 인증이 아님. tlntadmn 으로 인증 방식을
 # NTLM 으로 제한한다. tlntadmn 설정은 레지스트리 헬퍼로 백업/원복할 수 없어(레거시 텔넷 서버
 # 자체 설정 저장소) Restore-FixItem 표준 원복 대상에 포함되지 않는다 - Windows Server 2016+

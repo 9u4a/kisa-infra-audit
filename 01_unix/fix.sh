@@ -110,6 +110,7 @@ if [ -z "$VULN_CODES" ]; then
 fi
 
 # shellcheck disable=SC2086
+FIX_FILE_DIR="$SCRIPT_DIR/fixes"
 [ "$APPLY" -eq 1 ] && fix_confirm_plan $VULN_CODES
 
 fix_prepare_dir "$OUT_BASE" "$CATEGORY_NUM"
@@ -152,6 +153,7 @@ for code in $VULN_CODES; do
     if [ "$APPLY" -ne 1 ]; then
         echo "[$code] $title"
         echo "  등급: $grade (dry-run — 실제 적용하려면 --apply 추가)"
+        _rbn=$(fix_rollback_note "$fix_file"); [ -n "$_rbn" ] && echo "  원복: $_rbn"
         N_PREVIEW=$((N_PREVIEW + 1))
         continue
     fi

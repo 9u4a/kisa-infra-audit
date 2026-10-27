@@ -447,10 +447,20 @@ function Read-FixConfirm {
     return ($ans -match '^[yY]$')
 }
 
+function Get-FixRollbackNote {
+    <# 조치 파일 머리말의 "# 원복: ..." 표기. 없으면 빈 값(= 백업으로 원복 가능). 원복할 수 없거나 일부만
+       되돌아가는 조치를 적용 "전에" 알리기 위함(운영 안전 기준 F4) #>
+    param([Parameter(Mandatory)][string]$File)
+    if (-not (Test-Path -LiteralPath $File)) { return "" }
+    $line = Get-Content -LiteralPath $File -Encoding UTF8 -TotalCount 12 | Where-Object { $_ -like "# 원복: *" } | Select-Object -First 1
+    if ($line) { return $line.Substring("# 원복: ".Length) }
+    return ""
+}
+
 function Confirm-FixPlan {
     <# -Apply 시 실제로 바뀔 항목을 먼저 보여주고 1회 확인. auto 등급은 항목별 확인 없이 적용되므로
        예전처럼 -Apply 만으로 경고 없이 auto 전체가 적용되던 것을 막는다. -Yes 는 이 확인만 생략 #>
-    param([Parameter(Mandatory)][string[]]$Codes, [Parameter(Mandatory)][hashtable]$GuideByCode, [switch]$Yes)
+    param([Parameter(Mandatory)][string[]]$Codes, [Parameter(Mandatory)][hashtable]$GuideByCode, [switch]$Yes, [string]$FixDir = "")
     if ($Yes) { return $true }
     Write-Host "다음 항목을 실제로 변경합니다:"
     $nAuto = 0
@@ -460,6 +470,8 @@ function Confirm-FixPlan {
         $t = if ($m) { $m.title } else { $c }
         if ($g -eq "auto") { Write-Host ("  [auto]    {0,-8} {1}  <- 개별 확인 없이 적용" -f $c, $t); $nAuto++ }
         elseif ($g -eq "confirm") { Write-Host ("  [confirm] {0,-8} {1}  <- 적용 직전 항목별로 다시 확인" -f $c, $t) }
+        $rb = if ($FixDir) { Get-FixRollbackNote -File (Join-Path $FixDir "$c.ps1") } else { "" }
+        if ($rb -and $g -in @("auto", "confirm")) { Write-Host "            └ 원복: $rb" -ForegroundColor Yellow }
     }
     return (Read-FixConfirm -Prompt "위 목록대로 진행하시겠습니까? (auto $nAuto 건은 추가 확인 없이 적용됨) [y/N]")
 }
@@ -1160,4 +1172,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Confirm-FixPlan, Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

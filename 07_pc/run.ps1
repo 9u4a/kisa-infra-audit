@@ -83,6 +83,10 @@ Write-Log "진단 시작: 환경=$OsFamily 대상=$($Selected.Count)항목"
 $Results = @()
 $CsvRows = @()
 $n = 0
+# 중단(Ctrl+C·예외)돼도 그때까지 진단한 항목을 result.partial.json 으로 남긴다(운영 안전 기준 S7) -
+# 예전에는 결과를 루프가 끝난 뒤 한 번만 저장해 중단되면 run.log/raw 만 남았다.
+$runCompleted = $false
+try {
 foreach ($code in $Selected) {
     $n++
     $meta = $GuideByCode[$code]
@@ -120,6 +124,13 @@ foreach ($code in $Selected) {
     }
 }
 
+$runCompleted = $true
+} finally {
+    if (-not $runCompleted -and @($Results).Count -gt 0) {
+        Save-ResultJson -Results $Results -OutFile (Join-Path $OutDir "result.partial.json") -Category $CategoryName -OsFamily $OsFamily
+        Write-Warning "중단됨 - 지금까지 진단한 $(@($Results).Count)개 항목을 $(Join-Path $OutDir 'result.partial.json') 에 저장했습니다."
+    }
+}
 $ResultJson = Join-Path $OutDir "result.json"
 Save-ResultJson -Results $Results -OutFile $ResultJson -Category $CategoryName -OsFamily $OsFamily
 $CsvRows | Export-Csv -Path (Join-Path $OutDir "result.csv") -NoTypeInformation -Encoding UTF8

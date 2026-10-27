@@ -94,7 +94,7 @@ try {
     }
 
     # -Apply 시 실제로 바뀔 항목(auto 는 항목별 확인 없이 적용)을 먼저 보여주고 1회 확인(-Yes 로 생략)
-    if ($Apply -and -not (Confirm-FixPlan -Codes $VulnCodes -GuideByCode $GuideByCode -Yes:$Yes)) {
+    if ($Apply -and -not (Confirm-FixPlan -Codes $VulnCodes -GuideByCode $GuideByCode -Yes:$Yes -FixDir (Join-Path $ScriptDir "fixes"))) {
         Write-Host "중단 — 아무것도 변경하지 않았습니다. (비대화형 실행은 -Yes 로 이 확인을 생략할 수 있음)"
         exit 0
     }
@@ -138,6 +138,7 @@ try {
         if (-not $Apply) {
             Write-Host "[$code] $title"
             Write-Host "  등급: $grade (dry-run — 실제 적용하려면 -Apply 추가)"
+            $rbn = Get-FixRollbackNote -File $fixFile; if ($rbn) { Write-Host "  원복: $rbn" -ForegroundColor Yellow }
             $nPreview++
             continue
         }

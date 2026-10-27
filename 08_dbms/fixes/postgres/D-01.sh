@@ -1,4 +1,5 @@
 # D-01 (상) 기본 계정의 비밀번호, 정책 등을 변경하여 사용 [PostgreSQL] — 조치 [fix: confirm]
+# 원복: 불가 — 원래 값(비밀번호 없음)으로 되돌리지 않음
 # checks/postgres/D-01.sh: 취약 = postgres 계정 비밀번호가 NULL.
 # 1.3.0: 무작위 비밀번호 생성을 폐지했다(아무도 새 값을 몰라 관리 접속이 끊겼음). 사전 승인 후 운영자가
 # 새 비밀번호를 터미널에서 직접 입력한다(lib/common.sh fix_read_new_password). 비대화형이면 바꾸지 않는다.

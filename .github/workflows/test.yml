@@ -149,16 +149,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: 환경 확인
+      # 주의: 여기 run: 블록은 GitHub 가 BOM 없는 UTF-8 .ps1 로 만들어 Windows PowerShell 5.1 이 한글을 깨뜨린다
+      # (첫 실행에서 파싱 실패) - powershell 단계의 인라인 스크립트에는 한글을 쓰지 않는다(저장소 .ps1 은 BOM 있음).
+      - name: environment
         shell: powershell
         run: |
-          "PS $($PSVersionTable.PSVersion) / $((Get-CimInstance Win32_OperatingSystem).Caption) / 언어 $((Get-Culture).Name) UI $((Get-UICulture).Name)"
+          "PS $($PSVersionTable.PSVersion) / $((Get-CimInstance Win32_OperatingSystem).Caption) / culture $((Get-Culture).Name) ui $((Get-UICulture).Name)"
           "sqlcmd: $((Get-Command sqlcmd -ErrorAction SilentlyContinue).Source)"
           "SqlLocalDB: $((Get-Command SqlLocalDB -ErrorAction SilentlyContinue).Source)"
           if (Get-Command SqlLocalDB -ErrorAction SilentlyContinue) { SqlLocalDB info }
-          "MSSQL 서비스: $((Get-Service -Name 'MSSQL*' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name + '=' + $_.Status }) -join ', ')"
-          "Web-Server 기능: $((Get-WindowsFeature Web-Server).InstallState)"
+          "MSSQL services: $((Get-Service -Name 'MSSQL*' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name + '=' + $_.Status }) -join ', ')"
+          "Web-Server: $((Get-WindowsFeature Web-Server).InstallState) / Web-DAV-Publishing: $((Get-WindowsFeature Web-DAV-Publishing).InstallState)"
       - name: IIS 설치
+        if: always()
         shell: powershell
         run: |
           Install-WindowsFeature Web-Server, Web-Mgmt-Tools, Web-Scripting-Tools, Web-DAV-Publishing, Web-Includes, Web-Http-Redirect, Web-Filtering, Web-ISAPI-Ext, Web-ISAPI-Filter, Web-CGI | Format-Table -AutoSize

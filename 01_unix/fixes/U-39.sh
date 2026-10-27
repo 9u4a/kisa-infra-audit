@@ -1,4 +1,5 @@
 # U-39 (상) 불필요한 NFS 서비스 비활성화 — 조치
+# 원복: 일부 — systemd 서비스 상태는 되돌리지만, 직접 종료한 프로세스(inetd 계열 등)는 다시 띄우지 않음
 run_fix() {
     fix_service_disable nfs-server nfs-kernel-server rpc-statd nfslock
     pkill -f 'nfsd|rpc\.statd|rpc\.lockd|rpc\.mountd' 2>/dev/null

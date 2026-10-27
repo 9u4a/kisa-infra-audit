@@ -1325,6 +1325,12 @@ fix_lock_release() {
 # auto 등급은 항목별 확인 없이 적용되므로, 예전처럼 --apply 만 붙이면 경고 없이 auto 전체가
 # 적용되던 문제를 막는다. --yes(YES=1)는 이 1회 확인만 생략한다(confirm 등급은 여전히 항목별 확인).
 # 비대화형(터미널 없음)에서 --yes 없이 실행하면 아무것도 바꾸지 않고 끝낸다.
+# fix_rollback_note <조치 파일> — 조치 파일 머리말의 "# 원복: ..." 표기. 없으면 빈 값(= 백업으로 원복 가능).
+# 원복할 수 없거나 일부만 되돌아가는 조치를 적용 "전에" 알리기 위함(운영 안전 기준 F4).
+fix_rollback_note() {
+    [ -f "$1" ] && sed -n '1,12s/^# 원복: //p' "$1" | head -n1
+}
+
 fix_confirm_plan() {
     [ "${YES:-0}" -eq 1 ] && return 0
     echo "다음 항목을 실제로 변경합니다:"
@@ -1332,10 +1338,12 @@ fix_confirm_plan() {
     for _c in "$@"; do
         _g=$(guide_field "$GUIDE_JSON" "$_c" "fix"); [ -z "$_g" ] && _g="manual"
         _t=$(guide_field "$GUIDE_JSON" "$_c" "title")
+        _rb=$(fix_rollback_note "${FIX_FILE_DIR:-.}/$_c.sh")
         case "$_g" in
             auto) printf '  [auto]    %-8s %s  ← 개별 확인 없이 적용\n' "$_c" "$_t"; _n_auto=$((_n_auto + 1)) ;;
             confirm) printf '  [confirm] %-8s %s  ← 적용 직전 항목별로 다시 확인\n' "$_c" "$_t" ;;
         esac
+        case "$_g" in auto|confirm) [ -n "$_rb" ] && printf '            └ 원복: %s\n' "$_rb" ;; esac
     done
     printf '위 목록대로 진행하시겠습니까? (auto %s건은 추가 확인 없이 적용됨) [y/N] ' "$_n_auto"
     _ans=""

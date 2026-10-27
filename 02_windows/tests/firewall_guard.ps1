@@ -9,6 +9,13 @@ Import-Module (Join-Path $Repo "lib\Common.psm1") -Force
 
 $port = 59999                       # 어떤 기본 규칙도 열지 않는 포트 - "허용 규칙 없음" 상황을 확정적으로 만든다
 $rdpGroup = '@FirewallAPI.dll,-28752'
+# 러너에는 "모든 포트·모든 프로그램 허용" 인바운드 규칙이 있어(있으면 59999 도 실제로 열려 있는 것) 첫 실행에서
+# A 가 적용돼 버렸다 - 테스트 동안만 이런 전체 허용 규칙을 끄고 끝나면 되살린다.
+$broad = @(Get-NetFirewallRule -Direction Inbound -Enabled True -Action Allow | Where-Object {
+    $pf = $_ | Get-NetFirewallPortFilter; $af = $_ | Get-NetFirewallApplicationFilter
+    ($pf.Protocol -in @("TCP", "Any")) -and (@($pf.LocalPort) -contains "Any") -and "$($af.Program)" -eq "Any" })
+Write-Host "전체 허용 규칙(테스트 동안 비활성): $(@($broad | ForEach-Object DisplayName) -join ' | ')"
+$broad | Disable-NetFirewallRule
 Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
 Get-NetFirewallRule -Group $rdpGroup -ErrorAction SilentlyContinue | Disable-NetFirewallRule
 Remove-NetFirewallRule -Name "kisa-test-$port" -ErrorAction SilentlyContinue
@@ -33,8 +40,8 @@ $s = Get-State
 Write-Host "A) $($Global:FixStatus): $($Global:FixDetail) / 켜진 프로필=$($s.On) RDP규칙=$($s.RdpRulesOn)"
 if ($Global:FixStatus -ne "ERROR" -or $s.On -ne 0 -or $s.RdpRulesOn -ne 0) { $fail += "A) 허용 규칙이 없는데 방화벽/규칙 상태가 바뀜" }
 
-# B) 허용 규칙 있음
-New-NetFirewallRule -Name "kisa-test-$port" -DisplayName "kisa test $port" -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow | Out-Null
+# B) 허용 규칙 있음 - 업무 포트(59999)와, 러너의 WinRM HTTPS 리스너(5986: WinRM 기본 규칙 그룹은 5985 만 연다)를 허용
+New-NetFirewallRule -Name "kisa-test-$port" -DisplayName "kisa test $port" -Direction Inbound -Protocol TCP -LocalPort @($port, 5986) -Action Allow | Out-Null
 $Global:FixBackupDir = Join-Path $env:TEMP "fwguard_b"; Remove-Item -Recurse -Force $Global:FixBackupDir -ErrorAction SilentlyContinue
 Enable-FixFirewallSafely -RequiredPorts @($port)
 $s = Get-State
@@ -48,5 +55,7 @@ $s = Get-State
 Write-Host "C) 원복 후 켜진 프로필=$($s.On) RDP규칙=$($s.RdpRulesOn) 원복실패=$(@($Global:FixRollbackFailures).Count)"
 if ($s.On -ne 0 -or $s.RdpRulesOn -ne 0 -or @($Global:FixRollbackFailures).Count -gt 0) { $fail += "C) 원복 후 프로필/규칙이 조치 전과 다름: $($Global:FixRollbackFailures -join ' / ')" }
 
+$broad | Enable-NetFirewallRule
+Remove-NetFirewallRule -Name "kisa-test-$port" -ErrorAction SilentlyContinue
 if ($fail.Count -gt 0) { Write-Host "FAIL: firewall-guard"; $fail | ForEach-Object { Write-Host "  - $_" }; exit 1 }
 Write-Host "PASS: firewall-guard"

@@ -87,6 +87,10 @@ $CsvRows = @()
 $n = 0
 $iisUnreadable = Test-IisInstalledButUnreadable
 if ($iisUnreadable) { Write-Log "IIS 가 설치되어 있으나 설정을 읽을 수 없습니다(관리자 권한 필요) - IIS 항목을 ERROR 로 표시합니다." "WARN" }
+# 중단(Ctrl+C·예외)돼도 그때까지 진단한 항목을 result.partial.json 으로 남긴다(운영 안전 기준 S7) -
+# 예전에는 결과를 루프가 끝난 뒤 한 번만 저장해 중단되면 run.log/raw 만 남았다.
+$runCompleted = $false
+try {
 foreach ($code in $Selected) {
     $n++
     $meta = $GuideByCode[$code]
@@ -128,6 +132,13 @@ foreach ($code in $Selected) {
     }
 }
 
+$runCompleted = $true
+} finally {
+    if (-not $runCompleted -and @($Results).Count -gt 0) {
+        Save-ResultJson -Results $Results -OutFile (Join-Path $OutDir "result.partial.json") -Category $CategoryName -OsFamily $WebEngine
+        Write-Warning "중단됨 - 지금까지 진단한 $(@($Results).Count)개 항목을 $(Join-Path $OutDir 'result.partial.json') 에 저장했습니다."
+    }
+}
 $ResultJson = Join-Path $OutDir "result.json"
 Save-ResultJson -Results $Results -OutFile $ResultJson -Category $CategoryName -OsFamily $WebEngine
 $CsvRows | Export-Csv -Path (Join-Path $OutDir "result.csv") -NoTypeInformation -Encoding UTF8

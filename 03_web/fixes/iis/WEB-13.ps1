@@ -1,4 +1,5 @@
 ﻿# WEB-13 (상) 웹 서비스 설정 파일 노출 제한 [IIS] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
+# 원복: 불가 — hiddenSegments 에 추가한 항목은 자동으로 제거하지 않음
 # checks/iis/WEB-13.ps1 이 확인하는 hiddenSegments 컬렉션에 "web.config" 항목을 추가한다.
 # 컬렉션에 원소를 추가/제거하는 작업은 Set-FixWebConfigProperty(단일 값 설정)로 표현할 수
 # 없어 Add-WebConfigurationProperty 를 직접 쓴다 - 이 항목은 표준 webconfig 백업/원복 대상이

@@ -1,4 +1,5 @@
 # D-19 (상) OS_ROLES, REMOTE_OS_AUTHENTICATION, REMOTE_OS_ROLES를 FALSE로 설정 [Oracle] — 조치 [fix: confirm]
+# 원복: 불가 — SPFILE 의 원래 값을 기록하지 않음(재기동 포함)
 # 세 파라미터 모두 정적(static) 파라미터라 SPFILE 값을 바꿔도 인스턴스 재시작 전까지는 반영되지
 # 않는다 - D-07/D-26 과 동일한 논리로 confirm 등급에서 재시작까지 수행한다(DB 클라이언트 연결만
 # 영향, 이 스크립트의 OS 세션에는 영향 없음).

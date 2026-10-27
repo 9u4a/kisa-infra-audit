@@ -1,4 +1,5 @@
 # D-11 (상) DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정 [MySQL] — 조치 [fix: auto]
+# 원복: 불가 — 회수한 권한의 원래 종류를 알 수 없어 다시 부여하지 않음
 # checks/mysql/D-11.sh 가 찾아낸 root/mysql.% 외 계정의 mysql 스키마 권한을 회수한다.
 run_fix() {
     if ! command -v mysql >/dev/null 2>&1; then
