@@ -11,15 +11,19 @@ if (-not $sites -or $sites.Count -eq 0) {
 }
 
 $applied = @()
+$failed = @()   # 쓰기 실패 - 예전엔 "대상 없음(NA)"으로 덮여 원인이 사라졌다
 foreach ($site in $sites) {
     $enabled = Get-IisConfigValue -Filter "system.webServer/webdav/authoring" -Name "enabled" -SiteName $site
     if ($enabled -eq $true) {
         Set-FixWebConfigProperty -Filter "system.webServer/webdav/authoring" -Name "enabled" -Value $false -PSPath "IIS:\Sites\$site"
-        if ($Global:FixStatus -eq "APPLIED") { $applied += $site }
+        if ($Global:FixStatus -eq "APPLIED") { $applied += $site } else { $failed += "${site}: $($Global:FixDetail)" }
     }
 }
 
-if ($applied.Count -gt 0) {
+if ($failed.Count -gt 0) {
+    $Global:FixStatus = "ERROR"
+    $Global:FixDetail = "조치 실패: $($failed -join ' / ')$(if ($applied) { " (적용됨: $($applied -join ', '))" })"
+} elseif ($applied.Count -gt 0) {
     $Global:FixStatus = "APPLIED"
     $Global:FixDetail = "WebDAV 를 비활성화한 사이트: $($applied -join ', ')"
 } else {

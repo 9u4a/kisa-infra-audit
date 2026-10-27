@@ -782,44 +782,67 @@ function Set-FixAppPoolIdentity {
 # Set-/Backup-/Restore- 세트를 둔다(모듈 재사용 범위: 03_web IIS 웹사이트 설정과 Windows FTP
 # 서버 설정은 PSPath 필터만 다를 뿐 같은 WebAdministration 공급자를 쓴다).
 function Backup-FixWebConfigProperty {
-    param([Parameter(Mandatory)][string]$Filter, [Parameter(Mandatory)][string]$Name, [string]$PSPath = "IIS:\")
+    <# -Location: MACHINE/WEBROOT/APPHOST 의 <location path="사이트"> 에 쓰는 경우(잠긴 섹션) #>
+    param([Parameter(Mandatory)][string]$Filter, [Parameter(Mandatory)][string]$Name, [string]$PSPath = "IIS:\", [string]$Location = "")
     $dir = Get-FixItemBackupDir -Sub "webconfig"
-    $safe = ("$PSPath--$Filter--$Name") -replace '[\\:/\s]', '_'
+    $safe = ("$PSPath--$Location--$Filter--$Name") -replace '[\:/\s\[\]@=''"*?<>|]', '_'
     $file = Join-Path $dir "$safe.json"
     if (Test-Path -LiteralPath $file) { return $file }
+    $loc = @{}; if ($Location) { $loc.Location = $Location }
     # 읽기 실패를 $null 로 기록하면 원복 때 설정을 빈 값으로 덮어쓰므로 중단한다.
     try {
-        $v = Get-WebConfigurationProperty -Filter $Filter -Name $Name -PSPath $PSPath -ErrorAction Stop
+        $v = Get-WebConfigurationProperty -Filter $Filter -Name $Name -PSPath $PSPath @loc -ErrorAction Stop
         $value = if ($v.PSObject.Properties.Name -contains "Value") { $v.Value } else { $v }
-    } catch { throw "[백업 실패] IIS 설정 현재 값을 읽을 수 없음($PSPath [$Filter] $Name): $($_.Exception.Message)" }
-    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Filter = $Filter; Name = $Name; PSPath = $PSPath; Value = $value }))
+    } catch { throw "[백업 실패] IIS 설정 현재 값을 읽을 수 없음($PSPath $Location [$Filter] $Name): $($_.Exception.Message)" }
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Filter = $Filter; Name = $Name; PSPath = $PSPath; Location = $Location; Value = $value }))
 }
 
 function Restore-FixWebConfigPropertyBackup {
     param([Parameter(Mandatory)][string]$File)
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
+    $loc = @{}; if ($o.Location) { $loc.Location = $o.Location }
     try {
-        Set-WebConfigurationProperty -Filter $o.Filter -Name $o.Name -Value $o.Value -PSPath $o.PSPath -ErrorAction Stop
-    } catch { Add-FixRollbackFailure "IIS 설정 원복 실패 $($o.PSPath) [$($o.Filter)] $($o.Name): $($_.Exception.Message)" }
+        Set-WebConfigurationProperty -Filter $o.Filter -Name $o.Name -Value $o.Value -PSPath $o.PSPath @loc -ErrorAction Stop
+    } catch { Add-FixRollbackFailure "IIS 설정 원복 실패 $($o.PSPath) $($o.Location) [$($o.Filter)] $($o.Name): $($_.Exception.Message)" }
 }
 
 function Set-FixWebConfigProperty {
+    <# 사이트(IIS:\Sites\<이름>) 에 쓰기가 실패하면 - asp, security/access, webdav/authoring 처럼 기본적으로
+       사이트 web.config 위임이 막힌(overrideModeDefault=Deny) 섹션 - 같은 값을 applicationHost.config 의
+       <location path="<이름>"> 에 쓴다(IIS 관리자에서 사이트 설정을 바꿀 때와 같은 위치). 결과는 호출부의 check 재실행이 검증한다 #>
     param(
         [Parameter(Mandatory)][string]$Filter,
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)]$Value,
         [string]$PSPath = "IIS:\"
     )
-    Backup-FixWebConfigProperty -Filter $Filter -Name $Name -PSPath $PSPath | Out-Null
+    $bk = Join-Path (Get-FixItemBackupDir -Sub "webconfig") "_"
+    $existed = @(Get-ChildItem -Path (Split-Path $bk) -Filter *.json -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    $file = Backup-FixWebConfigProperty -Filter $Filter -Name $Name -PSPath $PSPath
     try {
         Set-WebConfigurationProperty -Filter $Filter -Name $Name -Value $Value -PSPath $PSPath -ErrorAction Stop
         $Global:FixStatus = "APPLIED"
         $Global:FixDetail = "$PSPath [$Filter] $Name = $Value 로 설정함"
         $Global:FixEvidence = ""
+        return
     } catch {
         $Global:FixStatus = "ERROR"
         $Global:FixDetail = "$PSPath [$Filter] $Name 설정 실패: $($_.Exception.Message)"
         $Global:FixEvidence = ""
+    }
+    if ($PSPath -notmatch '^IIS:\Sites\(.+)$') { return }
+    $site = $Matches[1]
+    # 사이트 경로 쓰기는 실패해 아무것도 바뀌지 않았다 - 그 백업을 남기면 원복 때 같은 쓰기가 다시 실패해 "원복 실패"로 잘못 보고된다
+    if ($existed -notcontains $file) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
+    $first = $Global:FixDetail
+    Backup-FixWebConfigProperty -Filter $Filter -Name $Name -PSPath "MACHINE/WEBROOT/APPHOST" -Location $site | Out-Null
+    try {
+        Set-WebConfigurationProperty -Filter $Filter -Name $Name -Value $Value -PSPath "MACHINE/WEBROOT/APPHOST" -Location $site -ErrorAction Stop
+        $Global:FixStatus = "APPLIED"
+        $Global:FixDetail = "applicationHost.config <location path=`"$site`"> [$Filter] $Name = $Value 로 설정함(사이트 web.config 위임 불가)"
+    } catch {
+        $Global:FixStatus = "ERROR"
+        $Global:FixDetail = "$first / applicationHost.config location 설정도 실패: $($_.Exception.Message)"
     }
 }
 

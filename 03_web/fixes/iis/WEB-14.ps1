@@ -12,6 +12,7 @@ if (-not $sites -or $sites.Count -eq 0) {
 
 $riskyRights = 'FullControl', 'Modify', 'Write'
 $applied = @()
+$failed = @()   # 쓰기 실패 - 예전엔 "대상 없음(NA)"으로 덮여 원인이 사라졌다
 foreach ($site in $sites) {
     $path = Get-IisSitePhysicalPath -SiteName $site
     if (-not $path -or -not (Test-Path $path)) { continue }
@@ -24,10 +25,13 @@ foreach ($site in $sites) {
     if (-not $bad) { continue }
     $patterns = @($bad | ForEach-Object { [regex]::Escape($_.IdentityReference.Value) })
     Remove-FixAclIdentity -Path $path -IdentityPatterns $patterns
-    if ($Global:FixStatus -eq "APPLIED") { $applied += $site }
+    if ($Global:FixStatus -eq "APPLIED") { $applied += $site } else { $failed += "${site}: $($Global:FixDetail)" }
 }
 
-if ($applied.Count -gt 0) {
+if ($failed.Count -gt 0) {
+    $Global:FixStatus = "ERROR"
+    $Global:FixDetail = "조치 실패: $($failed -join ' / ')$(if ($applied) { " (적용됨: $($applied -join ', '))" })"
+} elseif ($applied.Count -gt 0) {
     $Global:FixStatus = "APPLIED"
     $Global:FixDetail = "일반 사용자 쓰기 권한을 제거한 사이트: $($applied -join ', ')"
 } else {

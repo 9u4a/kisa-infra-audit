@@ -13,15 +13,19 @@ if (-not $sites -or $sites.Count -eq 0) {
 
 $unlimitedThreshold = 4000000000
 $applied = @()
+$failed = @()   # 쓰기 실패 - 예전엔 "대상 없음(NA)"으로 덮여 원인이 사라졌다
 foreach ($site in $sites) {
     $maxLen = Get-IisConfigValue -Filter "system.webServer/security/requestFiltering/requestLimits" -Name "maxAllowedContentLength" -SiteName $site
     if ($null -ne $maxLen -and [int64]$maxLen -ge $unlimitedThreshold) {
         Set-FixWebConfigProperty -Filter "system.webServer/security/requestFiltering/requestLimits" -Name "maxAllowedContentLength" -Value 30000000 -PSPath "IIS:\Sites\$site"
-        if ($Global:FixStatus -eq "APPLIED") { $applied += $site }
+        if ($Global:FixStatus -eq "APPLIED") { $applied += $site } else { $failed += "${site}: $($Global:FixDetail)" }
     }
 }
 
-if ($applied.Count -gt 0) {
+if ($failed.Count -gt 0) {
+    $Global:FixStatus = "ERROR"
+    $Global:FixDetail = "조치 실패: $($failed -join ' / ')$(if ($applied) { " (적용됨: $($applied -join ', '))" })"
+} elseif ($applied.Count -gt 0) {
     $Global:FixStatus = "APPLIED"
     $Global:FixDetail = "업로드 용량 제한을 기본값(30000000바이트)으로 되돌린 사이트: $($applied -join ', ')"
 } else {

@@ -5,13 +5,72 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+
+## [1.3.1] - 2026-10-27
+### Windows Server 실기 검증(CI)과 남은 운영 안전 과제
+로컬 PC(Windows 11 Home)는 Windows 컨테이너를 지원하지 않는다. 그래서 GitHub Actions의
+windows-latest(Windows Server 2025 Datacenter) 일회용 VM을 운영 Windows Server 대용으로 쓰는
+`windows-server` job을 추가했다. 대상 호스트와 같은 Windows PowerShell 5.1로 실행한다. 이 실기
+검증에서 운영 버그 2건을 찾아 고쳤다.
+
+### Fixed
+- **방화벽 허용 판정이 스토어 앱(AppX) 규칙을 "전체 허용"으로 오인(lockout 위험)**
+  - `Test-FixFirewallPortAllowed`가 Start·Work or school account 같은 앱 패키지 전용 규칙(Program=Any,
+    Package 지정)을 모든 포트 허용으로 셌다. 그래서 RDP 허용 규칙이 없어도 방화벽을 켤 수 있었다.
+  - 이제 포트 Any 규칙은 프로그램·패키지·서비스 제한이 전혀 없을 때만 인정한다.
+  - Windows Server 러너 실기에서 발견했다.
+- **IIS 조치가 실패를 "이미 정상(NA)"으로 끝내던 문제**
+  - 실기에서 WEB-18이 진단은 VULN인데 조치는 "활성화된 사이트 없음"으로 끝났다.
+  - 원인: `system.webServer/webdav/authoring`은 사이트 web.config 위임이 기본으로 막힌 섹션이라 쓰기가
+    실패했다. 그런데 IIS 조치 9개(WEB-04/06/08/09/14/18/21/22/26)가 쓰기 실패를 집계하지 않고
+    "적용한 사이트 없음 = NA"로 덮어 원인이 사라졌다.
+  - 이제 쓰기 실패는 ERROR로 남기고 사이트별 원인을 함께 기록한다.
+  - `Set-FixWebConfigProperty`는 사이트 경로 쓰기가 실패하면 applicationHost.config의
+    `<location path="사이트">`에 쓴다(IIS 관리자와 같은 위치, 백업·원복도 location 단위).
+    asp(WEB-06)·security/access(WEB-21)도 같은 잠금 섹션이다.
+  - 03_web/fix.ps1은 조치 중 IIS 설정 조회가 실패했는데 NA로 끝나면 ERROR로 바꾸고 원인을 남긴다
+    (진단의 거짓 양호 방지와 같은 원칙).
+- **`Enable-FixFirewallSafely`의 거부 경로**: 방화벽을 켜지 않기로 하고도 방금 켠 원격 관리 규칙을
+  남겨 두던 것을 되돌리도록 고쳤다.
+- **Oracle D-19/D-26 재기동 실패 자동 복구**
+  - 변경 전 SPFILE을 PFILE로 백업한다(실패하면 바꾸지 않음).
+  - 원래 파라미터 값을 원복 SQL로 남긴다. 예전에는 "원복 불가"였다.
+  - 재기동 후 인스턴스가 열리지 않으면 PFILE로 기동해 SPFILE을 되돌리고 다시 기동한다
+    (`oracle_restart_or_recover`).
+  - Oracle Free 26ai 컨테이너에서 실기로 확인했다.
+    - 정상 경로: NONE → DB 적용.
+    - 실패 경로: 기동 불가 값(sga_target=64G)을 주입해 재기동에 실패시킨 뒤 원래 값으로 READ WRITE
+      복구되는 것을 확인했다.
+
+### Added
+- **원복 불가 사전 표기**: 조치 파일 머리말의 `# 원복: ...`(34개 파일)을 dry-run과 적용 전 확인
+  목록에 보여준다. 대상은 secedit 항목(실행 단위 전체만), auditpol·DNS·이벤트 로그 크기
+  (불가), 기본 공유 삭제(일부), DB 비밀번호·권한 회수(불가), 프로세스 종료(일부) 등이다.
+  예전에는 적용한 뒤에야 알 수 있었다.
+- **Windows 진단 중단 시 부분 결과**: 4개 run.ps1이 중단(Ctrl+C·예외)돼도 그때까지의 항목을
+  `result.partial.json`으로 남긴다. 실행 중 중지시켜 37개 항목 저장을 확인했다.
+
 ### Tests
-- `02_windows` 픽스처: W-44(원격 레지스트리 서비스)를 러너 기본 상태에 맡기지 않고 vuln=기동,
-  hardened=중지로 명시한다. windows 러너 이미지가 `windows-2025-vs2026` 20261021로 바뀌면서 기본
-  실행 상태가 달라져 1.3.0 CI가 실패했다. 코드 변경 없이 기대값이 환경에 따라 흔들리던 문제다.
-- `07_pc` 픽스처: PC-05(불필요 서비스)도 vuln=RemoteRegistry 기동, hardened=점검 대상 서비스 전부
-  중지로 명시한다. 같은 VM에서 먼저 도는 02_windows hardened 픽스처가 RemoteRegistry를 꺼서 PC-05
-  결과가 바뀌었다. 테스트 사이에 상태가 새어 나가는 문제다.
+- `windows-server` job(CI, Windows Server 2025, PowerShell 5.1)
+  - **IIS 진단 회귀**: 러너에 IIS·WebDAV 등 기능을 설치하고 WEB-04/12/18을 vuln/hardened로
+    명시한다. IIS 진단이 실제 IIS에서 처음 검증됐다.
+  - **조치 실적용·원복**(`lib/tests/fix_safety_windows.ps1`): 03_web(IIS)·02_windows·07_pc에서
+    `fix.ps1 -Apply -Yes` → 재진단 → `-Rollback` → 판정이 조치 전으로 돌아오는지 확인한다.
+    "원복 불가"로 보고된 항목은 경고로 표시한다. Windows·IIS 조치를 실제로 적용·원복해 본 첫 검증이다.
+  - **방화벽 안전장치**(`02_windows/tests/firewall_guard.ps1`): 허용 규칙이 없으면 켜지 않음, 있으면
+    켬, 원복 시 프로필·규칙 복구를 확인한다.
+  - **MSSQL**(`08_dbms/tests/run_tests_mssql.ps1`, 러너 기본 LocalDB): 진단 회귀(D-01 sa 활성/비활성)와,
+    잘못된 비밀번호 시 로그인 실패가 1건뿐인지 확인한다. 실패 횟수는 오류 18456 확장 이벤트로 센다.
+    LocalDB는 오류 로그에 "Login failed"를 남기지 않았다(감사 수준). 그래서 sqlcmd를 직접 1회
+    실행하는 대조군으로 측정 방법부터 검증한다.
+  - 도메인 컨트롤러·한글 로캘은 재부팅이 필요해 이 러너로도 검증할 수 없다.
+- 픽스처 정비
+  - `02_windows` 픽스처: W-44(원격 레지스트리 서비스)를 러너 기본 상태에 맡기지 않고 vuln=기동,
+    hardened=중지로 명시한다. windows 러너 이미지가 `windows-2025-vs2026` 20261021로 바뀌면서 기본
+    실행 상태가 달라져 1.3.0 CI가 실패했다. 코드 변경 없이 기대값이 환경에 따라 흔들리던 문제다.
+  - `07_pc` 픽스처: PC-05(불필요 서비스)도 vuln=RemoteRegistry 기동, hardened=점검 대상 서비스 전부
+    중지로 명시한다. 같은 VM에서 먼저 도는 02_windows hardened 픽스처가 RemoteRegistry를 꺼서 PC-05
+    결과가 바뀌었다. 테스트 사이에 상태가 새어 나가는 문제다.
 
 ## [1.3.0] - 2026-10-27
 ### 운영 안전성: 조치(fix) 등급 재분류·비밀번호 직접 입력·접속 차단 사전 검사·원복 정직성

@@ -14,6 +14,7 @@ if (-not $sites -or $sites.Count -eq 0) {
 }
 
 $applied = @()
+$failed = @()   # 쓰기 실패 - 예전엔 "대상 없음(NA)"으로 덮여 원인이 사라졌다
 $pools = @{}
 foreach ($site in $sites) {
     try {
@@ -23,12 +24,15 @@ foreach ($site in $sites) {
         $identityType = (Get-ItemProperty "IIS:\AppPools\$poolName" -Name processModel.identityType -ErrorAction Stop).Value
         if ("$identityType" -eq "LocalSystem") {
             Set-FixAppPoolIdentity -PoolName $poolName -IdentityType "ApplicationPoolIdentity"
-            if ($Global:FixStatus -eq "APPLIED") { $applied += $poolName }
+            if ($Global:FixStatus -eq "APPLIED") { $applied += $poolName } else { $failed += "${poolName}: $($Global:FixDetail)" }
         }
-    } catch { }
+    } catch { $failed += "${site}: $($_.Exception.Message)" }
 }
 
-if ($applied.Count -gt 0) {
+if ($failed.Count -gt 0) {
+    $Global:FixStatus = "ERROR"
+    $Global:FixDetail = "조치 실패: $($failed -join ' / ')$(if ($applied) { " (적용됨: $($applied -join ', '))" })"
+} elseif ($applied.Count -gt 0) {
     $Global:FixStatus = "APPLIED"
     $Global:FixDetail = "애플리케이션 풀을 ApplicationPoolIdentity 로 전환: $($applied -join ', ')"
 } else {

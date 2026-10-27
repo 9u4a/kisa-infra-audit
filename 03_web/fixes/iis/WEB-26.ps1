@@ -11,6 +11,7 @@ if (-not $sites -or $sites.Count -eq 0) {
 }
 
 $applied = @()
+$failed = @()   # 쓰기 실패 - 예전엔 "대상 없음(NA)"으로 덮여 원인이 사라졌다
 $checkedDirs = @{}
 foreach ($site in $sites) {
     $logDir = Get-IisConfigValue -Filter "system.applicationHost/sites/site[@name='$site']/logFile" -Name "directory" -SiteName ""
@@ -27,10 +28,13 @@ foreach ($site in $sites) {
     if (-not $bad) { continue }
     $patterns = @($bad | ForEach-Object { [regex]::Escape($_.IdentityReference.Value) })
     Remove-FixAclIdentity -Path $logDir -IdentityPatterns $patterns
-    if ($Global:FixStatus -eq "APPLIED") { $applied += $logDir }
+    if ($Global:FixStatus -eq "APPLIED") { $applied += $logDir } else { $failed += "${logDir}: $($Global:FixDetail)" }
 }
 
-if ($applied.Count -gt 0) {
+if ($failed.Count -gt 0) {
+    $Global:FixStatus = "ERROR"
+    $Global:FixDetail = "조치 실패: $($failed -join ' / ')$(if ($applied) { " (적용됨: $($applied -join ', '))" })"
+} elseif ($applied.Count -gt 0) {
     $Global:FixStatus = "APPLIED"
     $Global:FixDetail = "로그 디렉터리에서 일반 사용자 접근 권한 제거: $($applied -join ', ')"
 } else {
