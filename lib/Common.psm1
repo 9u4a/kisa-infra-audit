@@ -830,7 +830,7 @@ function Set-FixWebConfigProperty {
         $Global:FixDetail = "$PSPath [$Filter] $Name 설정 실패: $($_.Exception.Message)"
         $Global:FixEvidence = ""
     }
-    if ($PSPath -notmatch '^IIS:\Sites\(.+)$') { return }
+    if ($PSPath -notmatch '^IIS:\\Sites\\(.+)$') { return }
     $site = $Matches[1]
     # 사이트 경로 쓰기는 실패해 아무것도 바뀌지 않았다 - 그 백업을 남기면 원복 때 같은 쓰기가 다시 실패해 "원복 실패"로 잘못 보고된다
     if ($existed -notcontains $file) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }

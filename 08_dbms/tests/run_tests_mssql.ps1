@@ -59,7 +59,10 @@ function Get-LoginFailCount { [int]((Sql "SELECT COUNT(*) FROM (SELECT CAST(t.ta
 function Get-ErrorLogFailCount { [int]((Sql "CREATE TABLE #l (d datetime, p nvarchar(100), t nvarchar(max)); INSERT #l EXEC xp_readerrorlog 0, 1, N'Login failed'; SELECT COUNT(*) FROM #l;") | Select-Object -Last 1) }
 # 대조군: 틀린 비밀번호로 sqlcmd 를 직접 1회 실행하면 1건으로 잡혀야 한다(측정 방법 자체의 검증)
 $c0 = Get-LoginFailCount
-$env:SQLCMDPASSWORD = "Wrong_Pw_9!"; & sqlcmd -S $inst -U kisa_t -C -l 5 -Q "SELECT 1" *>$null; Remove-Item Env:SQLCMDPASSWORD
+# (PS 5.1 은 $ErrorActionPreference=Stop 에서 네이티브 명령의 stderr 를 예외로 바꾼다 - 실패가 기대 동작이므로 이 호출만 Continue)
+$env:SQLCMDPASSWORD = "Wrong_Pw_9!"
+$ErrorActionPreference = "Continue"; & sqlcmd -S $inst -U kisa_t -C -l 5 -Q "SELECT 1" *>$null; $ErrorActionPreference = "Stop"
+Remove-Item Env:SQLCMDPASSWORD
 Start-Sleep -Seconds 2
 $c1 = Get-LoginFailCount
 Write-Host "대조군(sqlcmd 직접 1회): 로그인 실패 $($c1 - $c0)건"

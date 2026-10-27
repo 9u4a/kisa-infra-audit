@@ -19,6 +19,11 @@ if ($Mode -eq "vuln") {
 # RemoteRegistry 를 끔)의 영향을 받지 않도록 상태를 명시한다 - vuln 은 RemoteRegistry 기동,
 # hardened 는 checks/PC-05.ps1 의 점검 대상 서비스를 모두 중지.
 if ($Mode -eq "vuln") {
+    # RemoteRegistry 는 유휴 시 스스로 멈추는(트리거 시작) 서비스라 진단 시점엔 이미 중지돼 W-44/PC-05 가 GOOD 으로
+    # 흔들렸다 - 유휴 중지를 끄고 기동한다(hardened 에서 되돌림)
+    if (-not (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\RemoteRegistry\Parameters")) { New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\RemoteRegistry\Parameters" | Out-Null }   # -Force 는 기존 키(ServiceDll)를 덮어쓴다
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\RemoteRegistry\Parameters" -Name DisableIdleStop -Type DWord -Value 1
+    Stop-Service -Name "RemoteRegistry" -Force -ErrorAction SilentlyContinue
     Set-Service -Name "RemoteRegistry" -StartupType Manual
     Start-Service -Name "RemoteRegistry"
 } else {
