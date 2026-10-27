@@ -148,10 +148,17 @@ try {
 
         $Global:FixCode = $code
         $Global:FixStatus = "ERROR"; $Global:FixDetail = "조치 스크립트가 결과를 반환하지 않음"; $Global:FixEvidence = ""
+        $Global:IisConfigQueryFailed = $false; $Global:IisConfigQueryError = ""
         try { & $fixFile } catch {
             $Global:FixStatus = "ERROR"; $Global:FixDetail = "조치 스크립트 실행 중 예외: $($_.Exception.Message)"
             # lib/Common.psm1 백업 함수는 실패 시 "[백업 실패]" 예외를 던진다(변경 전에 멈춤) - 이 항목을 원복한 뒤 실행 중단
             if ($_.Exception.Message.StartsWith("[백업 실패]")) { $abortRun = $true }
+        }
+        # IIS 설정 조회가 실패했는데 "대상 없음(이미 정상)"으로 끝났다면 확인하지 못한 것이다 - 진단(run.ps1)과 같은
+        # 원칙으로 ERROR 로 바꾼다(Windows Server 러너 실기에서 WEB-18 이 진단은 VULN 인데 조치는 NA 로 끝난 사례).
+        if ($Global:IisConfigQueryFailed -and $Global:FixStatus -eq "NA") {
+            $Global:FixStatus = "ERROR"
+            $Global:FixDetail = "IIS 설정 조회에 실패해 대상 여부를 확인하지 못함: $($Global:IisConfigQueryError)"
         }
 
         $Global:CheckStatus = "ERROR"; $checkDetail = "check 스크립트 없음"

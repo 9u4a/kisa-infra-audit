@@ -855,8 +855,12 @@ function Test-FixFirewallPortAllowed {
         $r = $f | Get-NetFirewallRule -ErrorAction SilentlyContinue
         if (-not $r -or "$($r.Enabled)" -ne "True" -or "$($r.Direction)" -ne "Inbound" -or "$($r.Action)" -ne "Allow") { continue }
         if (@($f.LocalPort) -contains "$Port") { return $true }
+        # 포트 Any 규칙은 "프로그램·앱 패키지·서비스 제한이 전혀 없는" 경우만 전체 허용으로 인정한다 - 스토어 앱
+        # (AppX) 규칙은 Program=Any 로 보이지만 그 앱 패키지에만 적용된다(Windows Server 러너 실기에서 "Start",
+        # "Work or school account" 등의 앱 규칙을 전체 허용으로 오인해, RDP 허용 규칙이 없는데도 켤 뻔했다).
         $app = $r | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
-        if ($app -and "$($app.Program)" -eq "Any") { return $true }
+        $svc = $r | Get-NetFirewallServiceFilter -ErrorAction SilentlyContinue
+        if ($app -and "$($app.Program)" -eq "Any" -and -not "$($app.Package)" -and (-not $svc -or "$($svc.Service)" -eq "Any")) { return $true }
     }
     return $false
 }

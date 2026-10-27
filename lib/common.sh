@@ -1205,6 +1205,43 @@ db_restart_or_revert() {
     return 1
 }
 
+# ---- Oracle 정적 파라미터 조치의 재기동·복구 (D-19/D-26, 1.3.1) --------------------------------------
+# SPFILE 을 바꾼 뒤 SHUTDOWN/STARTUP 을 하는데, 새 값 때문에 기동에 실패하면 인스턴스가 내려간 채로 남고 SQL 로는
+# 되돌릴 수 없다(SPFILE 은 인스턴스가 떠 있어야 ALTER SYSTEM 으로 바꿀 수 있음). 그래서:
+#   oracle_pfile_backup <코드>  — 변경 "전" SPFILE 을 PFILE 로 떠 둔다(실패하면 조치하지 말 것)
+#   oracle_restart_or_recover   — 재기동 후 기동을 확인하고, 안 뜨면 PFILE 로 기동해 SPFILE 을 원래대로 다시
+#                                 만들고 재기동한다. 결과는 DB_RESTART_RESULT(ok/reverted/down)
+# PFILE 은 oracle 계정이 쓸 수 있는 $ORACLE_HOME/dbs 에 두고(백업 디렉터리는 root 700 이라 oracle 이 못 씀),
+# 경로를 ORACLE_PFILE_BACKUP 에 담는다.
+oracle_pfile_backup() {
+    _oh=$(oracle_home)
+    [ -n "$_oh" ] && [ -d "$_oh/dbs" ] || return 1
+    ORACLE_PFILE_BACKUP="$_oh/dbs/kisa_${1}_$(date '+%Y%m%d%H%M%S').ora"
+    oracle_query "CREATE PFILE='$ORACLE_PFILE_BACKUP' FROM SPFILE;" >/dev/null || return 1
+    [ -s "$ORACLE_PFILE_BACKUP" ] || return 1
+    # 백업 디렉터리에도 사본을 남긴다(원본 SPFILE 내용 증적)
+    mkdir -p "$FIX_BACKUP_DIR/$FIX_CODE/_oracle" 2>/dev/null && cp -p "$ORACLE_PFILE_BACKUP" "$FIX_BACKUP_DIR/$FIX_CODE/_oracle/" 2>/dev/null
+    return 0
+}
+
+oracle_restart_or_recover() {
+    # 재기동은 도중에 끊으면 DB 가 내려간 채로 남으므로 시간 제한을 걸지 않는다
+    DB_CMD_TIMEOUT=0 oracle_query "SHUTDOWN IMMEDIATE;
+STARTUP;" >/dev/null 2>&1
+    if db_wait_alive 120; then DB_RESTART_RESULT="ok"; return 0; fi
+    log_error "[$FIX_CODE] 재기동 후 Oracle 이 열리지 않습니다 - 변경 전 PFILE 로 기동해 SPFILE 을 되돌립니다($ORACLE_PFILE_BACKUP)."
+    DB_CMD_TIMEOUT=0 oracle_query "SHUTDOWN ABORT;" >/dev/null 2>&1
+    DB_CMD_TIMEOUT=0 oracle_query "STARTUP PFILE='$ORACLE_PFILE_BACKUP';" >/dev/null 2>&1
+    if db_wait_alive 120 \
+       && DB_CMD_TIMEOUT=0 oracle_query "CREATE SPFILE FROM PFILE='$ORACLE_PFILE_BACKUP';" >/dev/null 2>&1; then
+        # PFILE 로 떠 있는 상태 - 복원한 SPFILE 로 다시 기동해 이후 재기동에도 원래 값이 쓰이게 한다
+        DB_CMD_TIMEOUT=0 oracle_query "SHUTDOWN IMMEDIATE;
+STARTUP;" >/dev/null 2>&1
+    fi
+    if db_wait_alive 120; then DB_RESTART_RESULT="reverted"; else DB_RESTART_RESULT="down"; fi
+    return 1
+}
+
 # ---- 비밀번호 변경 조치 헬퍼 (1.3.0, 사용자 결정: 무작위 생성 폐지 → 사전 승인 + 직접 입력) ----------
 # 예전 조치(mysql D-01/D-08, postgres D-01, WEB-02)는 무작위 비밀번호를 만들어 아무 데도 기록하지 않아
 # 앱·관리 접속이 끊기고 아무도 새 값을 몰랐다. 이제 계정마다 승인을 받고 운영자가 새 비밀번호를

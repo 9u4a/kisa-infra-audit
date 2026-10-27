@@ -1,39 +1,39 @@
 # D-19 (상) OS_ROLES, REMOTE_OS_AUTHENTICATION, REMOTE_OS_ROLES를 FALSE로 설정 [Oracle] — 조치 [fix: confirm]
-# 원복: 불가 — SPFILE 의 원래 값을 기록하지 않음(재기동 포함)
-# 세 파라미터 모두 정적(static) 파라미터라 SPFILE 값을 바꿔도 인스턴스 재시작 전까지는 반영되지
-# 않는다 - D-07/D-26 과 동일한 논리로 confirm 등급에서 재시작까지 수행한다(DB 클라이언트 연결만
-# 영향, 이 스크립트의 OS 세션에는 영향 없음).
-# 주의(Docker 23ai/26ai 실기 테스트로 확인): remote_os_authent 는 최신 Oracle 버전에서 더 이상
-# ALTER SYSTEM 으로 설정할 수 없는(ORA-02065) obsolete 파라미터로 보인다 - v$parameter 조회
-# 결과에도 아예 나타나지 않았다. 세 ALTER SYSTEM 명령 중 하나가 실패해도 나머지는 계속
-# 진행하도록 각각 독립적으로 실행한다(한 파라미터의 실패가 전체를 막지 않게 함).
+# 원복: 일부 — SPFILE 값은 원래대로 되돌리지만 반영하려면 인스턴스 재기동이 필요함
+# 세 파라미터 모두 정적(static) 파라미터라 SPFILE 값을 바꾼 뒤 인스턴스를 재기동해야 반영된다 - confirm 등급에서
+# 재기동까지 수행한다(DB 클라이언트 연결만 영향, 이 스크립트의 OS 세션에는 영향 없음).
+# 운영 안전(1.3.1):
+#  - 변경 전 SPFILE 을 PFILE 로 떠 두고(실패하면 아무것도 바꾸지 않음), 원래 값을 조회해 원복 SQL 로 남긴다.
+#  - 재기동 후 인스턴스가 열리지 않으면 PFILE 로 기동해 SPFILE 을 되돌리고 다시 기동한다(oracle_restart_or_recover).
+# 주의(Docker 23ai/26ai 실기 테스트로 확인): remote_os_authent 는 최신 버전에서 obsolete(ORA-02065)라 v$parameter
+# 에도 없다 - 세 ALTER SYSTEM 을 각각 실행해 한 파라미터의 실패가 나머지를 막지 않게 한다.
 run_fix() {
-    fix_db_queue_rollback "oracle" "-- D-19: os_roles/remote_os_authent/remote_os_roles SPFILE 값을 변경함(원본 값을 정확히 알지 못해 기본값 FALSE로도 되돌리지 못함 - 재시작 전이라 실제로는 아직 미반영 상태일 수 있음)"
+    orig=$(oracle_query "SELECT name || '=' || value FROM v\$parameter WHERE name IN ('os_roles','remote_os_authent','remote_os_roles') ORDER BY name;" | tr -d ' \r' | grep '=')
+    if ! oracle_pfile_backup "D-19"; then
+        FIX_STATUS="ERROR"; FIX_DETAIL="변경 전 SPFILE 백업(CREATE PFILE)에 실패해 변경하지 않음 - 재기동 실패 시 복구할 수 없기 때문(SYSDBA/OS 인증으로 실행 필요)"; FIX_EVIDENCE=""
+        return
+    fi
+    for kv in $orig; do
+        fix_db_queue_rollback "oracle" "ALTER SYSTEM SET ${kv%%=*} = ${kv#*=} SCOPE=SPFILE;"
+    done
 
     o1=$(oracle_query "ALTER SYSTEM SET os_roles = FALSE SCOPE=SPFILE;" 2>&1)
     o2=$(oracle_query "ALTER SYSTEM SET remote_os_authent = FALSE SCOPE=SPFILE;" 2>&1)
     o3=$(oracle_query "ALTER SYSTEM SET remote_os_roles = FALSE SCOPE=SPFILE;" 2>&1)
 
-    restarted=0
-    # 재기동 도중 시간 제한으로 sqlplus 가 끊기면 STARTUP 없이 DB가 내려간 채로 남으므로 제한 해제
-    restart_out=$(DB_CMD_TIMEOUT=0 oracle_query "SHUTDOWN IMMEDIATE;
-STARTUP;" 2>&1)
-    rc=$?
-    [ $rc -eq 0 ] && restarted=1
-
-    if [ "$restarted" -eq 1 ]; then
-        val=$(oracle_query "SELECT name, value FROM v\$parameter WHERE name IN ('os_roles','remote_os_authent','remote_os_roles') ORDER BY name;")
-        if printf '%s\n' "$val" | grep -qi TRUE; then
-            FIX_STATUS="ERROR"
-            FIX_DETAIL="재시작은 했으나 일부 값이 여전히 TRUE 로 확인됨: $val"
-        else
-            FIX_STATUS="APPLIED"
-            FIX_DETAIL="SPFILE 값을 FALSE로 설정하고 인스턴스를 재시작하여 적용함"
-        fi
-        FIX_EVIDENCE="$val"
-    else
-        FIX_STATUS="ERROR"
-        FIX_DETAIL="SPFILE 값은 변경했으나($o1 / $o2 / $o3) 인스턴스 재시작 실패 - 재시작 전까지는 미반영 상태: $restart_out"
-        FIX_EVIDENCE="$restart_out"
-    fi
+    oracle_restart_or_recover
+    case "$DB_RESTART_RESULT" in
+        ok)
+            val=$(oracle_query "SELECT name, value FROM v\$parameter WHERE name IN ('os_roles','remote_os_authent','remote_os_roles') ORDER BY name;")
+            if printf '%s\n' "$val" | grep -qi TRUE; then
+                FIX_STATUS="ERROR"; FIX_DETAIL="재기동했으나 일부 값이 여전히 TRUE: $val"
+            else
+                FIX_STATUS="APPLIED"; FIX_DETAIL="SPFILE 값을 FALSE 로 설정하고 재기동해 적용함(변경 전: $(printf '%s' "$orig" | tr '\n' ' '), PFILE 백업: $ORACLE_PFILE_BACKUP)"
+            fi
+            FIX_EVIDENCE="$val" ;;
+        reverted)
+            FIX_STATUS="ERROR"; FIX_DETAIL="재기동 후 인스턴스가 열리지 않아 변경 전 PFILE 로 SPFILE 을 되돌리고 다시 기동함(서비스 복구 확인됨): $o1 / $o2 / $o3"; FIX_EVIDENCE="" ;;
+        *)
+            FIX_STATUS="ERROR"; FIX_DETAIL="재기동 후 인스턴스가 열리지 않고 자동 복구도 확인하지 못함 - 즉시 수동 조치 필요(STARTUP PFILE='$ORACLE_PFILE_BACKUP' 후 CREATE SPFILE FROM PFILE)"; FIX_EVIDENCE="" ;;
+    esac
 }

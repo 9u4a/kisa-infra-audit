@@ -11,9 +11,12 @@ $port = 59999                       # 어떤 기본 규칙도 열지 않는 포�
 $rdpGroup = '@FirewallAPI.dll,-28752'
 # 러너에는 "모든 포트·모든 프로그램 허용" 인바운드 규칙이 있어(있으면 59999 도 실제로 열려 있는 것) 첫 실행에서
 # A 가 적용돼 버렸다 - 테스트 동안만 이런 전체 허용 규칙을 끄고 끝나면 되살린다.
+# (스토어 앱 전용 규칙은 Program=Any 로 보여도 앱 패키지 제한이 있어 전체 허용이 아니다 - 끄지 않는다. 이 앱 규칙이
+#  남아 있는 채로 A 가 ERROR 여야 Test-FixFirewallPortAllowed 가 앱 규칙을 오인하지 않는다는 회귀 검증도 된다)
 $broad = @(Get-NetFirewallRule -Direction Inbound -Enabled True -Action Allow | Where-Object {
-    $pf = $_ | Get-NetFirewallPortFilter; $af = $_ | Get-NetFirewallApplicationFilter
-    ($pf.Protocol -in @("TCP", "Any")) -and (@($pf.LocalPort) -contains "Any") -and "$($af.Program)" -eq "Any" })
+    $pf = $_ | Get-NetFirewallPortFilter; $af = $_ | Get-NetFirewallApplicationFilter; $sf = $_ | Get-NetFirewallServiceFilter
+    ($pf.Protocol -in @("TCP", "Any")) -and (@($pf.LocalPort) -contains "Any") -and "$($af.Program)" -eq "Any" -and
+    -not "$($af.Package)" -and "$($sf.Service)" -eq "Any" })
 Write-Host "전체 허용 규칙(테스트 동안 비활성): $(@($broad | ForEach-Object DisplayName) -join ' | ')"
 $broad | Disable-NetFirewallRule
 Set-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
