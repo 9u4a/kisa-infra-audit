@@ -785,7 +785,7 @@ function Backup-FixWebConfigProperty {
     <# -Location: MACHINE/WEBROOT/APPHOST 의 <location path="사이트"> 에 쓰는 경우(잠긴 섹션) #>
     param([Parameter(Mandatory)][string]$Filter, [Parameter(Mandatory)][string]$Name, [string]$PSPath = "IIS:\", [string]$Location = "")
     $dir = Get-FixItemBackupDir -Sub "webconfig"
-    $safe = ("$PSPath--$Location--$Filter--$Name") -replace '[\:/\s\[\]@=''"*?<>|]', '_'
+    $safe = ("$PSPath--$Location--$Filter--$Name") -replace '[\\:/\s\[\]@=''"*?<>|]', '_'
     $file = Join-Path $dir "$safe.json"
     if (Test-Path -LiteralPath $file) { return $file }
     $loc = @{}; if ($Location) { $loc.Location = $Location }
