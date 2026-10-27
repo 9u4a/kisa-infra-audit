@@ -293,6 +293,13 @@ function Invoke-MssqlQuery {
     try {
         $out = & sqlcmd @sqlArgs 2>$Global:DbErrFile
         $Global:DbQueryOk = ($LASTEXITCODE -eq 0)
+        # PS 5.1 은 stderr 를 오류 레코드 형식("SQLCMD.EXE : ... At ...psm1:294 char:16", "+ CategoryInfo ...")으로 쓴다 -
+        # 결과 detail 에 스크립트 위치 같은 잡음이 남지 않게 sqlcmd 메시지만 남긴다
+        if (-not $Global:DbQueryOk -and (Test-Path $Global:DbErrFile)) {
+            $clean = @(Get-Content -Path $Global:DbErrFile | Where-Object { $_ -notmatch '^\s*(At .+ char:\d+|\+|CategoryInfo|FullyQualifiedErrorId)' -and $_.Trim() } |
+                ForEach-Object { $_ -replace '^\s*SQLCMD(\.EXE)?\s*:\s*', '' })
+            $clean | Out-File -FilePath $Global:DbErrFile -Encoding utf8
+        }
         return $out
     } catch {
         $Global:DbQueryOk = $false

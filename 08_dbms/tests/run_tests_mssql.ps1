@@ -68,7 +68,7 @@ Start-Sleep -Seconds 2
 $c1 = Get-LoginFailCount
 Write-Host "대조군(sqlcmd 직접 1회): 로그인 실패 $($c1 - $c0)건"
 $unit = $c1 - $c0
-if ($unit -lt 1) { Write-Host "FAIL: mssql/safety - 측정 방법 검증 실패(대조군이 $unit건)"; exit 1 }
+if ($unit -lt 1) { Write-Host "FAIL: mssql/safety - 측정 방법 검증 실패(대조군이 ${unit}건)"; exit 1 }
 
 $before = Get-LoginFailCount; $elBefore = Get-ErrorLogFailCount
 $r = Invoke-Diag "wrongpw" @{ DB_PASSWORD = "Wrong_Pw_9!"; KISA_SQLUSER = "kisa_t" }
@@ -76,10 +76,11 @@ Start-Sleep -Seconds 2
 $after = Get-LoginFailCount; $elAfter = Get-ErrorLogFailCount
 Sql "DROP EVENT SESSION kisa_lf ON SERVER;" | Out-Null
 $blocked = @($r.Items | Where-Object { $_.status -eq "ERROR" -and $_.detail -like "*사전 점검 실패*" })
-Write-Host "잘못된 비밀번호: 로그인 실패 $($after - $before)건 = 접속 시도 $(($after - $before) / $unit)회(대조군 1회=$unit건, 오류 로그 기준 $($elAfter - $elBefore)건), 사전 점검으로 차단된 항목 $($blocked.Count)개, 소요 $($r.Seconds)초"
+Write-Host "잘못된 비밀번호: 로그인 실패 $($after - $before)건 = 접속 시도 $(($after - $before) / $unit)회(대조군 1회=${unit}건, 오류 로그 기준 $($elAfter - $elBefore)건), 사전 점검으로 차단된 항목 $($blocked.Count)개, 소요 $($r.Seconds)초"
 if ($blocked.Count -gt 0) { Write-Host "  예: $($blocked[0].code) $($blocked[0].detail)" }
-if (($after - $before) -ne $unit) { Write-Host "FAIL: mssql/safety - 로그인 실패가 $($after - $before)건(기대 $unit건 = 접속 시도 1회)"; $fail = $true }
+if (($after - $before) -ne $unit) { Write-Host "FAIL: mssql/safety - 로그인 실패가 $($after - $before)건(기대 ${unit}건 = 접속 시도 1회)"; $fail = $true }
 elseif ($blocked.Count -eq 0) { Write-Host "FAIL: mssql/safety - '사전 점검 실패' ERROR 항목이 없음"; $fail = $true }
+elseif ($blocked[0].detail -match 'char:\d+|CategoryInfo') { Write-Host "FAIL: mssql/safety - detail 에 PowerShell 오류 레코드 잡음이 남음"; $fail = $true }
 else { Write-Host "PASS: mssql/safety" }
 
 if ($fail) { exit 1 }

@@ -30,6 +30,9 @@ windows-latest(Windows Server 2025 Datacenter) 일회용 VM을 운영 Windows Se
     asp(WEB-06)·security/access(WEB-21)도 같은 잠금 섹션이다.
   - 03_web/fix.ps1은 조치 중 IIS 설정 조회가 실패했는데 NA로 끝나면 ERROR로 바꾸고 원인을 남긴다
     (진단의 거짓 양호 방지와 같은 원칙).
+- **MSSQL 접속 오류 detail에 PowerShell 오류 레코드 잡음**: PS 5.1이 sqlcmd의 stderr를
+  `SQLCMD.EXE : ... At ...Common.psm1:294 char:16` 형식으로 써서 결과 detail에 스크립트 위치가 남았다.
+  이제 sqlcmd 메시지만 남긴다(실기 로그에서 발견).
 - **`Enable-FixFirewallSafely`의 거부 경로**: 방화벽을 켜지 않기로 하고도 방금 켠 원격 관리 규칙을
   남겨 두던 것을 되돌리도록 고쳤다.
 - **Oracle D-19/D-26 재기동 실패 자동 복구**
