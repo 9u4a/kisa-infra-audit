@@ -27,6 +27,8 @@ if (-not $zones) {
 }
 
 $applied = @()
+# 원복 경로가 없는 자원 - 원복 시 "원복 불가"로 정직하게 보고되도록 변경 직전에 표시(lib/Common.psm1)
+if (@($zones).Count -gt 0) { Register-FixNoRollback -Reason "DNS 영역 영역 전송 설정(SecureSecondaries, WMI) - 변경 전 값은 changes.log 상세 참고" }
 foreach ($z in $zones) {
     try {
         $z.SecureSecondaries = 3

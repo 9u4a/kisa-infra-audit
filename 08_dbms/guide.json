@@ -272,11 +272,11 @@
       "guide_page": 625,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "oracle"
       ],
-      "deviation": null
+      "deviation": "1.3.0 운영 안전 재분류(auto→confirm, 항목별 확인 필수): 로그인 실패 허용 횟수(5회) 설정 후 애플리케이션 커넥션 풀이 잘못된 비밀번호로 재시도하면 서비스 계정이 잠김"
     },
     {
       "code": "D-10",
@@ -617,12 +617,12 @@
       "guide_page": 654,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "mysql",
         "oracle"
       ],
-      "deviation": "Oracle 대상: D-11과 동일한 이유로 owner 정적 예외 목록 대신 dba_users.oracle_maintained='N' 조건을 사용."
+      "deviation": "Oracle 대상: D-11과 동일한 이유로 owner 정적 예외 목록 대신 dba_users.oracle_maintained='N' 조건을 사용. / 1.3.0 운영 안전 재분류(auto→confirm, 항목별 확인 필수): REVOKE 는 연쇄 회수되어 이 계정이 다시 부여했던 제3자 권한까지 사라지고 원복되지 않음"
     },
     {
       "code": "D-22",

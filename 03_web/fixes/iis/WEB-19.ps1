@@ -16,6 +16,8 @@ $ssiExt = @(".stm", ".shtm", ".shtml")
 $applied = @()
 $failed = @()
 
+# 원복 경로가 없는 자원 - 원복 시 "원복 불가"로 정직하게 보고되도록 변경 직전에 표시(lib/Common.psm1)
+Register-FixNoRollback -Reason "IIS 에서 제거한 SSI 핸들러 매핑 - 필요 시 처리기 매핑에서 수동 재등록"
 foreach ($site in $sites) {
     try {
         $handlers = Get-WebConfiguration -Filter "system.webServer/handlers/add" -PSPath "IIS:\Sites\$site" -ErrorAction Stop

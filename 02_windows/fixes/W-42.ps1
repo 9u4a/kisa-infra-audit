@@ -8,6 +8,8 @@ $before = @()
 $applied = @()
 $failed = @()
 
+# 원복 경로가 없는 자원 - 원복 시 "원복 불가"로 정직하게 보고되도록 변경 직전에 표시(lib/Common.psm1)
+Register-FixNoRollback -Reason "이벤트 로그 최대 크기(Limit-EventLog) - 변경 전 크기는 changes.log 상세 참고"
 foreach ($logName in $logs) {
     try {
         $log = Get-WinEvent -ListLog $logName -ErrorAction Stop

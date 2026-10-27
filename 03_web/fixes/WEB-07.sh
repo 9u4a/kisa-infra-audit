@@ -1,4 +1,4 @@
-# WEB-07 (중) 웹 서비스 경로 내 불필요한 파일 제거 — 조치 [fix: auto]
+# WEB-07 (중) 웹 서비스 경로 내 불필요한 파일 제거 — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # checks/WEB-07.sh 와 동일한 대상 경로를 제거한다. 삭제 전 전체 내용을 tar로 백업해
 # (fix_backup_remove_path) 원복 시 완전히 복원할 수 있게 한다.
 run_fix() {

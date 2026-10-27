@@ -1,4 +1,4 @@
-﻿# WEB-13 (상) 웹 서비스 설정 파일 노출 제한 [IIS] — 조치 [fix: auto]
+﻿# WEB-13 (상) 웹 서비스 설정 파일 노출 제한 [IIS] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # checks/iis/WEB-13.ps1 이 확인하는 hiddenSegments 컬렉션에 "web.config" 항목을 추가한다.
 # 컬렉션에 원소를 추가/제거하는 작업은 Set-FixWebConfigProperty(단일 값 설정)로 표현할 수
 # 없어 Add-WebConfigurationProperty 를 직접 쓴다 - 이 항목은 표준 webconfig 백업/원복 대상이
@@ -16,6 +16,8 @@ if (-not $sites -or $sites.Count -eq 0) {
 
 $applied = @()
 $failed = @()
+# 원복 경로가 없는 자원 - 원복 시 "원복 불가"로 정직하게 보고되도록 변경 직전에 표시(lib/Common.psm1)
+Register-FixNoRollback -Reason "IIS hiddenSegments 에 추가한 web.config 항목 - 필요 시 요청 필터링에서 수동 제거"
 foreach ($site in $sites) {
     try {
         $hidden = Get-WebConfiguration -Filter "system.webServer/security/requestFiltering/hiddenSegments/add" -PSPath "IIS:\Sites\$site" -ErrorAction Stop

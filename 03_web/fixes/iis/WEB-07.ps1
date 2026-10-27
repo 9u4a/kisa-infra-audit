@@ -1,4 +1,4 @@
-﻿# WEB-07 (중) 웹 서비스 경로 내 불필요한 파일 제거 [IIS] — 조치 [fix: auto]
+﻿# WEB-07 (중) 웹 서비스 경로 내 불필요한 파일 제거 [IIS] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # checks/iis/WEB-07.ps1 과 동일한 대상 경로를 제거한다(내용 전체를 백업 후 삭제 -
 # Backup-FixPathAndRemove 로 원복 가능).
 

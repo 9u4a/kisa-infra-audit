@@ -6,6 +6,8 @@
 
 Set-FixRegistryValue -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AutoShareServer" -Value 0 -Type DWord
 
+# 원복 경로가 없는 자원 - 원복 시 "원복 불가"로 정직하게 보고되도록 변경 직전에 표시(lib/Common.psm1)
+Register-FixNoRollback -Reason "즉시 삭제한 기본 공유(ADMIN$/C$ 등) - 레지스트리는 원복되지만 공유는 Server 서비스 재시작/재부팅 후에야 다시 생김"
 try {
     $defaultShares = Get-SmbShare -ErrorAction Stop | Where-Object { $_.Name -match '^[A-Za-z]\$$' -or $_.Name -eq 'ADMIN$' }
     foreach ($s in $defaultShares) {

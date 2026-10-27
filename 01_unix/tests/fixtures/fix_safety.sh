@@ -19,8 +19,17 @@ echo "FIX_RC=$?"
 grep -qE 'parameter not set|unbound variable' /tmp/fix.log && echo "CRASH=yes" || echo "CRASH=no"
 LOG=$(ls /tmp/fixout/*_01_fix_*/changes.log)
 echo "APPLIED=$(grep -c "$(printf '\tAPPLIED\t')" "$LOG")"
-# 이 픽스처에는 root 외 관리자(sudo/wheel 구성원)가 없으므로 U-01 은 sshd_config 를 바꾸면 안 된다
-echo "U01=$(awk -F'\t' '$1 == "U-01" { print $3 }' "$LOG")"
+# U-01 은 1.3.0 부터 confirm 등급이라 비대화형 일괄 적용에서는 확인 단계에서 건너뛴다(DECLINED)
+# changes.log 형식: 시각<TAB>코드<TAB>등급<TAB>결과<TAB>상세
+echo "U01=$(awk -F'\t' '$2 == "U-01" { print $4 }' "$LOG")"
+
+# U-01 안전장치: root 외 관리자(sudo/wheel 구성원)가 없으면 sshd_config 를 바꾸지 않아야 한다 -
+# 확인 단계를 거치지 않도록 조치 함수를 직접 호출해 검증한다.
+SSHD_BEFORE=$(cksum < /etc/ssh/sshd_config)
+U01_GUARD=$(LIB_DIR=lib sh -c '
+    . lib/common.sh; OS_FAMILY=debian; FIX_CODE=U-01; FIX_BACKUP_DIR=/tmp/u01guard; FIX_LOG=/dev/null
+    mkdir -p "$FIX_BACKUP_DIR"; . 01_unix/fixes/U-01.sh; run_fix; echo "$FIX_STATUS"' 2>/dev/null | tail -n1)
+[ "$SSHD_BEFORE" = "$(cksum < /etc/ssh/sshd_config)" ] && echo "U01_GUARD=$U01_GUARD/unchanged" || echo "U01_GUARD=$U01_GUARD/changed"
 
 sh 01_unix/fix.sh -o /tmp/fixout --rollback "$(dirname "$LOG")" >/dev/null 2>&1 < /dev/null
 AFTER=$(snap)

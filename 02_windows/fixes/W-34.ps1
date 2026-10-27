@@ -16,6 +16,8 @@ if (-not $tlntadmn) {
     return
 }
 
+# 원복 경로가 없는 자원 - 원복 시 "원복 불가"로 정직하게 보고되도록 변경 직전에 표시(lib/Common.psm1)
+Register-FixNoRollback -Reason "Telnet 인증 방식(tlntadmn) - 이전 방식으로 수동 재설정 필요"
 try {
     $out = & tlntadmn.exe config sec /NTLM:yes 2>&1 | Out-String
     $Global:FixStatus = "APPLIED"

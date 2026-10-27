@@ -1,4 +1,4 @@
-# WEB-13 (상) 웹 서비스 설정 파일 노출 제한 — 조치 [fix: auto]
+# WEB-13 (상) 웹 서비스 설정 파일 노출 제한 — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 run_fix() {
     detect_web_engines
     case " $WEB_ENGINES " in *" tomcat "*) : ;; *)

@@ -133,7 +133,7 @@ for code in $VULN_CODES; do
         remediation=$(guide_field "$GUIDE_JSON" "$code" "remediation")
         echo "[$code] $title"
         echo "  등급: manual (자동 조치 없음) — 가이드 조치 방법: $remediation"
-        printf '%s\t%s\tMANUAL\t%s\n' "$code" "manual" "자동 조치 없음(가이드 조치 방법 안내만)" >> "$FIX_LOG"
+        printf '%s\t%s\tMANUAL\t%s\n' "$code" "manual" "자동 조치 없음(가이드 조치 방법 안내만)" | fix_log_stamp >> "$FIX_LOG"
         N_MANUAL=$((N_MANUAL + 1))
         continue
     fi
@@ -144,7 +144,7 @@ for code in $VULN_CODES; do
     if [ ! -f "$fix_file" ]; then
         echo "[$code] $title"
         echo "  등급: $grade 이나 조치 스크립트 미구현 — 건너뜀"
-        printf '%s\t%s\tSKIPPED\t조치 스크립트 미구현\n' "$code" "$grade" >> "$FIX_LOG"
+        printf '%s\t%s\tSKIPPED\t조치 스크립트 미구현\n' "$code" "$grade" | fix_log_stamp >> "$FIX_LOG"
         N_SKIPPED=$((N_SKIPPED + 1))
         continue
     fi
@@ -168,7 +168,7 @@ for code in $VULN_CODES; do
             y|Y) : ;;
             *)
                 echo "  건너뜀 (사용자 미확인)"
-                printf '%s\t%s\tDECLINED\t사용자가 확인하지 않음\n' "$code" "$grade" >> "$FIX_LOG"
+                printf '%s\t%s\tDECLINED\t사용자가 확인하지 않음\n' "$code" "$grade" | fix_log_stamp >> "$FIX_LOG"
                 N_DECLINED=$((N_DECLINED + 1))
                 continue
                 ;;
@@ -207,13 +207,16 @@ for code in $VULN_CODES; do
     if { [ "$FIX_STATUS" = "APPLIED" ] || [ "$FIX_STATUS" = "NA" ]; } && [ "$CHECK_STATUS" != "VULN" ] && [ "$CHECK_STATUS" != "ERROR" ]; then
         echo "[$code] $title"
         echo "  적용 완료 — 재검증 결과: $CHECK_STATUS ($FIX_DETAIL)"
-        printf '%s\t%s\tAPPLIED\t%s (recheck=%s)\n' "$code" "$grade" "$FIX_DETAIL" "$CHECK_STATUS" >> "$FIX_LOG"
+        printf '%s\t%s\tAPPLIED\t%s (recheck=%s)\n' "$code" "$grade" "$FIX_DETAIL" "$CHECK_STATUS" | fix_log_stamp >> "$FIX_LOG"
         N_APPLIED=$((N_APPLIED + 1))
     else
         echo "[$code] $title"
         echo "  적용 실패 또는 재검증 실패(FIX_STATUS=$FIX_STATUS, 재검증=$CHECK_STATUS) — 원복 중"
+        # 실제로 되돌리지 못한 부분이 있으면 FAILED_NOT_ROLLED_BACK 으로 정직하게 기록한다(lib/common.sh FIX_ROLLBACK_FAILS)
+        FIX_ROLLBACK_FAILS=""
         fix_rollback_item "$code"
-        printf '%s\t%s\tFAILED_ROLLED_BACK\tFIX_STATUS=%s detail=%s recheck=%s\n' "$code" "$grade" "$FIX_STATUS" "$FIX_DETAIL" "$CHECK_STATUS" >> "$FIX_LOG"
+        if [ -z "$FIX_ROLLBACK_FAILS" ]; then _rbs="FAILED_ROLLED_BACK"; else _rbs="FAILED_NOT_ROLLED_BACK"; echo "  원복하지 못한 부분(수동 확인 필요):$FIX_ROLLBACK_FAILS"; fi
+        printf '%s\t%s\t%s\tFIX_STATUS=%s detail=%s recheck=%s %s\n' "$code" "$grade" "$_rbs" "$FIX_STATUS" "$FIX_DETAIL" "$CHECK_STATUS" "$(printf '%s' "$FIX_ROLLBACK_FAILS" | tr '\n' ' ')" | fix_log_stamp >> "$FIX_LOG"
         N_FAILED=$((N_FAILED + 1))
     fi
     unset FIX_CODE

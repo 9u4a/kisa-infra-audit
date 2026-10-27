@@ -905,7 +905,15 @@ fix_prepare_dir() {
     make_private_dir "$FIX_OUT_DIR"
     make_private_dir "$FIX_BACKUP_DIR"
     FIX_LOG="$FIX_OUT_DIR/changes.log"
-    : > "$FIX_LOG"
+    # 감사 로그(운영 안전 기준 F6): 누가 언제 어느 호스트에서 바꿨는지 첫 줄에 남기고, 각 줄 앞에는
+    # fix_log_stamp 가 시각을 붙인다(형식: 시각<TAB>코드<TAB>등급<TAB>결과<TAB>상세).
+    printf '# 조치 실행 시작 %s / 호스트 %s / 실행자 %s(uid=%s, sudo=%s) / 도구 v%s\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S %z')" "$_host" "$(id -un 2>/dev/null)" "$(id -u 2>/dev/null)" "${SUDO_USER:-없음}" "$TOOL_VERSION" > "$FIX_LOG"
+}
+
+# fix_log_stamp — 표준입력의 각 줄 앞에 시각을 붙인다(changes.log 기록용)
+fix_log_stamp() {
+    while IFS= read -r _ls; do printf '%s\t%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$_ls"; done
 }
 
 # fix_abort_item <사유> — 백업 실패처럼 "이대로 바꾸면 원복할 수 없는" 상황(운영 안전 기준 F1).
@@ -915,7 +923,8 @@ fix_prepare_dir() {
 fix_abort_item() {
     log_error "[${FIX_CODE:-?}] $1 — 이 항목의 변경을 원복하고 조치 실행을 중단합니다(이후 항목은 변경하지 않음)."
     [ -n "${FIX_CODE:-}" ] && fix_rollback_item "$FIX_CODE"
-    printf '%s\t-\tABORTED\t%s (이 항목 원복 후 실행 중단)\n' "${FIX_CODE:-?}" "$1" >> "${FIX_LOG:-/dev/null}"
+    printf '%s\t-\tABORTED\t%s (이 항목 원복 후 실행 중단)%s\n' "${FIX_CODE:-?}" "$1" \
+        "$(printf '%s' "${FIX_ROLLBACK_FAILS:-}" | tr '\n' ' ')" | fix_log_stamp >> "${FIX_LOG:-/dev/null}"
     exit 3
 }
 
@@ -1131,6 +1140,153 @@ sshd_match_overrides() {
     done
 }
 
+# ---- DB 재기동 조치 헬퍼 (운영 안전 기준 F2, 1.3.0) ----------------------------------------------
+# 정적 파라미터 조치(mysql D-07, postgres D-03/D-26)는 재기동이 필요하다. 예전에는 재기동 명령의 성공만 보고
+# DB 가 실제로 떴는지 확인하지 않았고, 기동에 실패해도 설정을 되돌리지 않아 DB 가 내려간 채로 남을 수 있었다.
+
+# db_wait_alive <초> — DBMS_ENGINE 에 접속될 때까지 최대 N초 기다린다(0=접속 확인, 1=시간 초과)
+db_wait_alive() {
+    _wa=0
+    while [ "$_wa" -lt "$1" ]; do
+        case "${DBMS_ENGINE:-}" in
+            mysql) mysql_query "SELECT 1;" >/dev/null 2>&1 && return 0 ;;
+            postgres) psql_query "SELECT 1;" >/dev/null 2>&1 && return 0 ;;
+            oracle) oracle_query "SELECT 1 FROM dual;" >/dev/null 2>&1 && return 0 ;;
+            *) return 1 ;;
+        esac
+        sleep 2; _wa=$((_wa + 2))
+    done
+    return 1
+}
+
+# db_restart_server — 지금 실행 중인 DB 서비스만 재기동한다. 0=재기동 명령 성공, 1=실패, 2=재기동 수단 없음
+# (원격 실행 등). 예전처럼 실행 중이 아닌 유닛 이름까지 차례로 restart 하거나 systemd 밖에서 mysqld_safe 로
+# 띄우지 않는다.
+db_restart_server() {
+    case "${DBMS_ENGINE:-}" in
+        mysql) _units="mysqld mysql mariadb" ;;
+        postgres) _units="postgresql postgresql-17 postgresql-16 postgresql-15 postgresql-14 postgresql-13 postgresql-12" ;;
+        *) return 2 ;;
+    esac
+    if command -v systemctl >/dev/null 2>&1; then
+        for _u in $_units; do
+            systemctl is-active --quiet "$_u" 2>/dev/null || continue
+            systemctl restart "$_u" 2>/dev/null && return 0
+            return 1
+        done
+    fi
+    if [ "$DBMS_ENGINE" = "postgres" ] && command -v pg_ctlcluster >/dev/null 2>&1; then
+        _cl=$(pg_lsclusters 2>/dev/null | awk 'NR > 1 && $4 == "online" { print $1, $2; exit }')
+        # shellcheck disable=SC2086
+        [ -n "$_cl" ] && { pg_ctlcluster $_cl restart 2>/dev/null && return 0; return 1; }
+    fi
+    if command -v service >/dev/null 2>&1; then
+        for _u in $_units; do
+            service "$_u" status >/dev/null 2>&1 || continue
+            service "$_u" restart >/dev/null 2>&1 && return 0
+            return 1
+        done
+    fi
+    return 2
+}
+
+# db_restart_or_revert <설명> — 재기동 후 기동을 확인하고, 뜨지 않으면 이 항목의 백업(설정 파일)으로 되돌린 뒤
+# 다시 기동한다. 결과는 DB_RESTART_RESULT 에: ok / no_method / reverted / down(되돌렸는데도 안 뜸 - 즉시 수동 조치)
+db_restart_or_revert() {
+    db_restart_server
+    case $? in
+        2) DB_RESTART_RESULT="no_method"; return 1 ;;
+    esac
+    if db_wait_alive 60; then DB_RESTART_RESULT="ok"; return 0; fi
+    log_error "[$FIX_CODE] $1 후 DB 가 다시 뜨지 않습니다 - 설정을 되돌리고 다시 기동합니다."
+    fix_rollback_item "$FIX_CODE"
+    db_restart_server
+    if db_wait_alive 60; then DB_RESTART_RESULT="reverted"; else DB_RESTART_RESULT="down"; fi
+    return 1
+}
+
+# ---- 비밀번호 변경 조치 헬퍼 (1.3.0, 사용자 결정: 무작위 생성 폐지 → 사전 승인 + 직접 입력) ----------
+# 예전 조치(mysql D-01/D-08, postgres D-01, WEB-02)는 무작위 비밀번호를 만들어 아무 데도 기록하지 않아
+# 앱·관리 접속이 끊기고 아무도 새 값을 몰랐다. 이제 계정마다 승인을 받고 운영자가 새 비밀번호를
+# 터미널에서 직접 입력한다. 비대화형이면 아무것도 바꾸지 않는다. 비밀번호는 인자·로그·백업에 남기지 않는다.
+
+# fix_tty_available — 제어 터미널을 실제로 열 수 있으면 0(/dev/tty 파일이 있어도 cron/docker 에선 열기 실패)
+fix_tty_available() {
+    ( : < /dev/tty ) 2>/dev/null
+}
+
+# fix_confirm_tty <질문> — 터미널에서 y/N(파이프 입력으로는 승인 불가). 비대화형이면 1.
+fix_confirm_tty() {
+    fix_tty_available || return 1
+    printf '%s [y/N] ' "$1" > /dev/tty
+    _ct=""
+    IFS= read -r _ct < /dev/tty || _ct=""
+    case "$_ct" in y|Y) return 0 ;; esac
+    return 1
+}
+
+# fix_read_new_password <대상 설명> — 새 비밀번호를 화면 표시 없이 2회 입력받아 FIX_NEW_PASSWORD 에 담는다.
+# 8자 미만·불일치는 다시 묻고(최대 3회), 끝내 실패하거나 비대화형이면 1(변경하지 않음).
+# 호출부는 사용 직후 FIX_NEW_PASSWORD="" 로 지운다.
+fix_read_new_password() {
+    FIX_NEW_PASSWORD=""
+    fix_tty_available || return 1
+    _rp_try=0
+    while [ "$_rp_try" -lt 3 ]; do
+        _rp_try=$((_rp_try + 1))
+        printf '  %s 새 비밀번호(화면에 표시되지 않음, 8자 이상): ' "$1" > /dev/tty
+        stty -echo < /dev/tty 2>/dev/null
+        _rp1=""; IFS= read -r _rp1 < /dev/tty || _rp1=""
+        stty echo < /dev/tty 2>/dev/null; printf '\n' > /dev/tty
+        printf '  한 번 더 입력: ' > /dev/tty
+        stty -echo < /dev/tty 2>/dev/null
+        _rp2=""; IFS= read -r _rp2 < /dev/tty || _rp2=""
+        stty echo < /dev/tty 2>/dev/null; printf '\n' > /dev/tty
+        if [ "${#_rp1}" -lt 8 ]; then
+            printf '  8자 이상이어야 합니다.\n' > /dev/tty
+        elif [ "$_rp1" != "$_rp2" ]; then
+            printf '  두 입력이 다릅니다.\n' > /dev/tty
+        else
+            FIX_NEW_PASSWORD=$_rp1; _rp1=""; _rp2=""
+            return 0
+        fi
+    done
+    _rp1=""; _rp2=""
+    printf '  비밀번호를 설정하지 않고 건너뜁니다.\n' > /dev/tty
+    return 1
+}
+
+# sql_quote_mysql / sql_quote_pg <값> — SQL 문자열 리터럴('...') 안에 넣을 수 있게 이스케이프한다.
+# 운영자가 입력한 비밀번호에 ' 나 \ 가 있어도 SQL 이 깨지거나 다른 문장이 실행되지 않게 한다.
+sql_quote_mysql() {
+    printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e "s/'/''/g"
+}
+sql_quote_pg() {
+    printf '%s' "$1" | sed -e "s/'/''/g"
+}
+
+# db_exec_stdin <mysql|postgres> <sql> — 비밀번호가 들어간 SQL 을 명령 인자(-e/-c)가 아니라 표준입력으로
+# 보낸다. 인자로 넘기면 실행되는 동안 ps 로 다른 사용자에게도 보인다.
+db_exec_stdin() {
+    _db_conn_blocked && return 1
+    case "$1" in
+        mysql)
+            (
+                [ -n "${DB_PASSWORD:-}" ] && export MYSQL_PWD="$DB_PASSWORD"
+                # shellcheck disable=SC2046
+                printf '%s\n' "$2" | _db_run mysql $(mysql_args)
+            ) 2>"${DB_ERR_FILE:-/dev/null}" ;;
+        postgres)
+            (
+                [ -n "${DB_PASSWORD:-}" ] && export PGPASSWORD="$DB_PASSWORD"
+                export PGCONNECT_TIMEOUT="${PGCONNECT_TIMEOUT:-5}"
+                # shellcheck disable=SC2046
+                printf '%s\n' "$2" | _db_run psql $(psql_args) -v ON_ERROR_STOP=1
+            ) 2>"${DB_ERR_FILE:-/dev/null}" ;;
+        *) return 1 ;;
+    esac
+}
+
 # ---- fix 진입점 공통 가드 (운영 안전 기준 F1·F6, 1.2.2) ------------------------------
 # fix_require_root — 적용/원복을 root 로만 허용한다. 권한이 모자라면 일부 파일만 바뀌고
 # 원복(chown/cp -p)도 실패해 "반쯤 바뀐" 상태가 남기 때문이다. 08_dbms 는 Oracle OS 인증
@@ -1190,7 +1346,13 @@ fix_confirm_plan() {
     esac
 }
 
-# fix_rollback_item <코드> — 해당 항목에서 fix_backup 한 모든 파일/디렉터리를 원상 복구한다.
+# fix_rollback_item <코드> — 해당 항목에서 백업한 SQL·파일·서비스 상태를 원상 복구한다.
+# 실패한 원복은 FIX_ROLLBACK_FAILS 에 누적한다(운영 안전 기준 F4) - 예전에는 모든 오류를 삼키고 항상
+# "원복 완료"로 표시해, 실제로 되돌아가지 않은 변경을 운영자가 알 수 없었다. 파이프(| while)는 서브셸이라
+# 실패 집계가 전달되지 않으므로 here-doc 반복문을 쓴다.
+FIX_ROLLBACK_FAILS=""
+_rb_fail() { FIX_ROLLBACK_FAILS="$FIX_ROLLBACK_FAILS
+[$_code] $1"; }
 fix_rollback_item() {
     _code=$1
     _dir="$FIX_BACKUP_DIR/$_code"
@@ -1198,28 +1360,37 @@ fix_rollback_item() {
 
     # DBMS SQL 원복은 파일 원복과 메커니즘이 완전히 달라(DB_* 접속 환경변수를 이용해 실제 SQL을
     # 재실행) 별도로 먼저 처리한다. 같은 항목 안에서 여러 SQL을 순서대로 큐에 넣었을 수 있으므로
-    # (예: 계정 3개를 순서대로 잠금) 적용 역순(번호 내림차순)으로 실행한다.
+    # (예: 계정 3개를 순서대로 잠금) 적용 역순(번호 내림차순)으로 실행한다. "--" 로 시작하는 큐는
+    # 원복 SQL 이 없다는 기록이라 실행하지 않고 원복 불가로 보고한다.
     _sqldir="$_dir/dbsql"
     if [ -d "$_sqldir" ]; then
         for _sqlfile in $(ls "$_sqldir" 2>/dev/null | sort -r); do
             _sql=$(cat "$_sqldir/$_sqlfile")
-            case "$_sqlfile" in
-                *.mysql.sql) mysql_query "$_sql" >/dev/null 2>&1 ;;
-                *.postgres.sql) psql_query "$_sql" >/dev/null 2>&1 ;;
-                *.oracle.sql) oracle_query "$_sql" >/dev/null 2>&1 ;;
+            case "$_sql" in
+                --*) _rb_fail "SQL 원복 불가(기록만 있음): $(printf '%s' "$_sql" | head -n1)"; continue ;;
             esac
+            _rc=0
+            case "$_sqlfile" in
+                *.mysql.sql) mysql_query "$_sql" >/dev/null 2>&1 || _rc=1 ;;
+                *.postgres.sql) psql_query "$_sql" >/dev/null 2>&1 || _rc=1 ;;
+                *.oracle.sql) oracle_query "$_sql" >/dev/null 2>&1 || _rc=1 ;;
+            esac
+            [ "$_rc" -eq 0 ] || _rb_fail "SQL 원복 실패: $(printf '%s' "$_sql" | head -n1)"
         done
     fi
 
-    find "$_dir" -type f | while IFS= read -r _bak; do
+    _baklist=$(find "$_dir" -type f 2>/dev/null)
+    while IFS= read -r _bak; do
+        [ -z "$_bak" ] && continue
         case "$_bak" in
-            */dbsql/*)
-                : # 위에서 이미 처리함
+            */dbsql/*|*/_services/*)
+                : # 따로 처리
                 ;;
             *.WAS_ABSENT)
                 _orig="/${_bak#"$_dir"/}"
                 _orig="${_orig%.WAS_ABSENT}"
-                rm -f "$_orig"
+                if [ -d "$_orig" ]; then rmdir "$_orig" 2>/dev/null || _rb_fail "조치가 만든 디렉터리를 지우지 못함(비어 있지 않음): $_orig"
+                else rm -f "$_orig" || _rb_fail "조치가 만든 파일 삭제 실패: $_orig"; fi
                 ;;
             *.DIRMETA)
                 _orig="/${_bak#"$_dir"/}"
@@ -1227,8 +1398,7 @@ fix_rollback_item() {
                 if [ -d "$_orig" ]; then
                     _owner=$(sed -n '1p' "$_bak")
                     _perm=$(sed -n '2p' "$_bak")
-                    chown "$_owner" "$_orig" 2>/dev/null
-                    chmod "$_perm" "$_orig" 2>/dev/null
+                    chown "$_owner" "$_orig" 2>/dev/null && chmod "$_perm" "$_orig" 2>/dev/null || _rb_fail "디렉터리 소유자/권한 원복 실패: $_orig"
                 fi
                 ;;
             *.TARBALL.tgz)
@@ -1236,14 +1406,27 @@ fix_rollback_item() {
                 _orig="${_orig%.TARBALL.tgz}"
                 _origparent=$(dirname "$_orig")
                 mkdir -p "$_origparent"
-                (cd "$_origparent" 2>/dev/null && tar xzf "$_bak")
+                (cd "$_origparent" 2>/dev/null && tar xzf "$_bak") || _rb_fail "삭제된 경로 복원 실패: $_orig"
                 ;;
             *)
                 _orig="/${_bak#"$_dir"/}"
-                cp -p "$_bak" "$_orig" 2>/dev/null
+                cp -p "$_bak" "$_orig" 2>/dev/null || _rb_fail "파일 원복 실패: $_orig"
                 ;;
         esac
-    done
+    done <<EOF
+$_baklist
+EOF
+
+    # 서비스 상태는 설정 파일을 되돌린 뒤 마지막에 되살린다(fix_service_disable 가 기록)
+    if [ -d "$_dir/_services" ] && command -v systemctl >/dev/null 2>&1; then
+        for _sf in "$_dir/_services"/*; do
+            [ -f "$_sf" ] || continue
+            _unit=$(basename "$_sf")
+            _was_enabled=$(sed -n '1p' "$_sf"); _was_active=$(sed -n '2p' "$_sf")
+            [ "$_was_enabled" = "enabled" ] && { systemctl enable "$_unit" >/dev/null 2>&1 || _rb_fail "서비스 enable 원복 실패: $_unit"; }
+            [ "$_was_active" = "active" ] && { systemctl start "$_unit" >/dev/null 2>&1 || _rb_fail "서비스 기동 원복 실패: $_unit"; }
+        done
+    fi
 }
 
 # fix_set_owner_perm <파일> <소유자> <권한> — check_owner_perm 과 짝을 이루는 조치 헬퍼.
@@ -1270,6 +1453,14 @@ fix_service_disable() {
     if command -v systemctl >/dev/null 2>&1; then
         for _u in "$@"; do
             systemctl list-unit-files "$_u" >/dev/null 2>&1 || continue
+            # 원복용으로 원래 상태(enabled/active)를 기록한다 - 예전에는 기록하지 않아 원복해도 서비스가 다시
+            # 켜지지 않았다. 같은 항목에서 이미 기록했으면 첫 기록(조치 전 상태)을 유지한다.
+            _sd="$FIX_BACKUP_DIR/$FIX_CODE/_services"
+            if [ ! -f "$_sd/$_u" ]; then
+                mkdir -p "$_sd" 2>/dev/null || fix_abort_item "서비스 상태 백업 디렉터리 생성 실패: $_sd"
+                { systemctl is-enabled "$_u" 2>/dev/null | head -n1; systemctl is-active "$_u" 2>/dev/null | head -n1; } > "$_sd/$_u" \
+                    || fix_abort_item "서비스 상태 백업 실패: $_u"
+            fi
             systemctl stop "$_u" 2>/dev/null
             systemctl disable "$_u" 2>/dev/null && _ok=1
         done
@@ -1329,6 +1520,15 @@ fix_rollback_all() {
         log_error "$_backup_dir 를 찾을 수 없습니다."
         return 1
     fi
+    # 다른 호스트에서 만든 백업을 이 호스트에 덮어쓰는 사고 방지(폴더 이름 규칙: <host>_<카테고리>_fix_<시각>)
+    _rb_host=$(basename "$_run_dir" | sed 's/_[0-9][0-9]_fix_.*$//')
+    _this_host=$(hostname 2>/dev/null || echo unknown-host)
+    if [ "$_rb_host" != "$_this_host" ]; then
+        log_warn "이 백업은 다른 호스트($_rb_host)에서 만든 것으로 보입니다(현재: $_this_host)."
+        fix_confirm_tty "그래도 이 호스트에 원복하시겠습니까?" || { echo "원복하지 않았습니다."; return 1; }
+    fi
+    # 조치 이후 경과 시간이 길면 그 사이의 정상적인 설정 변경까지 되돌리게 된다 - 알리고 진행한다
+    log_warn "원복은 조치 직전 상태로 덮어씁니다. 조치 이후에 사람이 바꾼 설정이 있으면 함께 되돌아갑니다."
     _codes=""
     for _code_dir in "$_backup_dir"/*/; do
         [ -d "$_code_dir" ] || continue
@@ -1336,8 +1536,14 @@ fix_rollback_all() {
 $(basename "$_code_dir")"
     done
     _codes=$(printf '%s\n' "$_codes" | grep -v '^$' | sort -r)
+    FIX_ROLLBACK_FAILS=""
     for _code in $_codes; do
+        _before_fails=$FIX_ROLLBACK_FAILS
         FIX_BACKUP_DIR="$_backup_dir" fix_rollback_item "$_code"
-        echo "원복 완료: $_code"
+        if [ "$_before_fails" = "$FIX_ROLLBACK_FAILS" ]; then echo "원복 완료: $_code"; else echo "원복 일부 실패: $_code"; fi
     done
+    if [ -n "$FIX_ROLLBACK_FAILS" ]; then
+        log_error "되돌리지 못한 항목이 있습니다 - 수동 확인 필요:$FIX_ROLLBACK_FAILS"
+        return 1
+    fi
 }

@@ -119,7 +119,7 @@ try {
         if ($grade -eq "manual") {
             Write-Host "[$code] $title"
             Write-Host "  등급: manual (자동 조치 없음) — 가이드 조치 방법: $($meta.remediation)"
-            "$code`tmanual`tMANUAL`t자동 조치 없음(가이드 조치 방법 안내만)" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+            "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`tmanual`tMANUAL`t자동 조치 없음(가이드 조치 방법 안내만)" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
             $nManual++
             continue
         }
@@ -130,7 +130,7 @@ try {
         if (-not (Test-Path $fixFile)) {
             Write-Host "[$code] $title"
             Write-Host "  등급: $grade 이나 조치 스크립트 미구현 — 건너뜀"
-            "$code`t$grade`tSKIPPED`t조치 스크립트 미구현" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+            "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`tSKIPPED`t조치 스크립트 미구현" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
             $nSkipped++
             continue
         }
@@ -145,7 +145,7 @@ try {
         if ($grade -eq "confirm") {
             if (-not (Read-FixConfirm -Prompt "[$code] $title`n  등급: confirm — 실제로 적용하시겠습니까? [y/N]")) {
                 Write-Host "  건너뜀 (사용자 미확인)"
-                "$code`t$grade`tDECLINED`t사용자가 확인하지 않음" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`tDECLINED`t사용자가 확인하지 않음" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
                 $nDeclined++
                 continue
             }
@@ -174,19 +174,23 @@ try {
         if (($Global:FixStatus -eq "APPLIED" -or $Global:FixStatus -eq "NA") -and $Global:CheckStatus -ne "VULN" -and $Global:CheckStatus -ne "ERROR") {
             Write-Host "[$code] $title"
             Write-Host "  적용 완료 — 재검증 결과: $($Global:CheckStatus) ($($Global:FixDetail))"
-            "$code`t$grade`tAPPLIED`t$($Global:FixDetail) (recheck=$($Global:CheckStatus))" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+            "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`tAPPLIED`t$($Global:FixDetail) (recheck=$($Global:CheckStatus))" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
             $nApplied++
         } else {
             Write-Host "[$code] $title"
             Write-Host "  적용 실패 또는 재검증 실패(FixStatus=$($Global:FixStatus), 재검증=$($Global:CheckStatus)) — 원복 중"
+            # 실제로 되돌리지 못한 부분이 있으면 FAILED_NOT_ROLLED_BACK 으로 정직하게 기록한다(lib/Common.psm1 Add-FixRollbackFailure)
+            $Global:FixRollbackFailures = @()
             Restore-FixItem -Code $code
-            "$code`t$grade`tFAILED_ROLLED_BACK`tFixStatus=$($Global:FixStatus) detail=$($Global:FixDetail) recheck=$($Global:CheckStatus)" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+            $rbs = if (@($Global:FixRollbackFailures).Count -eq 0) { "FAILED_ROLLED_BACK" } else { "FAILED_NOT_ROLLED_BACK" }
+            if ($rbs -eq "FAILED_NOT_ROLLED_BACK") { Write-Host "  원복하지 못한 부분(수동 확인 필요): $($Global:FixRollbackFailures -join ' / ')" -ForegroundColor Yellow }
+            "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`t$rbs`tFixStatus=$($Global:FixStatus) detail=$($Global:FixDetail) recheck=$($Global:CheckStatus) $($Global:FixRollbackFailures -join ' / ')" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
             $nFailed++
         }
         Remove-Variable -Name FixCode -Scope Global -ErrorAction SilentlyContinue
         if ($abortRun) {
             Write-Host "백업 실패로 조치 실행을 중단합니다 — 이 항목은 원복했고 이후 항목은 변경하지 않습니다." -ForegroundColor Red
-            "$code`t$grade`tABORTED`t백업 실패로 실행 중단(이 항목 원복)" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+            "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`tABORTED`t백업 실패로 실행 중단(이 항목 원복)" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
             break
         }
     }

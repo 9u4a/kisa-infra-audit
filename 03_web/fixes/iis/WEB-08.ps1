@@ -1,4 +1,4 @@
-﻿# WEB-08 (하) 웹 서비스 파일 업로드 및 다운로드 용량 제한 [IIS] — 조치 [fix: auto]
+﻿# WEB-08 (하) 웹 서비스 파일 업로드 및 다운로드 용량 제한 [IIS] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # 사실상 무제한(4GB 근접)으로 설정된 사이트를 IIS 기본값(30000000바이트≈28.6MB)으로 되돌린다.
 
 if (-not (Test-IisAvailable)) {

@@ -1,4 +1,4 @@
-﻿# W-41 (중) NTP 및 시각 동기화 설정 [fix: auto]
+﻿# W-41 (중) NTP 및 시각 동기화 설정 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # checks/W-41.ps1: 양호 = W32Time 구동 중 + NtpServer 설정. 조직별 내부 NTP 서버 주소는
 # 스크립트가 알 수 없으므로, Windows 기본 내장 시간 서버(time.windows.com)를 사용한다 -
 # 조직 정책상 다른 서버를 써야 하면 이 값은 언제든 재설정 가능한 일반 값이라 U-28 류의

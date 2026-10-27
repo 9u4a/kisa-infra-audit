@@ -19,6 +19,8 @@ foreach ($g in $subcats) {
 }
 
 $failed = @()
+# 원복 경로가 없는 자원 - 원복 시 "원복 불가"로 정직하게 보고되도록 변경 직전에 표시(lib/Common.psm1)
+Register-FixNoRollback -Reason "감사 정책(auditpol) - 변경 전 값은 changes.log 상세 참고"
 foreach ($g in $subcats) {
     & auditpol.exe /set /subcategory:"$g" /success:enable /failure:enable 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { $failed += $g }

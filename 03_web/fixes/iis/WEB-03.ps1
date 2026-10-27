@@ -1,4 +1,4 @@
-﻿# WEB-03 (상) 비밀번호 파일 권한 관리 [IIS] — 조치 [fix: auto]
+﻿# WEB-03 (상) 비밀번호 파일 권한 관리 [IIS] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # checks/iis/WEB-03.ps1 과 동일한 SAM 파일에서 일반 사용자 ACE 만 제거한다.
 
 if (-not (Test-IisAvailable)) {

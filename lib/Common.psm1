@@ -402,8 +402,13 @@ function New-FixOutputDir {
     New-PrivateDirectory -Path $Global:FixOutDir
     New-Item -ItemType Directory -Force -Path $Global:FixBackupDir | Out-Null
     $Global:FixLog = Join-Path $Global:FixOutDir "changes.log"
-    New-Item -ItemType File -Force -Path $Global:FixLog | Out-Null
+    # 감사 로그(운영 안전 기준 F6): 누가 언제 어느 컴퓨터에서 바꿨는지 첫 줄에 남긴다. 각 기록 줄 앞에는
+    # fix.ps1 이 시각을 붙인다(형식: 시각<TAB>코드<TAB>등급<TAB>결과<TAB>상세).
+    "# 조치 실행 시작 $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') / 컴퓨터 $($env:COMPUTERNAME) / 실행자 $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) / 도구 v$($Script:ToolVersion)" |
+        Out-File -FilePath $Global:FixLog -Encoding utf8
     $Global:FixSecPolicyBackupFile = $null
+    $Global:FixSecPolicyCodes = @()
+    $Global:FixRollbackFailures = @()
     return $Global:FixOutDir
 }
 
@@ -523,7 +528,34 @@ function Backup-FixRegistryValue {
             throw "[백업 실패] 기존 레지스트리 값을 읽을 수 없음($Path\$Name): $($_.Exception.Message)"
         }
     }
-    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Path = $Path; Name = $Name; Existed = $existed; Value = $value; Kind = $kind }))
+    # 자동 로그온 비밀번호(W-52/PC-12 의 DefaultPassword)처럼 비밀값은 평문으로 백업 파일에 남기지 않는다 -
+    # DPAPI(ConvertFrom-SecureString)로 암호화해 같은 계정·같은 컴퓨터에서만 복호화되게 한다.
+    $protected = $false
+    if ($existed -and $Name -match 'Password' -and $value) {
+        $ss = New-Object System.Security.SecureString
+        foreach ($ch in "$value".ToCharArray()) { $ss.AppendChar($ch) }
+        $ss.MakeReadOnly()
+        $value = $ss | ConvertFrom-SecureString
+        $ss.Dispose()
+        $protected = $true
+    }
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Path = $Path; Name = $Name; Existed = $existed; Value = $value; Kind = $kind; Protected = $protected }))
+}
+
+function Add-FixRollbackFailure {
+    <# 원복 실패/불가를 누적한다(운영 안전 기준 F4). 예전 Restore-* 는 모든 오류를 catch { } 로 삼키고 fix.ps1 은
+       항상 "원복됨"으로 기록해, 실제로 되돌아가지 않은 변경을 운영자가 알 수 없었다 #>
+    param([Parameter(Mandatory)][string]$Message)
+    $Global:FixRollbackFailures = @($Global:FixRollbackFailures) + "[$($Global:FixRollbackCode)] $Message"
+}
+
+function Register-FixNoRollback {
+    <# 표준 백업 형식이 없는 자원(DNS 영역·auditpol·이벤트 로그 크기·공유 삭제·IIS 컬렉션 등)을 바꾸는 조치가
+       변경 전에 호출한다. Restore-FixItem 이 이 표시를 보고 "원복 불가"로 보고한다 #>
+    param([Parameter(Mandatory)][string]$Reason)
+    $f = Join-Path (Get-FixItemBackupDir) "_norollback.txt"
+    try { Add-Content -Path $f -Value $Reason -Encoding UTF8 -ErrorAction Stop }
+    catch { throw "[백업 실패] 원복 불가 표시 기록 실패: $($_.Exception.Message)" }
 }
 
 function Restore-FixRegistryBackup {
@@ -531,12 +563,21 @@ function Restore-FixRegistryBackup {
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     try {
         if ($o.Existed) {
-            if (-not (Test-Path -LiteralPath $o.Path)) { New-Item -Path $o.Path -Force | Out-Null }
-            New-ItemProperty -Path $o.Path -Name $o.Name -PropertyType $o.Kind -Value $o.Value -Force | Out-Null
+            $value = $o.Value
+            if ($o.Protected) {
+                # DPAPI 로 보호해 둔 값(자동 로그온 비밀번호 등) - 같은 계정·같은 컴퓨터에서만 복호화된다
+                $ss = ConvertTo-SecureString -String $o.Value -ErrorAction Stop
+                $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($ss)
+                try { $value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+                finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+            }
+            if (-not (Test-Path -LiteralPath $o.Path)) { New-Item -Path $o.Path -Force -ErrorAction Stop | Out-Null }
+            New-ItemProperty -Path $o.Path -Name $o.Name -PropertyType $o.Kind -Value $value -Force -ErrorAction Stop | Out-Null
         } elseif (Test-Path -LiteralPath $o.Path) {
-            Remove-ItemProperty -Path $o.Path -Name $o.Name -ErrorAction SilentlyContinue
+            $item = Get-Item -LiteralPath $o.Path -ErrorAction Stop
+            if ($item.GetValueNames() -contains $o.Name) { Remove-ItemProperty -Path $o.Path -Name $o.Name -ErrorAction Stop }
         }
-    } catch { }
+    } catch { Add-FixRollbackFailure "레지스트리 원복 실패 $($o.Path)\$($o.Name): $($_.Exception.Message)" }
 }
 
 function Set-FixRegistryValue {
@@ -584,9 +625,9 @@ function Restore-FixServiceBackup {
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     if (-not $o.Found) { return }
     try {
-        Set-Service -Name $o.Name -StartupType $o.StartType -ErrorAction SilentlyContinue
-        if ($o.Status -eq "Running") { Start-Service -Name $o.Name -ErrorAction SilentlyContinue }
-    } catch { }
+        Set-Service -Name $o.Name -StartupType $o.StartType -ErrorAction Stop
+        if ($o.Status -eq "Running") { Start-Service -Name $o.Name -ErrorAction Stop }
+    } catch { Add-FixRollbackFailure "서비스 원복 실패 $($o.Name): $($_.Exception.Message)" }
 }
 
 function Disable-FixService {
@@ -628,9 +669,9 @@ function Restore-FixLocalAccountBackup {
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     if (-not $o.Found) { return }
     try {
-        if ($o.Enabled) { Enable-LocalUser -Name $o.Name -ErrorAction SilentlyContinue }
-        else { Disable-LocalUser -Name $o.Name -ErrorAction SilentlyContinue }
-    } catch { }
+        if ($o.Enabled) { Enable-LocalUser -Name $o.Name -ErrorAction Stop }
+        else { Disable-LocalUser -Name $o.Name -ErrorAction Stop }
+    } catch { Add-FixRollbackFailure "계정 상태 원복 실패 $($o.Name): $($_.Exception.Message)" }
 }
 
 function Set-FixLocalAccountDisabled {
@@ -683,8 +724,10 @@ function Restore-FixPathRemoveBackup {
     $src = $MetaFile -replace '\.origpath\.txt$', ''
     if (-not (Test-Path -LiteralPath $src)) { return }
     $parent = Split-Path -Parent $orig
-    if ($parent -and -not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
-    Copy-Item -LiteralPath $src -Destination $orig -Recurse -Force
+    try {
+        if ($parent -and -not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Force -Path $parent -ErrorAction Stop | Out-Null }
+        Copy-Item -LiteralPath $src -Destination $orig -Recurse -Force -ErrorAction Stop
+    } catch { Add-FixRollbackFailure "삭제된 경로 복원 실패 ${orig}: $($_.Exception.Message)" }
 }
 
 # ---- IIS 애플리케이션 풀 identity 백업/설정/원복 (WEB-09) --------------------------
@@ -702,7 +745,8 @@ function Restore-FixAppPoolIdentityBackup {
     param([Parameter(Mandatory)][string]$File)
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     if (-not $o.IdentityType) { return }
-    try { Set-ItemProperty "IIS:\AppPools\$($o.PoolName)" -Name processModel.identityType -Value $o.IdentityType -ErrorAction SilentlyContinue } catch { }
+    try { Set-ItemProperty "IIS:\AppPools\$($o.PoolName)" -Name processModel.identityType -Value $o.IdentityType -ErrorAction Stop }
+    catch { Add-FixRollbackFailure "앱 풀 identity 원복 실패 $($o.PoolName): $($_.Exception.Message)" }
 }
 
 function Set-FixAppPoolIdentity {
@@ -743,8 +787,8 @@ function Restore-FixWebConfigPropertyBackup {
     param([Parameter(Mandatory)][string]$File)
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     try {
-        Set-WebConfigurationProperty -Filter $o.Filter -Name $o.Name -Value $o.Value -PSPath $o.PSPath -ErrorAction SilentlyContinue
-    } catch { }
+        Set-WebConfigurationProperty -Filter $o.Filter -Name $o.Name -Value $o.Value -PSPath $o.PSPath -ErrorAction Stop
+    } catch { Add-FixRollbackFailure "IIS 설정 원복 실패 $($o.PSPath) [$($o.Filter)] $($o.Name): $($_.Exception.Message)" }
 }
 
 function Set-FixWebConfigProperty {
@@ -781,7 +825,82 @@ function Restore-FixFirewallProfilesBackup {
     param([Parameter(Mandatory)][string]$File)
     $items = @(Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json)
     foreach ($p in $items) {
-        try { Set-NetFirewallProfile -Name $p.Name -Enabled $p.Enabled -ErrorAction SilentlyContinue } catch { }
+        try { Set-NetFirewallProfile -Name $p.Name -Enabled $p.Enabled -ErrorAction Stop }
+        catch { Add-FixRollbackFailure "방화벽 프로필 원복 실패 $($p.Name): $($_.Exception.Message)" }
+    }
+}
+
+# ---- 방화벽을 안전하게 켜기 (W-64 / PC-15 / MSSQL D-10, 운영 안전 기준 F3, 1.3.0) --------------
+function Test-FixFirewallPortAllowed {
+    <# 활성화된 인바운드 Allow 규칙이 이 TCP 포트를 명시적으로 허용하는지(또는 프로그램 제한 없는 전체 허용).
+       프로그램 지정 규칙(예: sqlservr.exe Any 포트)은 판별이 모호해 인정하지 않는다 - 보수적으로 "없음" #>
+    param([Parameter(Mandatory)][int]$Port)
+    $filters = @(Get-NetFirewallPortFilter -All -ErrorAction Stop | Where-Object {
+        ($_.Protocol -eq "TCP" -and @($_.LocalPort) -contains "$Port") -or
+        ($_.Protocol -in @("TCP", "Any") -and @($_.LocalPort) -contains "Any")
+    })
+    foreach ($f in $filters) {
+        $r = $f | Get-NetFirewallRule -ErrorAction SilentlyContinue
+        if (-not $r -or "$($r.Enabled)" -ne "True" -or "$($r.Direction)" -ne "Inbound" -or "$($r.Action)" -ne "Allow") { continue }
+        if (@($f.LocalPort) -contains "$Port") { return $true }
+        $app = $r | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
+        if ($app -and "$($app.Program)" -eq "Any") { return $true }
+    }
+    return $false
+}
+
+function Enable-FixFirewallSafely {
+    <# 예전 조치는 "Remote Desktop" 같은 표시 이름(DisplayGroup)으로 원격 관리 규칙을 켰는데, 표시 이름은 OS
+       언어에 따라 번역되어 한글 Windows 에서는 아무 규칙도 켜지지 않은 채 방화벽을 켰다(오류도 삼킴). 또 비표준
+       RDP 포트·업무 포트(1433 등)는 확인하지 않았다.
+       이제: ① 쓰고 있는 원격 관리(RDP 사용 시 / WinRM 실행 시)의 규칙 그룹만 리소스 ID 로 켜고(켠 규칙은 원복
+       대상으로 기록) ② 현재 RDP 포트·WinRM 리스너 포트·호출부가 지정한 업무 포트를 허용하는 활성 인바운드
+       규칙이 각각 있는지 확인해 ③ 하나라도 없으면 방화벽을 켜지 않는다(ERROR) #>
+    param([int[]]$RequiredPorts = @(), [string]$Note = "")
+    $ports = @($RequiredPorts | Where-Object { $_ })
+    $groups = @()
+    $ts = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -ErrorAction SilentlyContinue
+    if ($ts -and $ts.fDenyTSConnections -eq 0) {
+        $groups += '@FirewallAPI.dll,-28752'
+        $rdpPort = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name PortNumber -ErrorAction SilentlyContinue).PortNumber
+        $ports += $(if ($rdpPort) { [int]$rdpPort } else { 3389 })
+    }
+    $winrm = Get-Service -Name WinRM -ErrorAction SilentlyContinue
+    if ($winrm -and $winrm.Status -eq "Running") {
+        $groups += '@FirewallAPI.dll,-30267'
+        $lp = @(Get-ChildItem WSMan:\localhost\Listener -ErrorAction SilentlyContinue | ForEach-Object {
+            ($_ | Get-ChildItem -ErrorAction SilentlyContinue | Where-Object Name -eq "Port").Value })
+        $ports += $(if ($lp.Count -gt 0) { $lp | ForEach-Object { [int]$_ } } else { 5985 })
+    }
+
+    try { $before = Get-NetFirewallProfile -ErrorAction Stop | Select-Object Name, Enabled }
+    catch { $Global:FixStatus = "ERROR"; $Global:FixDetail = "Get-NetFirewallProfile 실행 실패: $($_.Exception.Message)"; $Global:FixEvidence = ""; return }
+
+    # 켜기 전에 백업(프로필 상태 + 이번에 새로 켤 규칙 목록) - 실패하면 "[백업 실패]" 예외로 중단
+    Backup-FixFirewallProfiles | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "firewall"
+    $toEnable = @(foreach ($g in $groups) { Get-NetFirewallRule -Group $g -ErrorAction SilentlyContinue | Where-Object { "$($_.Enabled)" -ne "True" } })
+    $rulesFile = Join-Path $dir "rules-enabled.txt"
+    if (-not (Test-Path -LiteralPath $rulesFile)) {
+        try { @($toEnable | ForEach-Object { $_.Name }) | Set-Content -Path $rulesFile -Encoding UTF8 -ErrorAction Stop }
+        catch { throw "[백업 실패] 방화벽 규칙 목록 기록 실패: $($_.Exception.Message)" }
+    }
+    foreach ($r in $toEnable) { Enable-NetFirewallRule -Name $r.Name -ErrorAction SilentlyContinue }
+
+    $missing = @($ports | Select-Object -Unique | Where-Object { -not (Test-FixFirewallPortAllowed -Port $_) })
+    if ($missing.Count -gt 0) {
+        $Global:FixStatus = "ERROR"
+        $Global:FixDetail = "방화벽을 켜지 않음 - 다음 포트를 허용하는 활성 인바운드 규칙이 없어 켜는 즉시 접속이 끊길 수 있음: TCP $($missing -join ', '). 허용 규칙(필요 시 허용 IP 지정)을 먼저 만든 뒤 다시 실행"
+        $Global:FixEvidence = "변경 전: " + (($before | ForEach-Object { "$($_.Name)=$($_.Enabled)" }) -join ", ")
+        return
+    }
+    try {
+        Set-NetFirewallProfile -All -Enabled True -ErrorAction Stop
+        $Global:FixStatus = "APPLIED"
+        $Global:FixDetail = "모든 방화벽 프로필을 사용으로 설정함(허용 규칙 확인한 포트: TCP $((@($ports | Select-Object -Unique)) -join ', '), 새로 켠 원격 관리 규칙 $($toEnable.Count)개 - 원복 시 함께 되돌림)$Note"
+        $Global:FixEvidence = "변경 전: " + (($before | ForEach-Object { "$($_.Name)=$($_.Enabled)" }) -join ", ")
+    } catch {
+        $Global:FixStatus = "ERROR"; $Global:FixDetail = "Set-NetFirewallProfile 실패: $($_.Exception.Message)"; $Global:FixEvidence = ""
     }
 }
 
@@ -801,10 +920,10 @@ function Restore-FixAclBackup {
     param([Parameter(Mandatory)][string]$File)
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     try {
-        $acl = Get-Acl -Path $o.Path
+        $acl = Get-Acl -Path $o.Path -ErrorAction Stop
         $acl.SetSecurityDescriptorSddlForm($o.Sddl)
-        Set-Acl -Path $o.Path -AclObject $acl
-    } catch { }
+        Set-Acl -Path $o.Path -AclObject $acl -ErrorAction Stop
+    } catch { Add-FixRollbackFailure "ACL 원복 실패 $($o.Path): $($_.Exception.Message)" }
 }
 
 function Remove-FixAclIdentity {
@@ -841,8 +960,8 @@ function Restore-FixShareBackup {
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     foreach ($a in @($o.Access)) {
         try {
-            Grant-SmbShareAccess -Name $o.ShareName -AccountName $a.AccountName -AccessRight $a.AccessRight -Force -ErrorAction SilentlyContinue | Out-Null
-        } catch { }
+            Grant-SmbShareAccess -Name $o.ShareName -AccountName $a.AccountName -AccessRight $a.AccessRight -Force -ErrorAction Stop | Out-Null
+        } catch { Add-FixRollbackFailure "공유 권한 원복 실패 $($o.ShareName)/$($a.AccountName): $($_.Exception.Message)" }
     }
 }
 
@@ -888,6 +1007,8 @@ function Set-FixSecPolicyValue {
        $Values 는 그 섹션에 적용할 key=value 해시테이블(여러 개 가능) #>
     param([Parameter(Mandatory)][string]$Section, [Parameter(Mandatory)][hashtable]$Values)
     Backup-FixSecPolicy | Out-Null
+    # 이 항목이 보안 정책을 바꿨음을 기록 - 항목 단위 원복 불가를 Restore-FixItem 이 정직하게 보고하도록
+    $Global:FixSecPolicyCodes = @($Global:FixSecPolicyCodes) + $Global:FixCode
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "kisa-secedit-apply-$PID.inf"
     $lines = @("[Unicode]", "Unicode=yes", "[$Section]")
     foreach ($k in $Values.Keys) { $lines += "$k = $($Values[$k])" }
@@ -921,6 +1042,7 @@ function Restore-FixSecPolicyBackup {
     if (-not $Global:FixSecPolicyBackupFile -or -not (Test-Path $Global:FixSecPolicyBackupFile)) { return }
     $db = Join-Path ([System.IO.Path]::GetTempPath()) "kisa-secedit-rollback-$PID.sdb"
     & secedit /configure /db $db /cfg $Global:FixSecPolicyBackupFile /areas SECURITYPOLICY, USER_RIGHTS /quiet | Out-Null
+    if ($LASTEXITCODE -ne 0) { Add-FixRollbackFailure "보안 정책(secedit) 스냅샷 재적용 실패(exit=$LASTEXITCODE)" }
     Remove-Item -Path $db -Force -ErrorAction SilentlyContinue
 }
 
@@ -941,7 +1063,9 @@ function Restore-FixDbSqlBackup {
     $files = Get-ChildItem -Path $Dir -Filter *.sql -ErrorAction SilentlyContinue | Sort-Object Name -Descending
     foreach ($f in $files) {
         $sql = Get-Content -Raw -Path $f.FullName
+        if ($sql.TrimStart().StartsWith("--")) { Add-FixRollbackFailure "SQL 원복 불가(기록만 있음): $($sql.Trim())"; continue }
         Invoke-MssqlQuery -Sql $sql | Out-Null
+        if (-not $Global:DbQueryOk) { Add-FixRollbackFailure "SQL 원복 실패: $($sql.Trim())" }
     }
 }
 
@@ -950,8 +1074,18 @@ function Restore-FixItem {
     <# 해당 코드가 fix_backup 한 registry/service/acl/share 자원을 전부 원복한다. secedit
        스냅샷은 여기서 건드리지 않는다(위 설명 참고 - Invoke-FixRollbackAll 에서만 처리) #>
     param([Parameter(Mandatory)][string]$Code)
+    $Global:FixRollbackCode = $Code
     $dir = Join-Path $Global:FixBackupDir $Code
+    # 보안 정책(secedit)은 실행당 스냅샷 1개라 항목 단위로 되돌릴 수 없다 - 예전에는 아무 말 없이 건너뛰고
+    # fix.ps1 이 "원복됨"으로 기록했다. 전체 -Rollback 으로만 되돌릴 수 있음을 알린다.
+    if (@($Global:FixSecPolicyCodes) -contains $Code) {
+        Add-FixRollbackFailure "보안 정책(secedit) 변경은 항목 단위 원복 불가 - '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함"
+    }
     if (-not (Test-Path $dir)) { return }
+    $noRb = Join-Path $dir "_norollback.txt"
+    if (Test-Path -LiteralPath $noRb) {
+        Get-Content -Path $noRb -Encoding UTF8 | Where-Object { $_ } | ForEach-Object { Add-FixRollbackFailure "원복 경로 없음: $_" }
+    }
     Get-ChildItem -Path (Join-Path $dir "registry") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixRegistryBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "service") -Filter *.json -ErrorAction SilentlyContinue |
@@ -966,6 +1100,13 @@ function Restore-FixItem {
         ForEach-Object { Restore-FixWebConfigPropertyBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "firewall") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixFirewallProfilesBackup -File $_.FullName }
+    $fwRules = Join-Path $dir "firewall\rules-enabled.txt"
+    if (Test-Path -LiteralPath $fwRules) {
+        Get-Content -Path $fwRules -Encoding UTF8 | Where-Object { $_ } | ForEach-Object {
+            try { Disable-NetFirewallRule -Name $_ -ErrorAction Stop }
+            catch { Add-FixRollbackFailure "방화벽 규칙 원복 실패 ${_}: $($_.Exception.Message)" }
+        }
+    }
     Get-ChildItem -Path (Join-Path $dir "remove") -Filter *.origpath.txt -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixPathRemoveBackup -MetaFile $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "apppool") -Filter *.json -ErrorAction SilentlyContinue |
@@ -983,12 +1124,21 @@ function Invoke-FixRollbackAll {
         Write-Log "$backupDir 를 찾을 수 없습니다." "ERROR"
         return
     }
+    # 다른 컴퓨터에서 만든 백업을 이 컴퓨터에 덮어쓰는 사고 방지(폴더 이름 규칙: <컴퓨터>_<카테고리>_fix_<시각>)
+    $rbHost = (Split-Path -Leaf $RunDir) -replace '_\d\d_fix_.*$', ''
+    if ($rbHost -ne $env:COMPUTERNAME) {
+        Write-Warning "이 백업은 다른 컴퓨터($rbHost)에서 만든 것으로 보입니다(현재: $($env:COMPUTERNAME))."
+        if (-not (Read-FixConfirm -Prompt "그래도 이 컴퓨터에 원복하시겠습니까? [y/N]")) { Write-Host "원복하지 않았습니다."; return }
+    }
+    Write-Warning "원복은 조치 직전 상태로 덮어씁니다. 조치 이후에 사람이 바꾼 설정이 있으면 함께 되돌아갑니다."
+    $Global:FixRollbackFailures = @()
     $secPolicyFile = Join-Path $backupDir "_secpolicy\secedit-snapshot.inf"
     if (Test-Path $secPolicyFile) {
         $Global:FixSecPolicyBackupFile = $secPolicyFile
         Restore-FixSecPolicyBackup
-        Write-Host "보안 정책(secedit) 스냅샷 전체 원복 완료"
+        Write-Host "보안 정책(secedit) 스냅샷 전체 원복 시도(결과는 아래 요약 참고)"
     }
+    $Global:FixSecPolicyCodes = @()   # 전체 원복에서는 secedit 를 위에서 통째로 되돌리므로 항목별 경고 불필요
     $Global:FixBackupDir = $backupDir
     # 여러 항목이 같은 파일을 순차적으로 수정했을 수 있으므로 적용 역순(코드 내림차순)으로
     # 원복한다 - 정순으로 처리하면 뒤에 적용된 항목의 백업이 마지막에 덮어써 앞 항목의 조치만
@@ -997,9 +1147,15 @@ function Invoke-FixRollbackAll {
         Where-Object { $_.Name -ne "_secpolicy" } |
         Sort-Object Name -Descending |
         ForEach-Object {
+            $n = @($Global:FixRollbackFailures).Count
             Restore-FixItem -Code $_.Name
-            Write-Host "원복 완료: $($_.Name)"
+            if (@($Global:FixRollbackFailures).Count -eq $n) { Write-Host "원복 완료: $($_.Name)" }
+            else { Write-Host "원복 일부 실패/불가: $($_.Name)" -ForegroundColor Yellow }
         }
+    if (@($Global:FixRollbackFailures).Count -gt 0) {
+        Write-Host "되돌리지 못한 항목이 있습니다 - 수동 확인 필요:" -ForegroundColor Red
+        $Global:FixRollbackFailures | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Confirm-FixPlan, Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Confirm-FixPlan, Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

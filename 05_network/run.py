@@ -68,9 +68,13 @@ def sorted_codes(by_code: dict) -> list[str]:
 
 
 def _load_check_module(path: str, name: str):
+    # 바이트코드 캐시(__pycache__)를 거치지 않고 항상 소스를 직접 컴파일한다. 캐시는 소스 수정 시각을 초
+    # 단위로 비교해, 같은 초 안에 소스가 바뀌면 낡은 판정 로직을 그대로 실행한다(실제로 N-26 이 VULN 대신
+    # GOOD 을 낸 사례 - OneDrive 동기화 폴더에서 발견).
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    with open(path, encoding="utf-8") as f:
+        exec(compile(f.read(), path, "exec"), mod.__dict__)  # noqa: S102 - 저장소 내 check 모듈만 로드
     return mod
 
 

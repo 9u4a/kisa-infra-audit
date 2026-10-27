@@ -45,9 +45,11 @@ def load_guide() -> dict:
 
 
 def _load_module(path: str, name: str):
+    # run.py 와 같은 이유로 바이트코드 캐시를 거치지 않고 소스를 직접 컴파일한다(낡은 캐시 실행 방지).
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    with open(path, encoding="utf-8") as f:
+        exec(compile(f.read(), path, "exec"), mod.__dict__)  # noqa: S102 - 저장소 내 fix 모듈만 로드
     return mod
 
 
@@ -110,6 +112,11 @@ def main() -> None:
         "! 주의: 이 파일은 사람이 검토 후 직접 입력하는 참고용 스크립트이며, 이 도구가 장비에",
         "!       직접 적용하지 않는다. '!' 로 시작하는 주석 중 '[수동 조치 필요]'/'주의:' 로",
         "!       표시된 항목은 placeholder(<...>) 를 실제 값으로 바꾸기 전에는 적용하지 말 것.",
+        "! [원격 적용 안전장치 - 권장] 원격 세션으로 적용한다면 먼저 특권 모드에서 'reload in 10' 을",
+        "!       입력해 10분 뒤 재부팅을 예약할 것 - 적용 중 접속이 끊겨도 10분 뒤 저장 전(이전) 설정으로",
+        "!       돌아온다. 적용 후 새 세션 접속이 확인되면 'reload cancel' 로 반드시 취소할 것(잊으면 재부팅됨).",
+        "! [저장] 마지막의 'write memory' 는 일부러 주석으로 두었다 - 파일 전체를 그대로 붙여넣어도 저장되지",
+        "!       않으며, 새 세션으로 접속·서비스가 정상인지 확인한 뒤에만 직접 입력할 것.",
         "! =============================================================",
         "",
         "configure terminal",
@@ -146,7 +153,9 @@ def main() -> None:
 
     lines.append("")
     lines.append("end")
-    lines.append("write memory")
+    lines.append("! 새 세션으로 접속·서비스가 정상인지 확인한 뒤에만 아래를 직접 입력해 저장할 것(저장 전 재부팅 시 이전 설정으로 돌아감)")
+    lines.append("! reload cancel   (reload in 을 예약했다면)")
+    lines.append("! write memory")
 
     out_file = os.path.join(out_dir, f"remediation_{host}.txt")
     with open(out_file, "w", encoding="utf-8", newline="\n") as f:

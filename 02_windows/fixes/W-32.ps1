@@ -1,4 +1,4 @@
-﻿# W-32 (중) DNS 서비스 구동 점검 (동적 업데이트 설정) [fix: auto]
+﻿# W-32 (중) DNS 서비스 구동 점검 (동적 업데이트 설정) [fix: manual — 1.3.0 재분류, guide.json deviation 참고]
 # checks/W-32.ps1: 취약 = AllowUpdate != 0 인 영역 존재. 가이드 권고값(0=없음)으로 설정한다.
 # W-25 와 동일하게 MicrosoftDNS_Zone 은 CIM(WMI) 클래스라 Restore-FixItem 표준 원복 대상에
 # 포함되지 않는다(02_windows/CLAUDE.md 참고).

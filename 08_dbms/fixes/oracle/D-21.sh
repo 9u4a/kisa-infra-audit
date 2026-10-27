@@ -1,4 +1,4 @@
-# D-21 (중) 인가되지 않은 GRANT OPTION 사용 제한 [Oracle] — 조치 [fix: auto]
+# D-21 (중) 인가되지 않은 GRANT OPTION 사용 제한 [Oracle] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # checks/oracle/D-21.sh 와 동일한 조건(oracle_maintained='N')으로 찾아낸 GRANT OPTION 을
 # 회수한다(REVOKE ... 는 권한 자체와 GRANT OPTION 을 함께 제거하므로, 재부여 시 WITH GRANT
 # OPTION 없이 다시 GRANT 해야 GRANT OPTION 없는 권한만 남는다 - 원복 SQL도 이를 반영).

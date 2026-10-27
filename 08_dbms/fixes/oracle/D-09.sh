@@ -1,4 +1,4 @@
-# D-09 (중) 일정 횟수의 로그인 실패 시 이에 대한 잠금정책 설정 [Oracle] — 조치 [fix: auto]
+# D-09 (중) 일정 횟수의 로그인 실패 시 이에 대한 잠금정책 설정 [Oracle] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 run_fix() {
     before=$(oracle_query "SELECT limit FROM dba_profiles WHERE profile = 'DEFAULT' AND resource_name = 'FAILED_LOGIN_ATTEMPTS';" | tr -d ' \r')
     [ -z "$before" ] && before="DEFAULT"
