@@ -1,8 +1,8 @@
 ﻿# 02_windows/tests/fixtures/apply.ps1 -Mode <vuln|hardened>
 # GitHub Actions windows-latest(매 job마다 새로 생성되는 휘발성 VM)에서만 실행한다 - 실제
-# 개발자 PC에서 이 스크립트를 돌리면 레지스트리가 실제로 바뀐다. W-15(개인키 사용 시 암호
-# 입력)만 명시적으로 vuln/hardened를 가른다 - 기본값(레지스트리 키 없음)이 이미 VULN이라
-# vuln 모드는 아무 것도 하지 않고, hardened만 명시적으로 설정한다.
+# 개발자 PC에서 이 스크립트를 돌리면 레지스트리·서비스가 실제로 바뀐다. 명시적으로 vuln/hardened 를
+# 가르는 항목: W-15(개인키 사용 시 암호 입력 - 기본값이 이미 VULN 이라 hardened 만 설정),
+# W-44(원격 레지스트리 서비스 - vuln 은 기동, hardened 는 중지).
 param(
     [Parameter(Mandatory = $true)][ValidateSet("vuln", "hardened")][string]$Mode
 )
@@ -15,4 +15,13 @@ if ($Mode -eq "hardened") {
     Set-ItemProperty -Path $keyPath -Name "ForceKeyProtection" -Value 2 -Type DWord
 } else {
     if (Test-Path $keyPath) { Remove-ItemProperty -Path $keyPath -Name "ForceKeyProtection" -ErrorAction SilentlyContinue }
+}
+
+# W-44(원격 레지스트리 서비스): 러너 이미지 기본 상태에 기대지 않고 명시적으로 만든다 - 이미지가
+# windows-2025-vs2026 20261021 로 바뀌면서 기본 실행 상태가 달라져 기대값이 깨진 적이 있다(1.3.0 CI).
+if ($Mode -eq "vuln") {
+    Set-Service -Name "RemoteRegistry" -StartupType Manual
+    Start-Service -Name "RemoteRegistry"
+} else {
+    Stop-Service -Name "RemoteRegistry" -Force -ErrorAction SilentlyContinue
 }
