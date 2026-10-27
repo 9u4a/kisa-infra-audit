@@ -14,3 +14,15 @@ if ($Mode -eq "vuln") {
 } else {
     Remove-ItemProperty -Path $keyPath -Name "AutoAdminLogon" -ErrorAction SilentlyContinue
 }
+
+# PC-05(불필요 서비스): 러너 이미지 기본값이나 같은 VM 에서 먼저 도는 02_windows 픽스처(W-44 가
+# RemoteRegistry 를 끔)의 영향을 받지 않도록 상태를 명시한다 - vuln 은 RemoteRegistry 기동,
+# hardened 는 checks/PC-05.ps1 의 점검 대상 서비스를 모두 중지.
+if ($Mode -eq "vuln") {
+    Set-Service -Name "RemoteRegistry" -StartupType Manual
+    Start-Service -Name "RemoteRegistry"
+} else {
+    foreach ($s in @("RemoteRegistry", "SSDPSRV", "upnphost", "WerSvc", "TapiSrv", "Fax")) {
+        Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+    }
+}
