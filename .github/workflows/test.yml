@@ -139,3 +139,64 @@ jobs:
           path: |
             02_windows/tests/fixtures/expected_*.json
             07_pc/tests/fixtures/expected_*.json
+
+  windows-server:
+    # windows-latest 러너(Windows Server, 매 job 새로 만들어지는 휘발성 VM)를 "운영 Windows Server" 대용으로
+    # 써서, 로컬(Windows 11 Home - Windows 컨테이너 불가)에서 할 수 없던 실기 검증을 한다: IIS 설치 후
+    # 진단 회귀 + 조치 실적용·원복, Windows 조치 실적용·원복, 방화벽 안전장치. 대상 호스트와 같은
+    # Windows PowerShell 5.1(shell: powershell)로 실행한다. 도메인 컨트롤러·한글 로캘은 재부팅이 필요해
+    # 이 러너로는 검증할 수 없다.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 환경 확인
+        shell: powershell
+        run: |
+          "PS $($PSVersionTable.PSVersion) / $((Get-CimInstance Win32_OperatingSystem).Caption) / 언어 $((Get-Culture).Name) UI $((Get-UICulture).Name)"
+          "sqlcmd: $((Get-Command sqlcmd -ErrorAction SilentlyContinue).Source)"
+          "SqlLocalDB: $((Get-Command SqlLocalDB -ErrorAction SilentlyContinue).Source)"
+          if (Get-Command SqlLocalDB -ErrorAction SilentlyContinue) { SqlLocalDB info }
+          "MSSQL 서비스: $((Get-Service -Name 'MSSQL*' -ErrorAction SilentlyContinue | ForEach-Object { $_.Name + '=' + $_.Status }) -join ', ')"
+          "Web-Server 기능: $((Get-WindowsFeature Web-Server).InstallState)"
+      - name: IIS 설치
+        shell: powershell
+        run: |
+          Install-WindowsFeature Web-Server, Web-Mgmt-Tools, Web-Scripting-Tools, Web-DAV-Publishing, Web-Includes, Web-Http-Redirect, Web-Filtering, Web-ISAPI-Ext, Web-ISAPI-Filter, Web-CGI | Format-Table -AutoSize
+      - name: IIS 진단 회귀(03_web)
+        if: always()
+        shell: powershell
+        run: |
+          $bootstrap = '${{ github.event.inputs.bootstrap_windows }}' -eq 'true'
+          if ($bootstrap) { .\03_web\tests\run_tests_iis.ps1 -Bootstrap } else { .\03_web\tests\run_tests_iis.ps1 }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: IIS 조치 안전(03_web)
+        if: always()
+        shell: powershell
+        run: |
+          .\03_web\tests\fixtures\apply_iis.ps1 -Mode vuln
+          .\lib\tests\fix_safety_windows.ps1 -Category 03_web
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows 조치 안전(02_windows)
+        if: always()
+        shell: powershell
+        run: |
+          .\lib\tests\fix_safety_windows.ps1 -Category 02_windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: PC 조치 안전(07_pc)
+        if: always()
+        shell: powershell
+        run: |
+          .\lib\tests\fix_safety_windows.ps1 -Category 07_pc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 방화벽 안전장치(W-64/PC-15/D-10)
+        if: always()
+        shell: powershell
+        run: |
+          .\02_windows\tests\firewall_guard.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: bootstrap 산출물 업로드
+        if: ${{ always() && github.event.inputs.bootstrap_windows == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-expected-iis
+          path: 03_web/tests/fixtures/expected_iis_*.json

@@ -889,6 +889,8 @@ function Enable-FixFirewallSafely {
 
     $missing = @($ports | Select-Object -Unique | Where-Object { -not (Test-FixFirewallPortAllowed -Port $_) })
     if ($missing.Count -gt 0) {
+        # 켜지 않기로 했으니 방금 켠 원격 관리 규칙도 되돌린다("변경 없음"으로 보고하면서 규칙만 바뀐 채 남지 않게)
+        foreach ($r in $toEnable) { Disable-NetFirewallRule -Name $r.Name -ErrorAction SilentlyContinue }
         $Global:FixStatus = "ERROR"
         $Global:FixDetail = "방화벽을 켜지 않음 - 다음 포트를 허용하는 활성 인바운드 규칙이 없어 켜는 즉시 접속이 끊길 수 있음: TCP $($missing -join ', '). 허용 규칙(필요 시 허용 IP 지정)을 먼저 만든 뒤 다시 실행"
         $Global:FixEvidence = "변경 전: " + (($before | ForEach-Object { "$($_.Name)=$($_.Enabled)" }) -join ", ")
