@@ -7,7 +7,7 @@ run_fix() {
         FIX_STATUS="ERROR"; FIX_DETAIL="find 명령을 사용할 수 없음"; FIX_EVIDENCE=""
         return
     fi
-    _list=$(find / -xdev \( -nouser -o -nogroup \) 2>/dev/null | head -n 200)
+    _list=$(low_prio find / -xdev \( -nouser -o -nogroup \) 2>/dev/null | head -n 200)
     if [ -z "$_list" ]; then
         FIX_STATUS="APPLIED"; FIX_DETAIL="소유자/그룹 없는 파일이 이미 없음(조치 불필요)"; FIX_EVIDENCE=""
         return

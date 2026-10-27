@@ -13,18 +13,39 @@ if (-not $sites -or $sites.Count -eq 0) {
     return New-CheckResult -Code "WEB-12" -Status "NA" -Detail "구성된 IIS 웹사이트가 없음"
 }
 
-$vuln = @(); $evid = @()
+$vuln = @(); $evid = @(); $manual = @()
 foreach ($site in $sites) {
     $path = Get-IisSitePhysicalPath -SiteName $site
     if (-not $path -or -not (Test-Path $path)) {
         $evid += "[$site] 물리 경로를 찾을 수 없음: $path"
         continue
     }
-    try {
-        $links = Get-ChildItem -Path $path -Recurse -Depth 10 -Force -ErrorAction SilentlyContinue |
-            Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $_.Extension -ieq ".lnk" }
-    } catch {
-        $links = @()
+    # UNC(\\서버\공유, DFS) 콘텐츠는 원격 파일 서버 전체를 순회하게 되므로 검사하지 않고 수동 확인으로 남긴다.
+    if ($path -like '\\*') {
+        $manual += $site
+        $evid += "[$site] 원격 경로($path)라 운영 부하 방지를 위해 순회하지 않음 - 수동 확인 필요"
+        continue
+    }
+    # 링크(정션/심볼릭) 안으로는 들어가지 않는다 - PS 5.1 -Recurse 는 링크를 따라가 다른 폴더·볼륨까지
+    # 순회했다. 직접 큐로 순회하며 링크는 "발견"만 하고, 검사 항목 수에 상한을 둔다.
+    $links = @(); $visited = 0; $limit = 20000; $truncated = $false
+    $queue = New-Object System.Collections.Queue
+    $queue.Enqueue(@($path, 0))
+    while ($queue.Count -gt 0) {
+        $cur = $queue.Dequeue()
+        foreach ($it in @(Get-ChildItem -LiteralPath $cur[0] -Force -ErrorAction SilentlyContinue)) {
+            $visited++
+            if ($visited -gt $limit) { $truncated = $true; break }
+            $isLink = [bool]($it.Attributes -band [IO.FileAttributes]::ReparsePoint)
+            if ($isLink -or $it.Extension -ieq ".lnk") { $links += $it; continue }
+            if ($it.PSIsContainer -and $cur[1] -lt 10) { $queue.Enqueue(@($it.FullName, ($cur[1] + 1))) }
+        }
+        if ($truncated) { break }
+    }
+    if ($truncated -and $links.Count -eq 0) {
+        $manual += $site
+        $evid += "[$site] 항목이 많아 처음 $limit 개만 검사함(링크 없음) - 나머지는 수동 확인 필요"
+        continue
     }
     if ($links -and $links.Count -gt 0) {
         $vuln += $site
@@ -36,5 +57,8 @@ foreach ($site in $sites) {
 
 if ($vuln.Count -gt 0) {
     return New-CheckResult -Code "WEB-12" -Status "VULN" -Detail "심볼릭 링크/바로가기가 존재하는 사이트: $($vuln -join ', ')" -Evidence ($evid -join "`n")
+}
+if ($manual.Count -gt 0) {
+    return New-CheckResult -Code "WEB-12" -Status "MANUAL" -Detail "일부 사이트는 원격 경로이거나 항목이 많아 전체 검사하지 못함: $($manual -join ', ')" -Evidence ($evid -join "`n")
 }
 return New-CheckResult -Code "WEB-12" -Status "GOOD" -Detail "모든 사이트에서 링크/바로가기가 발견되지 않음" -Evidence ($evid -join "`n")

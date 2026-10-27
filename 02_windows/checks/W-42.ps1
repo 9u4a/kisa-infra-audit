@@ -7,6 +7,7 @@
 $logs = @("Application", "Security", "System")
 $violations = @()
 $evidence = @()
+$failed = @()
 
 foreach ($logName in $logs) {
     try {
@@ -16,9 +17,14 @@ foreach ($logName in $logs) {
         if ($maxKb -lt 10240) { $violations += "$logName(${maxKb}KB)" }
     } catch {
         $evidence += "$logName : 조회 실패"
+        $failed += $logName
     }
 }
 
+# Security 로그는 관리자만 조회할 수 있다 - 조회 실패를 위반 없음으로 세면 거짓 GOOD 이 된다
+if ($violations.Count -eq 0 -and $failed.Count -gt 0) {
+    return New-CheckResult -Code "W-42" -Status "ERROR" -Detail ("이벤트 로그 설정을 조회하지 못함(관리자 권한 필요): " + ($failed -join ", ")) -Evidence ($evidence -join "`n")
+}
 if ($violations.Count -eq 0) {
     return New-CheckResult -Code "W-42" -Status "GOOD" -Detail "주요 이벤트 로그의 최대 크기가 10,240KB 이상으로 설정됨" -Evidence ($evidence -join "`n")
 } else {

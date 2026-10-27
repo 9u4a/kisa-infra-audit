@@ -48,6 +48,9 @@ $DbmsEngine = "mssql"
 
 Import-Module (Join-Path $LibDir "Common.psm1") -Force
 
+# checks/*.ps1 의 WMI/CIM 조회 시간 제한(운영 안전 기준 S2). 스크립트 범위라 사용자 세션 기본값은 건드리지 않는다.
+$PSDefaultParameterValues = @{ 'Get-CimInstance:OperationTimeoutSec' = 30 }
+
 if (-not (Test-Path $GuideJsonPath)) {
     Write-Error "오류: $GuideJsonPath 가 없습니다. lib/extract_guide.py 를 먼저 실행하세요."
     exit 2
@@ -112,9 +115,18 @@ try {
     Write-Log "진단 시작: 엔진=$DbmsEngine 대상=$($Selected.Count)항목"
 
     # 접속을 항목마다 시도하기 전에 1회만 시험한다 - 실패하면 이후 DB 조회 항목은 접속 없이 ERROR.
+    # sysadmin 이 아니면 카탈로그 일부만 보여(D-03 은 자기 로그인만, D-11/24 는 권한 일부만, D-26 은
+    # 감사 목록이 비어 보임) 거짓 GOOD/VULN 이 난다 - 이 항목들은 ERROR 로 바꾼다.
+    $SysadminOnly = @("D-03", "D-11", "D-24", "D-26")
+    $NotSysadmin = $false
     if (Test-MssqlPreflight) {
         Write-Host "DB 접속    : 사전 점검 성공"
         Write-Log "DB 접속 사전 점검 성공"
+        $sa = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT IS_SRVROLEMEMBER('sysadmin');"
+        if ($Global:DbQueryOk -and "$(@($sa)[0])".Trim() -ne "1") {
+            $NotSysadmin = $true
+            Write-Warning "접속 계정이 sysadmin 이 아닙니다 - $($SysadminOnly -join ', ') 는 전체 정보를 볼 수 없어 ERROR 로 표시합니다."
+        }
     } else {
         Write-Warning "DB 접속 사전 점검 실패 - 계정 잠금 방지를 위해 재시도하지 않고 DB 조회 항목은 ERROR 로 처리합니다: $Global:DbConnFailMsg"
         Write-Log "DB 접속 사전 점검 실패(재시도 안 함): $Global:DbConnFailMsg" "WARN"
@@ -140,6 +152,9 @@ try {
             }
         } else {
             $r = New-CheckResult -Code $code -Status "NA" -Detail "이 항목은 MSSQL 대상이 아니거나 아직 구현되지 않음"
+        }
+        if ($NotSysadmin -and $SysadminOnly -contains $code -and $r.status -in @("GOOD", "VULN")) {
+            $r = New-CheckResult -Code $code -Status "ERROR" -Detail "접속 계정이 sysadmin 이 아니라 전체 정보를 볼 수 없어 판정 불가(일부만 보고 내린 판정: $($r.status))" -Evidence $r.evidence
         }
 
         Show-Progress -Current $n -Total $Selected.Count -Code $code -Title $title -Status $r.status

@@ -39,6 +39,9 @@ $WebEngine = "iis"
 
 Import-Module (Join-Path $LibDir "Common.psm1") -Force
 
+# checks/*.ps1 의 WMI/CIM 조회 시간 제한(운영 안전 기준 S2). 스크립트 범위라 사용자 세션 기본값은 건드리지 않는다.
+$PSDefaultParameterValues = @{ 'Get-CimInstance:OperationTimeoutSec' = 30 }
+
 if (-not (Test-Path $GuideJsonPath)) {
     Write-Error "오류: $GuideJsonPath 가 없습니다. lib/extract_guide.py 를 먼저 실행하세요."
     exit 2
@@ -82,13 +85,19 @@ Write-Log "진단 시작: 엔진=$WebEngine 대상=$($Selected.Count)항목"
 $Results = @()
 $CsvRows = @()
 $n = 0
+$iisUnreadable = Test-IisInstalledButUnreadable
+if ($iisUnreadable) { Write-Log "IIS 가 설치되어 있으나 설정을 읽을 수 없습니다(관리자 권한 필요) - IIS 항목을 ERROR 로 표시합니다." "WARN" }
 foreach ($code in $Selected) {
     $n++
     $meta = $GuideByCode[$code]
     $title = if ($meta) { $meta.title } else { $code }
     $checkFile = Join-Path $ScriptDir "checks\iis\$code.ps1"
 
-    if (Test-Path $checkFile) {
+    if ($iisUnreadable -and (Test-Path $checkFile)) {
+        # IIS 는 설치돼 있으나 설정을 읽을 수 없음 - 예전처럼 "IIS 미설치(NA)"로 숨기지 않는다
+        $r = New-CheckResult -Code $code -Status "ERROR" -Detail "IIS(W3SVC)가 설치되어 있으나 IIS 설정을 읽을 수 없음 - 관리자 권한으로 다시 실행 필요"
+    } elseif (Test-Path $checkFile) {
+        $Global:IisConfigQueryFailed = $false; $Global:IisConfigQueryError = ""
         try {
             $r = & $checkFile
             if (-not $r) {
@@ -96,6 +105,11 @@ foreach ($code in $Selected) {
             }
         } catch {
             $r = New-CheckResult -Code $code -Status "ERROR" -Detail "check 실행 중 예외 발생: $($_.Exception.Message)"
+        }
+        # Get-IisConfigValue 는 조회 실패 시에도 $null(=설정 없음)을 돌려주므로, 그 항목의 GOOD 은
+        # 확인하지 못한 채 내린 판정일 수 있다 - ERROR 로 바꾼다(VULN/MANUAL 은 그대로 둠).
+        if ($Global:IisConfigQueryFailed -and $r.status -eq "GOOD") {
+            $r = New-CheckResult -Code $code -Status "ERROR" -Detail "IIS 설정 조회에 실패해 양호 판정을 확정할 수 없음: $($Global:IisConfigQueryError)" -Evidence $r.evidence
         }
     } else {
         $r = New-CheckResult -Code $code -Status "NA" -Detail "이 항목은 IIS 대상이 아니거나 아직 구현되지 않음"

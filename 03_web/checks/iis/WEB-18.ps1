@@ -7,19 +7,15 @@ if (-not (Test-IisAvailable)) {
     return New-CheckResult -Code "WEB-18" -Status "NA" -Detail "IIS(WebAdministration 모듈)가 설치되어 있지 않음"
 }
 
+# WebDAV 기능 설치 여부는 IIS 전역 모듈 목록(WebDAVModule)으로 확인한다. 예전의 Get-WindowsFeature /
+# Get-WindowsOptionalFeature -Online(DISM)은 수십 초~수 분이 걸리고 Windows Update 등 서비싱 작업과
+# 경합해 대기하거나 실패할 수 있었다(운영 안전 기준 S2). 조회 실패 시 $null → 사이트별 확인으로 진행.
 $featureInstalled = $null
 try {
-    # Windows Server: ServerManager 모듈의 Get-WindowsFeature
-    $feature = Get-WindowsFeature -Name Web-DAV-Publishing -ErrorAction Stop
-    $featureInstalled = ($feature.InstallState -eq "Installed")
+    $mod = Get-WebConfiguration -Filter "system.webServer/globalModules/add[@name='WebDAVModule']" -PSPath "MACHINE/WEBROOT/APPHOST" -ErrorAction Stop
+    $featureInstalled = [bool]$mod
 } catch {
-    try {
-        # Windows 10/11(클라이언트): Get-WindowsOptionalFeature 로 대체 조회
-        $feature = Get-WindowsOptionalFeature -Online -FeatureName IIS-WebDAV -ErrorAction Stop
-        $featureInstalled = ($feature.State -eq "Enabled")
-    } catch {
-        $featureInstalled = $null
-    }
+    $featureInstalled = $null
 }
 
 if ($featureInstalled -eq $false) {

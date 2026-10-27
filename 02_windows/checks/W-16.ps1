@@ -5,6 +5,9 @@
 
 try {
     $shares = Get-SmbShare -ErrorAction Stop | Where-Object { $_.Name -notmatch '\$$' -and $_.Name -ne 'print$' }
+    # DC 의 SYSVOL/NETLOGON 은 Everyone 읽기가 기본 설계(그룹 정책·로그온 스크립트 배포)다 - 취약으로 잡으면
+    # 이를 근거로 한 조치(fixes/W-16)가 도메인 전체 GPO 처리를 깨뜨리므로 판정에서 제외한다.
+    if (Test-IsDomainController) { $shares = $shares | Where-Object { $_.Name -notin @('SYSVOL', 'NETLOGON') } }
 } catch {
     return New-CheckResult -Code "W-16" -Status "ERROR" -Detail "Get-SmbShare 실행 실패: $($_.Exception.Message)"
 }

@@ -13,15 +13,21 @@ run_check() {
         return
     fi
 
-    files=$(find / -xdev -type f \( -perm -04000 -o -perm -02000 \) 2>/dev/null | head -n 100)
+    # root 가 아니면 읽을 수 없는 디렉터리가 조용히 빠져 목록이 불완전해진다.
+    if [ "$(id -u 2>/dev/null)" != "0" ]; then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="파일시스템 전수 검색은 root 권한이 필요함(권한 부족 시 결과가 누락되어 판정 불가)"; CHECK_EVIDENCE=""
+        return
+    fi
+    files=$(low_prio find / -xdev -type f \( -perm -04000 -o -perm -02000 \) 2>/dev/null | head -n 100)
+    excluded=$(scan_excluded_mounts)
 
     if [ -z "$files" ]; then
         CHECK_STATUS="GOOD"
-        CHECK_DETAIL="SUID/SGID 가 설정된 파일이 존재하지 않음"
+        CHECK_DETAIL="SUID/SGID 가 설정된 파일이 존재하지 않음${excluded:+ (루트 파일시스템 기준 - 별도 파일시스템 미검색: $excluded)}"
         CHECK_EVIDENCE=""
     else
         CHECK_STATUS="MANUAL"
-        CHECK_DETAIL="SUID/SGID 설정 파일 목록(최대 100건). passwd/su 등 표준 필수 바이너리를 제외하고 의심스러운 항목이 있는지 수동 검토 필요"
+        CHECK_DETAIL="SUID/SGID 설정 파일 목록(최대 100건). passwd/su 등 표준 필수 바이너리를 제외하고 의심스러운 항목이 있는지 수동 검토 필요${excluded:+ (별도 파일시스템 미검색: $excluded)}"
         CHECK_EVIDENCE="$(printf '%s\n' "$files" | xargs ls -al 2>/dev/null)"
     fi
 }

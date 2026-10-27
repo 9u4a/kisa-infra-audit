@@ -11,8 +11,10 @@ run_check() {
         evidence="$evidence
 Postfix: $v"
     fi
-    if command -v sendmail >/dev/null 2>&1; then
-        v=$(sendmail -d0.1 -bt </dev/null 2>/dev/null | grep -i version)
+    # Postfix 가 있으면 sendmail 은 Postfix 호환 래퍼라 -bt 를 지원하지 않고 maillog 에 오류를 남길 수
+    # 있어 실행하지 않는다. 실제 Sendmail 은 시작 시 FQDN 조회로 DNS 장애 때 멈출 수 있어 시간 제한을 둔다.
+    if command -v sendmail >/dev/null 2>&1 && ! command -v postconf >/dev/null 2>&1; then
+        v=$(run_to 10 sendmail -d0.1 -bt </dev/null 2>/dev/null | grep -i version)
         evidence="$evidence
 Sendmail: ${v:-버전 확인 실패}"
     fi

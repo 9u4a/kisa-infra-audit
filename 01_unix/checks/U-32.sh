@@ -14,6 +14,7 @@ run_check() {
     fi
 
     missing=""
+    skipped=""
     while IFS=: read -r name _ _ _ _ home shell; do
         [ -z "$name" ] && continue
         case "$home" in
@@ -22,12 +23,18 @@ run_check() {
         case "$shell" in
             */nologin|/bin/false) [ "$home" = "" ] && continue ;;
         esac
+        # 원격/자동마운트 홈은 존재 확인([ -d ])만으로도 마운트를 깨우거나 멈출 수 있어 건너뛴다
+        if is_remote_or_auto_fs "$home"; then skipped="$skipped $home"; continue; fi
         [ -d "$home" ] && continue
         missing="$missing
 $name:$home"
     done < "$passwd_file"
 
-    if [ -z "$missing" ]; then
+    if [ -z "$missing" ] && [ -n "$skipped" ]; then
+        CHECK_STATUS="MANUAL"
+        CHECK_DETAIL="로컬 홈은 모두 존재하나 원격/자동마운트 홈은 운영 영향 방지를 위해 확인하지 않음 - 수동 확인 필요:$skipped"
+        CHECK_EVIDENCE=""
+    elif [ -z "$missing" ]; then
         CHECK_STATUS="GOOD"
         CHECK_DETAIL="홈 디렉토리가 존재하지 않는 계정이 발견되지 않음"
         CHECK_EVIDENCE=""

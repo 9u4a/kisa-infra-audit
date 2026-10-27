@@ -101,6 +101,7 @@ fi
 prepare_output_dir "$OUT_BASE" "$CATEGORY_NUM"
 NDJSON="$OUT_DIR/.result.ndjson"
 : > "$NDJSON"
+result_trap_partial "$NDJSON" "$CATEGORY_NAME" OS_FAMILY
 CSV_FILE="$OUT_DIR/result.csv"
 csv_init "$CSV_FILE"
 HOST_NAME=$(hostname 2>/dev/null || echo unknown)

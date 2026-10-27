@@ -16,9 +16,14 @@ run_check() {
     common_allowlist='\.(ssh|cache|config|local|bash_history|bash_logout|bashrc|bash_profile|profile|viminfo|lesshst|gnupg|mozilla|Xauthority)$'
     homes=$(awk -F: '{print $6}' "$passwd_file" | sort -u)
     findings=""
+    skipped=""
     for h in $homes; do
+        # 홈이 / 나 시스템 디렉터리인 계정(nobody 등)은 제외 - 그대로 두면 find / 가 되어 /net 같은
+        # autofs 아래까지 들어간다. 원격/자동마운트 홈도 건드리지 않는다.
+        case "$h" in /|/bin|/sbin|/usr|/usr/bin|/usr/sbin|/dev|/proc|/sys|/run|/var/run|/nonexistent|"") continue ;; esac
+        if is_remote_or_auto_fs "$h"; then skipped="$skipped $h"; continue; fi
         [ -d "$h" ] || continue
-        f=$(find "$h" -maxdepth 2 -name '.*' 2>/dev/null | grep -vE "$common_allowlist" | grep -vE '^\.$|/\.$|/\.\.$')
+        f=$(find "$h" -xdev -maxdepth 2 -name '.*' 2>/dev/null | grep -vE "$common_allowlist" | grep -vE '^\.$|/\.$|/\.\.$')
         [ -n "$f" ] && findings="$findings
 $f"
     done
@@ -29,5 +34,6 @@ $f"
     else
         CHECK_DETAIL="통상적인 항목을 제외한 숨겨진 파일/디렉토리가 발견됨 — 의심스러운 항목인지 수동 검토 필요"
     fi
-    CHECK_EVIDENCE="${findings:-없음}"
+    CHECK_EVIDENCE="${findings:-없음}${skipped:+
+원격/자동마운트 홈이라 검색하지 않음:$skipped}"
 }

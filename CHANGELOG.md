@@ -6,6 +6,63 @@
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-10-27
+### 운영 안전성: 진단(run)의 무기한 대기·운영 부하·거짓 양호 판정 감소
+진단은 설정을 바꾸지 않지만, 운영 서버에서 멈추거나 부하를 주고, 확인하지 못한 것을 "양호"로
+보고하던 지점을 고쳤다.
+
+### Fixed
+- **확인하지 못한 것을 "양호/취약"으로 단정하던 문제(S6)**
+  - W-33: localhost HTTP 요청이 시간 초과되면 Server 헤더가 "없음"으로 처리돼 GOOD이 됐다.
+    1.2.2 CI의 windows-integration 실패(IIS cold start)로 실제 재현됐다. 1회 재시도하고, 끝내
+    응답이 없으면 ERROR로 남긴다. PS 7 오류 응답의 헤더도 읽는다.
+  - PC-08: 영문 문자열 "Windows Boot Loader"를 세서 한글 Windows에서는 항상 0개 → 항상 GOOD이었다.
+    → 번역되지 않는 구분선 수로 센다(`bcdedit /enum` 활성 항목 − 부팅 관리자).
+    - bcdedit 실패(권한 부족) 시 ERROR로 남긴다.
+    - `/enum osloader`는 WinRE 로더까지 포함해 단일 OS에서도 2개가 되므로 쓰지 않는다.
+  - W-42: Security 로그 조회 실패를 위반 없음으로 세던 것을 ERROR로 바꿨다.
+  - W-40: auditpol 실패를 "미설정"으로 세던 것을 ERROR로 바꿨다.
+  - 02_windows/07_pc: secedit 내보내기에 실패한 상태에서 정책을 조회한 항목의 GOOD/VULN은
+    ERROR로 바꾼다(W-49 등 `Get-SecPolicyValue` 사용 항목 공통).
+  - 03_web IIS
+    - IIS는 설치돼 있는데 설정을 읽지 못하면(권한 부족) "IIS 미설치(NA)" 대신 ERROR로 남긴다.
+    - `Get-IisConfigValue` 조회가 실패한 항목의 GOOD은 ERROR로 바꾼다.
+  - MSSQL: 접속 계정이 sysadmin이 아니면, 일부만 보이는 D-03/11/24/26의 GOOD/VULN을 ERROR로
+    바꾼다.
+  - Unix
+    - U-15/23/25(파일시스템 전수 검색), U-28(방화벽 규칙)은 root가 아니면 ERROR로 남긴다.
+    - U-37은 cron 스풀 디렉터리를 읽지 못하면 ERROR로 남긴다.
+    - 03_web·08_dbms run.sh도 root가 아니면 경고한다.
+  - sh 전체를 `LC_ALL=C`로 고정했다. 한국어 번역 ufw("상태: 활성") 때문에 U-28이 거짓 VULN이
+    나던 문제가 해결된다.
+- **운영 부하(S4)**
+  - U-15/23/25: `find /` 전수 검색을 `nice -n 19 ionice -c3`로 낮은 우선순위에서 실행한다
+    (`low_prio`). `-xdev`로 검색하지 않은 별도 파일시스템 목록을 판정 근거에 남긴다.
+  - U-24/31/32/33: NFS·CIFS·autofs·FUSE 위의 홈 디렉터리는 건드리지 않고 MANUAL 근거로 남긴다.
+    판별은 `/proc/mounts`만 보고 경로 자체는 stat하지 않는다. 이전에는 계정 수만큼 automount가
+    연쇄로 일어나거나 stale NFS에서 멈출 수 있었다.
+  - U-33: 홈이 `/`이거나 시스템 디렉터리인 계정을 제외하고 `-xdev`를 쓴다. 이전에는 사실상
+    `find / -maxdepth 2`가 되어 `/net` 같은 autofs까지 들어갔다.
+  - W-01/02/03: 도메인 컨트롤러에서는 `Win32_UserAccount` 열거(사실상 도메인 전체 LDAP 조회)를
+    하지 않고 AD에서 확인하라는 MANUAL로 남긴다.
+  - W-16 check·fix: DC의 SYSVOL/NETLOGON(Everyone 읽기가 기본 설계)을 대상에서 뺀다. 이전에는
+    모든 DC가 VULN이었고, 이를 근거로 조치하면 도메인 전체 GPO 처리가 깨질 수 있었다.
+  - IIS WEB-12: UNC/DFS 경로는 순회하지 않는다. 정션/심볼릭 링크 안으로 들어가지 않으며, 검사
+    항목 수에 상한(2만)을 둔다.
+  - IIS WEB-18: DISM(`Get-WindowsOptionalFeature -Online`) 대신 IIS 전역 모듈 목록으로
+    WebDAV 설치를 확인한다.
+- **무기한 대기(S2)**
+  - sh: `run_to` 시간 제한을 걸었다. rpcinfo(U-42), sendmail -bt(U-45), firewall-cmd·iptables(U-28),
+    hostnamectl(U-64)가 대상이다.
+  - U-28: iptables는 `-w`로 xtables 잠금을 기다린다.
+  - U-45: Postfix 호환 sendmail에는 `-bt`를 실행하지 않는다(maillog 오류 방지).
+  - ps1: `Get-CimInstance`의 기본 `OperationTimeoutSec`을 30초로 정했다. 모듈과 각 run.ps1의
+    스크립트 범위라 사용자 세션의 기본값은 건드리지 않는다.
+- **중복 실행·중단(S7)**
+  - 진단·조치 출력 폴더 이름에 PID를 붙였다(`..._YYYYMMDD-HHMMSS-<PID>`). 같은 초에 두 번
+    실행해도 결과가 섞이지 않고, merge.py 규칙과도 호환된다.
+  - sh run.sh: TERM/INT로 중단되면 그때까지의 결과를 `result.partial.json`으로 남긴다.
+
 ## [1.2.2] - 2026-10-27
 ### 운영 안전성: 자동 조치(fix)가 서비스를 죽이거나 원복할 수 없게 바꾸던 문제 수정
 조치 경로를 운영 서버 관점으로 재점검했다. 그 결과 **다음 재시작 때 웹 서비스가 뜨지 않는

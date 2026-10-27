@@ -12,12 +12,18 @@ run_check() {
         return
     fi
 
-    result=$(find / -xdev \( -nouser -o -nogroup \) 2>/dev/null | head -n 50)
-    count=$(printf '%s\n' "$result" | grep -c .)
+    # root 가 아니면 읽을 수 없는 디렉터리가 조용히 빠져 "없음 = 양호" 로 오인된다.
+    if [ "$(id -u 2>/dev/null)" != "0" ]; then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="파일시스템 전수 검색은 root 권한이 필요함(권한 부족 시 결과가 누락되어 판정 불가)"; CHECK_EVIDENCE=""
+        return
+    fi
+    # 운영 I/O 와 경쟁하지 않도록 낮은 우선순위로 실행(lib/common.sh low_prio)
+    result=$(low_prio find / -xdev \( -nouser -o -nogroup \) 2>/dev/null | head -n 50)
+    excluded=$(scan_excluded_mounts)
 
     if [ -z "$result" ]; then
         CHECK_STATUS="GOOD"
-        CHECK_DETAIL="소유자 또는 그룹이 존재하지 않는 파일/디렉터리가 없음"
+        CHECK_DETAIL="소유자 또는 그룹이 존재하지 않는 파일/디렉터리가 없음${excluded:+ (루트 파일시스템 기준 - 별도 파일시스템 미검색: $excluded)}"
         CHECK_EVIDENCE=""
     else
         CHECK_STATUS="VULN"

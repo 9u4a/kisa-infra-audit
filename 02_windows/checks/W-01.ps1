@@ -4,6 +4,10 @@
 # 자동화 범위: 계정명 변경 여부만 판정(비밀번호 강도는 평문 확인 불가) — 이름이 기본값이면
 #             비밀번호가 강력할 수도 있으므로 MANUAL 로 응답한다 (VULN 단정 금지).
 
+# DC 에는 로컬 SAM 이 없어 아래 조회가 도메인 전체 계정 열거(LDAP 대량 조회)가 될 수 있다 - 건너뛴다.
+if (Test-IsDomainController) {
+    return New-CheckResult -Code "W-01" -Status "MANUAL" -Detail "도메인 컨트롤러: 빌트인 Administrator 는 도메인 계정이므로 AD(Active Directory 사용자 및 컴퓨터)에서 이름 변경 여부를 확인 필요(운영 부하 방지를 위해 계정 열거 생략)"
+}
 $admin = Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True and SID like 'S-1-5-%-500'" -ErrorAction SilentlyContinue
 if (-not $admin) {
     return New-CheckResult -Code "W-01" -Status "ERROR" -Detail "빌트인 Administrator 계정(RID 500)을 조회하지 못함"

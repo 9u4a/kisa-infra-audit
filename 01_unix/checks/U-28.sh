@@ -8,8 +8,15 @@ run_check() {
     evidence=""
     found=0
 
-    if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state 2>/dev/null | grep -q running; then
-        rules=$(firewall-cmd --list-all 2>/dev/null)
+    # nft/iptables/ufw 규칙은 root 만 읽을 수 있다 - 비root 로 돌면 출력이 비어 "제한 없음 = 취약"으로 오인된다.
+    if [ "$(id -u 2>/dev/null)" != "0" ]; then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="방화벽 규칙 조회는 root 권한이 필요함(권한 부족 시 규칙이 없는 것처럼 보여 판정 불가)"; CHECK_EVIDENCE=""
+        return
+    fi
+
+    # firewall-cmd 는 D-Bus 경유라 서비스 장애 시 오래 멈출 수 있어 시간 제한을 둔다(lib/common.sh run_to)
+    if command -v firewall-cmd >/dev/null 2>&1 && run_to 15 firewall-cmd --state 2>/dev/null | grep -q running; then
+        rules=$(run_to 15 firewall-cmd --list-all 2>/dev/null)
         evidence="$evidence
 [firewalld]
 $rules"
@@ -39,7 +46,8 @@ $ufw_status"
     fi
 
     if command -v iptables >/dev/null 2>&1; then
-        ipt=$(iptables -L INPUT -n 2>/dev/null)
+        # -w: xtables 잠금을 기다린다(없으면 동시에 규칙을 바꾸는 다른 도구와 경합). 대기는 run_to 로 제한.
+        ipt=$(run_to 15 iptables -w -L INPUT -n 2>/dev/null)
         if [ -n "$ipt" ]; then
             rule_lines=$(printf '%s\n' "$ipt" | tail -n +3 | grep -c .)
             evidence="$evidence

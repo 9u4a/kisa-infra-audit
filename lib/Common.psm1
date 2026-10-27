@@ -17,6 +17,11 @@ $StatusColor = @{
 }
 $StatusOrder = @{ VULN = 0; MANUAL = 1; ERROR = 2; NA = 3; GOOD = 4 }
 
+# 모듈 함수의 WMI/CIM 조회 시간 제한(운영 안전 기준 S2). WMI 저장소 손상·서비스 정지 시 첫 조회
+# (Get-OsFamily)부터 무기한 멈출 수 있다. 모듈 범위 변수라 사용자 세션의 기본값은 건드리지 않는다.
+# 각 run.ps1 도 같은 값을 스크립트 범위로 두어 checks/*.ps1 에 적용한다.
+$PSDefaultParameterValues = @{ 'Get-CimInstance:OperationTimeoutSec' = 30 }
+
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $ts = Get-Date -Format "HH:mm:ss"
@@ -110,12 +115,22 @@ function New-PrivateDirectory {
 function New-OutputDir {
     param([string]$BaseDir, [string]$CategoryNum)
     $ts = Get-Date -Format "yyyyMMdd-HHmmss"
-    $outDir = Join-Path $BaseDir "$($env:COMPUTERNAME)_${CategoryNum}_$ts"
+    # 같은 초에 두 번 실행해도 결과가 섞이지 않도록 PID 를 붙인다('-' 구분이라 merge.py 규칙과 호환)
+    $outDir = Join-Path $BaseDir "$($env:COMPUTERNAME)_${CategoryNum}_$ts-$PID"
     New-PrivateDirectory -Path $outDir
     New-Item -ItemType Directory -Force -Path (Join-Path $outDir "raw") | Out-Null
     $Script:RunLogPath = Join-Path $outDir "run.log"
     New-Item -ItemType File -Force -Path $Script:RunLogPath | Out-Null
     return $outDir
+}
+
+function Test-IsDomainController {
+    <# DomainRole 4/5 = 백업/주 도메인 컨트롤러. DC 에는 로컬 SAM 이 없어 Win32_UserAccount 조회가 도메인
+       전체 계정 열거(LDAP 대량 조회)가 될 수 있으므로 계정 열거형 check 는 DC 에서 건너뛴다 #>
+    if ($null -ne $Global:IsDcCache) { return $Global:IsDcCache }
+    try { $Global:IsDcCache = ((Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 30 -ErrorAction Stop).DomainRole -ge 4) }
+    catch { $Global:IsDcCache = $false }
+    return $Global:IsDcCache
 }
 
 function Protect-SecretText {
@@ -211,12 +226,16 @@ function Get-SecEditExport {
         Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
     }
     $Script:SecEditCache = $sections
+    # 내보내기 실패(관리자 권한 없음 등)면 모든 정책 값이 $null 로 보여 "미설정 = 취약/양호"로 오판된다.
+    # 02_windows/07_pc run.ps1 이 이 플래그로 해당 항목의 GOOD/VULN 을 ERROR 로 바꾼다.
+    $Global:SecEditFailed = ($sections.Count -eq 0)
     return $sections
 }
 
 function Get-SecPolicyValue {
     <# [System Access] 등 단순 key=value 섹션에서 값을 조회. 없으면 $null #>
     param([Parameter(Mandatory)][string]$Section, [Parameter(Mandatory)][string]$Name)
+    $Global:SecPolicyQueried = $true
     $exp = Get-SecEditExport
     if ($exp.ContainsKey($Section) -and $exp[$Section].ContainsKey($Name)) {
         return $exp[$Section][$Name]
@@ -239,6 +258,7 @@ function ConvertFrom-Sid {
 function Get-SecPrivilegeAccounts {
     <# [Privilege Rights] 의 SeXxxPrivilege 값을 계정/그룹 이름 배열로 반환 (없으면 빈 배열) #>
     param([Parameter(Mandatory)][string]$Right)
+    $Global:SecPolicyQueried = $true
     $raw = Get-SecPolicyValue -Section "Privilege Rights" -Name $Right
     if (-not $raw) { return @() }
     return $raw -split ',' | Where-Object { $_ } | ForEach-Object { ConvertFrom-Sid $_.Trim() }
@@ -308,6 +328,13 @@ function Test-IisAvailable {
     return $Global:IisAvailableCache
 }
 
+function Test-IisInstalledButUnreadable {
+    <# IIS(W3SVC)는 설치돼 있는데 설정을 읽을 수 없는 경우(관리자 권한 없음 등). 예전에는 이를
+       "IIS 미설치"로 오인해 전 항목이 NA(해당없음)로 나왔다 - 확인하지 못한 것을 해당없음으로 숨기지 않는다 #>
+    if (Test-IisAvailable) { return $false }
+    return [bool](Get-Service -Name "W3SVC" -ErrorAction SilentlyContinue)
+}
+
 function Get-IisSiteNames {
     <# 구성된 사이트 이름 목록 (IIS 미설치/사이트 없음이면 빈 배열) #>
     if (-not (Test-IisAvailable)) { return @() }
@@ -341,7 +368,13 @@ function Get-IisConfigValue {
         if ($null -eq $v) { return $null }
         if ($v.PSObject.Properties.Name -contains "Value") { return $v.Value }
         return $v
-    } catch { return $null }
+    } catch {
+        # 호출부 다수가 "$null = 설정 없음(기본값)"으로 해석하므로 반환값은 유지하되, 조회 "실패"였다는
+        # 사실을 남긴다. 03_web/run.ps1 이 이 플래그가 선 항목의 GOOD 을 ERROR 로 바꾼다(거짓 양호 방지).
+        $Global:IisConfigQueryFailed = $true
+        $Global:IisConfigQueryError = "$Filter/@$Name$(if ($SiteName) { " ($SiteName)" }): $($_.Exception.Message)"
+        return $null
+    }
 }
 
 # ============================================================================
@@ -364,7 +397,7 @@ function Get-IisConfigValue {
 function New-FixOutputDir {
     param([string]$BaseDir, [string]$CategoryNum)
     $ts = Get-Date -Format "yyyyMMdd-HHmmss"
-    $Global:FixOutDir = Join-Path $BaseDir "$($env:COMPUTERNAME)_${CategoryNum}_fix_$ts"
+    $Global:FixOutDir = Join-Path $BaseDir "$($env:COMPUTERNAME)_${CategoryNum}_fix_$ts-$PID"
     $Global:FixBackupDir = Join-Path $Global:FixOutDir "backup"
     New-PrivateDirectory -Path $Global:FixOutDir
     New-Item -ItemType Directory -Force -Path $Global:FixBackupDir | Out-Null
@@ -969,4 +1002,4 @@ function Invoke-FixRollbackAll {
         }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Protect-SecretText, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Confirm-FixPlan, Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Confirm-FixPlan, Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

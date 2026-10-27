@@ -28,6 +28,7 @@ run_check() {
     ' "$passwd_file")
     violations=""
     evidence=""
+    skipped=""
     checked=0
 
     old_ifs=$IFS; IFS='
@@ -36,6 +37,9 @@ run_check() {
         IFS=$old_ifs
         name=${entry%%:*}
         home=${entry#*:}
+        # 원격/자동마운트 홈은 건드리지 않는다(마운트 연쇄·stale NFS 대기 방지, lib/common.sh)
+        if is_remote_or_auto_fs "$home"; then skipped="$skipped $home"; IFS='
+'; continue; fi
         [ -d "$home" ] || continue
         checked=$((checked + 1))
         owner=$(stat -L -c '%U' "$home" 2>/dev/null)
@@ -50,10 +54,20 @@ $(ls -ld "$home" 2>/dev/null)"
     done
     IFS=$old_ifs
 
-    if [ "$checked" -eq 0 ]; then
+    [ -n "$skipped" ] && evidence="$evidence
+원격/자동마운트 위의 홈이라 검사하지 않음(수동 확인 필요):$skipped"
+    if [ "$checked" -eq 0 ] && [ -n "$skipped" ]; then
+        CHECK_STATUS="MANUAL"
+        CHECK_DETAIL="검사 가능한 로컬 홈이 없고 원격/자동마운트 홈은 운영 영향 방지를 위해 검사하지 않음 - 수동 확인 필요:$skipped"
+        CHECK_EVIDENCE="$evidence"
+    elif [ "$checked" -eq 0 ]; then
         CHECK_STATUS="NA"
         CHECK_DETAIL="검사 대상 홈 디렉토리가 없음"
         CHECK_EVIDENCE=""
+    elif [ -n "$skipped" ] && [ -z "$violations" ]; then
+        CHECK_STATUS="MANUAL"
+        CHECK_DETAIL="로컬 홈 디렉토리(${checked}개)는 기준 충족, 원격/자동마운트 홈은 검사하지 않음 - 수동 확인 필요:$skipped"
+        CHECK_EVIDENCE="$evidence"
     elif [ -z "$violations" ]; then
         CHECK_STATUS="GOOD"
         CHECK_DETAIL="검사한 홈 디렉토리(${checked}개)가 모두 소유자 일치 및 타 사용자 쓰기 권한 제거 기준을 충족함"

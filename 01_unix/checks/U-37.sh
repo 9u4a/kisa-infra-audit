@@ -24,6 +24,11 @@ $(ls -l "$bin" 2>/dev/null)"
     for d in /var/spool/cron /var/spool/cron/crontabs /var/spool/at /var/spool/cron/atjobs; do
         [ -d "$d" ] || continue
         checked=1
+        # 스풀 디렉터리는 보통 root 만 읽을 수 있다 - 못 읽으면 위반 파일이 안 보여 거짓 GOOD 이 된다
+        if [ ! -r "$d" ] || [ ! -x "$d" ]; then
+            CHECK_STATUS="ERROR"; CHECK_DETAIL="$d 를 읽을 수 없음(권한 부족) - root 로 실행 필요"; CHECK_EVIDENCE=""
+            return
+        fi
         bad=$(find "$d" -maxdepth 1 -type f -perm -0007 2>/dev/null)
         evidence="$evidence
 $d: $(ls -l "$d" 2>/dev/null | tr '\n' ' ')"

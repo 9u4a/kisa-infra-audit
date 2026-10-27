@@ -40,6 +40,9 @@ $CategoryName = "Windows 서버"
 
 Import-Module (Join-Path $LibDir "Common.psm1") -Force
 
+# checks/*.ps1 의 WMI/CIM 조회 시간 제한(운영 안전 기준 S2). 스크립트 범위라 사용자 세션 기본값은 건드리지 않는다.
+$PSDefaultParameterValues = @{ 'Get-CimInstance:OperationTimeoutSec' = 30 }
+
 if (-not (Test-Path $GuideJsonPath)) {
     Write-Error "오류: $GuideJsonPath 가 없습니다. lib/extract_guide.py 를 먼저 실행하세요."
     exit 2
@@ -88,6 +91,7 @@ foreach ($code in $Selected) {
     $checkFile = Join-Path $ScriptDir "checks\$code.ps1"
 
     if (Test-Path $checkFile) {
+        $Global:SecPolicyQueried = $false
         try {
             $r = & $checkFile
             if (-not $r) {
@@ -95,6 +99,10 @@ foreach ($code in $Selected) {
             }
         } catch {
             $r = New-CheckResult -Code $code -Status "ERROR" -Detail "check 실행 중 예외 발생: $($_.Exception.Message)"
+        }
+        # secedit 내보내기가 실패하면 정책 값이 전부 $null 로 보여 "미설정"으로 오판된다 - 확인하지 못한 판정은 ERROR
+        if ($Global:SecPolicyQueried -and $Global:SecEditFailed -and $r.status -in @("GOOD", "VULN")) {
+            $r = New-CheckResult -Code $code -Status "ERROR" -Detail "보안 정책(secedit) 조회에 실패해 판정할 수 없음 - 관리자 권한으로 다시 실행 필요"
         }
     } else {
         $r = New-CheckResult -Code $code -Status "ERROR" -Detail "check 스크립트 없음 (미구현 항목)"

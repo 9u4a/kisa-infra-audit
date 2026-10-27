@@ -6,9 +6,13 @@
 # auditpol 은 시스템 로캘에 따라 하위 범주 "이름" 표시가 깨질 수 있어(콘솔 코드페이지 문제),
 # 로캘 독립적인 하위 범주 GUID + CSV(/r) 출력으로 조회한다.
 
+$script:auditFailed = $false
 function Get-AuditInclusion($guid) {
     # 헤더/공백 줄이 섞여 나올 수 있으므로 위치가 아니라 대상 GUID가 포함된 줄을 직접 찾는다.
-    $line = & auditpol.exe /get /subcategory:"$guid" /r 2>$null | Where-Object { $_ -like "*$guid*" } | Select-Object -First 1
+    $out = & auditpol.exe /get /subcategory:"$guid" /r 2>$null
+    # 관리자 권한이 없으면 auditpol 이 실패한다 - 예전에는 이를 "미설정"으로 세어 거짓 VULN 이 났다
+    if ($LASTEXITCODE -ne 0) { $script:auditFailed = $true; return $null }
+    $line = $out | Where-Object { $_ -like "*$guid*" } | Select-Object -First 1
     if (-not $line) { return $null }
     $cols = $line -split ','
     if ($cols.Count -ge 5) { return $cols[4].Trim() }
@@ -31,6 +35,9 @@ foreach ($c in $checks) {
     if (-not $setting -or ($c.Need -notcontains $setting)) { $violations += $c.Name }
 }
 
+if ($script:auditFailed) {
+    return New-CheckResult -Code "W-40" -Status "ERROR" -Detail "auditpol 실행 실패로 감사 정책을 확인하지 못함 - 관리자 권한으로 다시 실행 필요" -Evidence ($evidence -join "`n")
+}
 if ($violations.Count -eq 0) {
     return New-CheckResult -Code "W-40" -Status "GOOD" -Detail "감사 정책 권고 기준에 따라 주요 감사 항목이 설정되어 있음" -Evidence ($evidence -join "`n")
 } else {

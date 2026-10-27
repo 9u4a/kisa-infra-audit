@@ -8,7 +8,7 @@ run_check() {
     evidence="uname -a: $(uname -a 2>/dev/null)"
     if command -v hostnamectl >/dev/null 2>&1; then
         evidence="$evidence
-$(hostnamectl 2>/dev/null)"
+$(run_to 10 hostnamectl 2>/dev/null)"
     fi
     if [ -f /etc/os-release ]; then
         evidence="$evidence

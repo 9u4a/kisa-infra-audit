@@ -11,18 +11,38 @@ $anyRunning = $false
 $evidence = @()
 $violations = @()
 $manualNeeded = @()
+$unverified = @()
 
 if ($web -and $web.Status -eq "Running") {
     $anyRunning = $true
-    try {
-        $resp = Invoke-WebRequest -Uri "http://localhost/" -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
-        $serverHeader = $resp.Headers["Server"]
-    } catch {
-        $serverHeader = $null
-        if ($_.Exception.Response) { $serverHeader = $_.Exception.Response.Headers["Server"] }
+    # 운영 IIS 에 실제 요청이 1~2회 발생한다(앱 풀 기동·접속 로그 기록). 유휴 앱 풀은 첫 요청이
+    # cold start 로 늦을 수 있어 1회 재시도한다. 끝내 응답이 없으면 "헤더 없음 = 양호"로 단정하지
+    # 않고 ERROR 로 남긴다(예전에는 시간 초과도 GOOD 이 됐다 - CI 러너에서 실제로 재현됨).
+    $serverHeader = $null; $gotResponse = $false; $lastErr = ""
+    foreach ($timeoutSec in 5, 15) {
+        try {
+            $resp = Invoke-WebRequest -Uri "http://localhost/" -UseBasicParsing -TimeoutSec $timeoutSec -ErrorAction Stop
+            $serverHeader = $resp.Headers["Server"]; $gotResponse = $true; break
+        } catch {
+            $r = $_.Exception.Response
+            if ($r) {
+                # 4xx/5xx 도 응답이다. PS 5.1 은 HttpWebResponse, PS 7 은 HttpResponseMessage 라 헤더 접근법이 다르다.
+                $gotResponse = $true
+                if ($r -is [System.Net.HttpWebResponse]) { $serverHeader = $r.Headers["Server"] }
+                else { try { $serverHeader = @($r.Headers.Server | ForEach-Object { $_.ToString() }) -join " " } catch { $serverHeader = $null } }
+                break
+            }
+            $lastErr = $_.Exception.Message
+        }
     }
-    $evidence += "HTTP Server 헤더: $serverHeader"
-    if ($serverHeader) { $violations += "HTTP(Server 헤더 노출: $serverHeader)" }
+    $serverHeader = "$(@($serverHeader) -join ' ')".Trim()
+    if (-not $gotResponse) {
+        $unverified += "HTTP(localhost 응답 없음: $lastErr)"
+        $evidence += "HTTP Server 헤더: 확인 불가(응답 없음)"
+    } else {
+        $evidence += "HTTP Server 헤더: $serverHeader"
+        if ($serverHeader) { $violations += "HTTP(Server 헤더 노출: $serverHeader)" }
+    }
 }
 
 if ($ftp -and $ftp.Status -eq "Running") {
@@ -43,6 +63,8 @@ if (-not $anyRunning) {
 
 if ($violations.Count -gt 0) {
     return New-CheckResult -Code "W-33" -Status "VULN" -Detail ("배너/버전 정보가 노출됨: " + ($violations -join ", ")) -Evidence ($evidence -join "`n")
+} elseif ($unverified.Count -gt 0) {
+    return New-CheckResult -Code "W-33" -Status "ERROR" -Detail ("배너 노출 여부를 확인하지 못함: " + ($unverified -join ", ")) -Evidence ($evidence -join "`n")
 } elseif ($manualNeeded.Count -gt 0) {
     return New-CheckResult -Code "W-33" -Status "MANUAL" -Detail ("HTTP 배너는 노출되지 않으나 " + ($manualNeeded -join ", ") + " 배너 문구는 원격 접속으로 직접 확인 필요") -Evidence ($evidence -join "`n")
 } else {

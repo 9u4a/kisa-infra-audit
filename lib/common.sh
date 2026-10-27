@@ -16,6 +16,12 @@ else
 fi
 GUIDE_VERSION="2026"
 
+# 명령 출력 파싱이 로캘에 흔들리지 않도록 C 로캘로 고정한다 - 예) 한국어 번역이 설치된 ufw 는
+# "Status: active" 대신 "상태: 활성"을 출력해 U-28 이 거짓 VULN 이 됐다. 스크립트 안의 한글 문자열은
+# 바이트 그대로 출력되므로 UTF-8 터미널 표시에는 영향이 없다.
+LC_ALL=C
+export LC_ALL
+
 # ---- 색상 (비TTY 이면 자동 해제) ----------------------------------------
 if [ -t 1 ]; then
     C_RED='\033[31m'; C_YEL='\033[33m'; C_GRN='\033[32m'
@@ -190,6 +196,20 @@ result_add() {
     _file=$1; _code=$2; _status=$3; _detail=$4; _evidence=$5
     printf '{"code":"%s","status":"%s","detail":"%s","evidence":"%s"}\n' \
         "$(json_escape "$_code")" "$_status" "$(json_escape "$_detail")" "$(json_escape "$_evidence")" >> "$_file"
+}
+
+# result_trap_partial <ndjson> <category> <env 변수 이름> — Ctrl+C/TERM 으로 중단돼도 그때까지 진단한
+# 항목을 $OUT_DIR/result.partial.json 으로 남긴다(예전에는 result.json 없이 run.log/raw 만 남았다).
+# env 는 루프 도중에 정해질 수 있어(웹 엔진 감지 등) 변수 이름을 받아 중단 시점의 값을 쓴다.
+result_trap_partial() {
+    _RP_ND=$1; _RP_CAT=$2; _RP_ENVVAR=$3
+    trap '_result_partial_flush; exit 130' INT TERM
+}
+_result_partial_flush() {
+    [ -s "${_RP_ND:-}" ] || return 0
+    eval "_rp_env=\${$_RP_ENVVAR:-}"
+    result_finalize "$_RP_ND" "$OUT_DIR/result.partial.json" "$_RP_CAT" "$(hostname 2>/dev/null || echo unknown)" "$_rp_env"
+    log_warn "중단됨 - 지금까지 진단한 항목을 $OUT_DIR/result.partial.json 에 저장했습니다."
 }
 
 # NDJSON(items) + 메타 정보를 결합해 최종 result.json 생성
@@ -794,6 +814,53 @@ oracle_listener_ora() {
     done
 }
 
+# ---- 진단 대기·부하 제한 (운영 안전 기준 S2·S4, 1.2.3) ----------------------------------
+# run_to <초> <명령...> — timeout 명령이 있으면 제한 시간을 건다(없으면 그대로 실행, 대상 무설치 원칙).
+# 종료코드 124 = 시간 초과. rpcinfo(portmapper DROP), sendmail -bt(DNS 대기), firewall-cmd/hostnamectl
+# (D-Bus 장애) 처럼 운영 환경에서 멈출 수 있는 명령에 쓴다.
+run_to() {
+    _rt_s=$1; shift
+    if command -v timeout >/dev/null 2>&1; then timeout "$_rt_s" "$@"; else "$@"; fi
+}
+
+# low_prio <명령...> — 가능하면 nice -n 19 + ionice -c3(idle) 로 실행해 운영 서비스의 CPU/디스크 I/O 와
+# 경쟁하지 않게 한다(find / 전수 검색용). 컨테이너 등에서 ionice 가 거부되면 그 단계만 빼고 실행한다 -
+# 접두 명령이 실패해 본 명령이 아예 안 돌면 "검색 결과 없음 = 양호" 로 오인되므로 미리 시험해 본다.
+low_prio() {
+    if [ -z "${_LOW_PRIO_INIT:-}" ]; then
+        _LOW_PRIO_INIT=1; LOW_PRIO_PREFIX=""
+        nice -n 19 true >/dev/null 2>&1 && LOW_PRIO_PREFIX="nice -n 19"
+        ionice -c3 true >/dev/null 2>&1 && LOW_PRIO_PREFIX="$LOW_PRIO_PREFIX ionice -c3"
+    fi
+    # shellcheck disable=SC2086
+    $LOW_PRIO_PREFIX "$@"
+}
+
+# path_fs_type <경로> — /proc/mounts 에서 경로를 포함하는 가장 긴 마운트 지점의 파일시스템 종류.
+# 경로 자체는 stat 하지 않는다(automount 를 깨우거나 응답 없는 NFS 에서 멈추지 않게).
+path_fs_type() {
+    [ -r /proc/mounts ] || return 0
+    awk -v p="$1" '{ m = $2; if (p == m || m == "/" || index(p, m "/") == 1) { if (length(m) > bl) { bl = length(m); t = $3 } } }
+        END { print t }' /proc/mounts
+}
+
+# is_remote_or_auto_fs <경로> — 원격(NFS/CIFS 등)·자동마운트(autofs)·FUSE 위의 경로면 0. 홈 디렉터리를
+# 계정 수만큼 순회하는 check 가 이런 경로를 건드리면 마운트가 연쇄로 일어나거나 stale 마운트에서 멈춘다.
+is_remote_or_auto_fs() {
+    case "$(path_fs_type "$1")" in
+        nfs|nfs4|cifs|smb3|smbfs|autofs|fuse|fuse.*|sshfs|glusterfs|ceph|9p|davfs|afs) return 0 ;;
+    esac
+    return 1
+}
+
+# scan_excluded_mounts — find / -xdev 가 검색하지 않는 별도 실제 파일시스템(/home, /var 등) 목록.
+# 결과가 "없음=양호"일 때 검색 범위가 루트 파일시스템뿐이었다는 사실을 판정 근거에 남기기 위함.
+scan_excluded_mounts() {
+    [ -r /proc/mounts ] || return 0
+    awk '$2 != "/" && $3 !~ /^(proc|sysfs|devtmpfs|devpts|tmpfs|cgroup2?|mqueue|securityfs|pstore|bpf|tracefs|debugfs|configfs|fusectl|hugetlbfs|autofs|binfmt_misc|overlay|nsfs|rpc_pipefs|efivarfs|ramfs|squashfs|nfsd|selinuxfs)$/ \
+        && $2 !~ /^\/(proc|sys|dev|run)(\/|$)/ && $2 !~ /^\/etc\/(hosts|hostname|resolv\.conf)$/ { printf "%s(%s) ", $2, $3 }' /proc/mounts
+}
+
 # ---- 결과 디렉토리 준비 -----------------------------------------------------
 # make_private_dir <dir>  -- 실행자만 접근 가능한(700) 디렉터리 생성. 진단 증적(계정 목록·설정 발췌)과
 # 조치 백업(/etc/shadow 사본 등)이 같은 서버의 다른 사용자에게 읽히지 않게 한다. umask 를 전역으로
@@ -807,7 +874,8 @@ prepare_output_dir() {
     _base=$1; _cat_num=$2
     _host=$(hostname 2>/dev/null || echo unknown-host)
     _ts=$(date '+%Y%m%d-%H%M%S')
-    OUT_DIR="${_base}/${_host}_${_cat_num}_${_ts}"
+    # 같은 초에 두 번 실행해도 결과가 섞이지 않도록 PID 를 붙인다('-' 구분이라 merge.py 규칙과 호환)
+    OUT_DIR="${_base}/${_host}_${_cat_num}_${_ts}-$$"
     make_private_dir "$OUT_DIR"
     make_private_dir "$OUT_DIR/raw"
     RUN_LOG="$OUT_DIR/run.log"
@@ -832,7 +900,7 @@ fix_prepare_dir() {
     _base=$1; _cat_num=$2
     _host=$(hostname 2>/dev/null || echo unknown-host)
     _ts=$(date '+%Y%m%d-%H%M%S')
-    FIX_OUT_DIR="${_base}/${_host}_${_cat_num}_fix_${_ts}"
+    FIX_OUT_DIR="${_base}/${_host}_${_cat_num}_fix_${_ts}-$$"
     FIX_BACKUP_DIR="$FIX_OUT_DIR/backup"
     make_private_dir "$FIX_OUT_DIR"
     make_private_dir "$FIX_BACKUP_DIR"

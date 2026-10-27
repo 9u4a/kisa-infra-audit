@@ -4,6 +4,8 @@
 
 try {
     $shares = Get-SmbShare -ErrorAction Stop | Where-Object { $_.Name -notmatch '\$$' -and $_.Name -ne 'print$' }
+    # DC 의 SYSVOL/NETLOGON 에서 Everyone 을 빼면 도메인 전체의 그룹 정책·로그온 스크립트 처리가 깨진다 - 절대 건드리지 않는다
+    if (Test-IsDomainController) { $shares = $shares | Where-Object { $_.Name -notin @('SYSVOL', 'NETLOGON') } }
 } catch {
     $Global:FixStatus = "ERROR"; $Global:FixDetail = "Get-SmbShare 실행 실패: $($_.Exception.Message)"; $Global:FixEvidence = ""
     return

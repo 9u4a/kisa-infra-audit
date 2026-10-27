@@ -93,11 +93,13 @@ fi
 prepare_output_dir "$OUT_BASE" "$CATEGORY_NUM"
 NDJSON="$OUT_DIR/.result.ndjson"
 : > "$NDJSON"
+result_trap_partial "$NDJSON" "$CATEGORY_NAME" WEB_ENGINES
 CSV_FILE="$OUT_DIR/result.csv"
 csv_init "$CSV_FILE"
 HOST_NAME=$(hostname 2>/dev/null || echo unknown)
 
 echo "${C_BOLD}=== 주요정보통신기반시설 자동 진단 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VERSION}) ===${C_OFF}"
+[ "$(id -u 2>/dev/null)" != "0" ] && log_warn "root 권한이 아닙니다. 읽지 못한 설정·로그 파일 관련 항목은 ERROR 로 표시됩니다(root 실행 권장)."
 echo "카테고리   : $CATEGORY_NAME"
 echo "호스트     : $HOST_NAME"
 echo "감지된 엔진: ${WEB_ENGINES:-없음}"

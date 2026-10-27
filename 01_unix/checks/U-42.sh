@@ -12,7 +12,8 @@ run_check() {
     check_service_disabled "불필요한 RPC(cmsd/ttdbserverd/sadmind/rusersd/walld/sprayd/rstatd/nisd/rexd/pcnfsd/statd/ypupdated/rquotad/kcms_server/cachefsd)" "$pattern"
 
     if command -v rpcinfo >/dev/null 2>&1; then
-        rpc_out=$(rpcinfo -p 2>/dev/null | grep -iE 'cmsd|ttdbserver|sadmind|rusersd|walld|sprayd|rstatd|nisd|rexd|pcnfsd|statd|ypupdated|rquotad|kcms|cachefsd')
+        # 로컬 portmapper 가 방화벽에 DROP 되면 rpcinfo 가 오래 기다리므로 시간 제한(lib/common.sh run_to)
+        rpc_out=$(run_to 10 rpcinfo -p 2>/dev/null | grep -iE 'cmsd|ttdbserver|sadmind|rusersd|walld|sprayd|rstatd|nisd|rexd|pcnfsd|statd|ypupdated|rquotad|kcms|cachefsd')
         if [ -n "$rpc_out" ]; then
             CHECK_STATUS="VULN"
             CHECK_DETAIL="rpcinfo 에 불필요한 RPC 서비스가 등록되어 있음"
