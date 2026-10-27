@@ -4,6 +4,7 @@
 run_fix() {
     detect_web_engines
     applied=""
+    manual_only=""
 
     case " $WEB_ENGINES " in *" apache "*)
         conf=$(apache_conf_path)
@@ -30,8 +31,13 @@ run_fix() {
         done
         if [ -z "$hit" ] && [ -f "$conf" ]; then
             fix_backup "$conf"
-            printf '\n# KISA WEB-22: 에러 페이지 지정\nerror_page 404 /404.html;\nerror_page 500 502 503 504 /50x.html;\n' >> "$conf"
-            applied="$applied nginx($conf)"
+            # error_page 는 http/server/location 컨텍스트 전용 - 파일 끝(main)에 붙이면 nginx 기동 실패
+            if nginx_http_insert "$conf" "error_page 500 502 503 504 /50x.html;" && \
+               nginx_http_insert "$conf" "error_page 404 /404.html;"; then
+                applied="$applied nginx($conf)"
+            else
+                manual_only="$manual_only nginx($conf 에서 http 블록을 찾지 못함 - http 블록에 error_page 수동 추가)"
+            fi
         fi
     esac
 
@@ -55,7 +61,7 @@ run_fix() {
                         done=1
                     }
                     { print }
-                ' "$f" > "$f.kisa_tmp" && mv "$f.kisa_tmp" "$f"
+                ' "$f" > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
                 applied="$applied tomcat($f)"
             fi
         fi
@@ -63,8 +69,12 @@ run_fix() {
 
     if [ -n "$applied" ]; then
         FIX_STATUS="APPLIED"
-        FIX_DETAIL="에러 페이지를 지정함:$applied (실제 /404.html, /50x.html 등 파일이 없으면 컨테이너 기본 오류로 대체될 수 있음 - 페이지 내용 자체는 별도 준비 필요)"
+        FIX_DETAIL="에러 페이지를 지정함:$applied (실제 /404.html, /50x.html 등 파일이 없으면 컨테이너 기본 오류로 대체될 수 있음 - 페이지 내용 자체는 별도 준비 필요)${manual_only:+ / 수동 조치 필요:$manual_only}"
         FIX_EVIDENCE="$applied"
+    elif [ -n "$manual_only" ]; then
+        FIX_STATUS="ERROR"
+        FIX_DETAIL="자동 조치 불가 - 수동 조치 필요:$manual_only"
+        FIX_EVIDENCE=""
     else
         FIX_STATUS="NA"
         FIX_DETAIL="에러 페이지 지정이 필요한 엔진이 없음(이미 정상)"

@@ -8,11 +8,10 @@ run_fix() {
         files="$conf $(apache_extra_confs)"
         for f in $files; do
             [ -f "$f" ] || continue
-            grep -qE '^[^#]*Options[^#]*\bIndexes\b' "$f" 2>/dev/null || continue
-            grep -qE '^[^#]*Options[^#]*\-Indexes\b' "$f" 2>/dev/null && continue
+            apache_options_enabled "$f" Indexes || continue
             fix_backup "$f"
-            sed -i -E '/^[^#]*Options[^#]*Indexes/{ s/\bIndexes\b/-Indexes/ }' "$f"
-            applied="$applied apache($f)"
+            # +/- 혼용 문법 오류를 만들지 않도록 토큰 단위로 재구성(lib/common.sh apache_options_disable)
+            apache_options_disable "$f" Indexes && applied="$applied apache($f)"
         done
     esac
 
@@ -39,7 +38,7 @@ run_fix() {
                     /param-name>listings/ { inblock=1 }
                     inblock && /param-value>true</ { sub(/true/, "false"); inblock=0 }
                     { print }
-                ' "$f" > "$f.kisa_tmp" && mv "$f.kisa_tmp" "$f"
+                ' "$f" > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
                 applied="$applied tomcat($f)"
             fi
         fi

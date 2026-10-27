@@ -6,6 +6,83 @@
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-27
+### 운영 안전성: 자동 조치(fix)가 서비스를 죽이거나 원복할 수 없게 바꾸던 문제 수정
+조치 경로를 운영 서버 관점으로 재점검했다. 그 결과 **다음 재시작 때 웹 서비스가 뜨지 않는
+설정을 만드는 조치**, **백업 실패를 무시하고 진행하는 백업**, **아예 동작하지 않던 Unix 조치
+진입점**이 확인되어 고쳤다. 등급 재조정·원복 정직성·감사 로그는 다음 버전에서 다룬다.
+
+### Fixed
+- **01_unix/fix.sh 가 1.1.0 부터 첫 항목에서 죽던 회귀**
+  - 원인: `OS_FAMILY`를 설정하지 않은 채 `unverified_note`가 이를 참조해, `set -u` 환경에서
+    "parameter not set"으로 실행 전체가 종료됐다. CI에 조치 테스트가 없어 드러나지 않았다.
+  - 수정: run.sh와 같은 OS 자동 감지와 `-e` 옵션을 추가했다. 감지에 실패하면 추측하지 않고
+    중단한다.
+- **조치가 설정을 깨뜨려 다음 재시작 때 서비스가 뜨지 않던 문제**
+  - 이전 방식이 실제로 설정을 깨뜨리는지는 대조 실험으로 확인했다.
+  - WEB-04/12/19(Apache): `Options Indexes FollowSymLinks`를 `Options -Indexes FollowSymLinks`로
+    바꿔 `+/-` 혼용 문법 오류(AH00526)가 났다. → 토큰 단위로 재구성한다(`apache_options_disable`).
+  - WEB-16/22/12(nginx): `server_tokens`·`error_page`·`disable_symlinks`를 파일 맨 앞이나 끝
+    (main 컨텍스트)에 넣어 "directive is not allowed here"가 났다. → `http {}` 블록 안에
+    삽입한다(`nginx_http_insert`). http 블록을 찾지 못하면 바꾸지 않고 수동 조치로 안내한다.
+  - WEB-21(Apache): 서버 전역 `Redirect`가 443 가상호스트에도 상속돼 무한 리다이렉트가 났다.
+    → `<If "%{HTTPS} != 'on'">`으로 감싼다.
+  - WEB-18(Apache): dav 모듈만 끄면 다른 파일에 남은 `Dav*` 지시어 때문에 기동에 실패했다.
+    → 모듈을 끌 때 로드되는 모든 설정 파일의 `Dav*` 지시어도 함께 주석 처리한다.
+  - Tomcat XML 편집: `mv`로 새 파일을 만들어 소유자·권한·SELinux 라벨이 바뀌던 것을, 원래
+    파일에 내용만 덮어쓰도록 바꿨다(`fix_write_back`).
+  - 03_web/fix.sh: 조치 전에 Apache·nginx 설정 문법 검사 기준선을 잡는다. 항목마다 다시 검사해
+    실패하면 그 항목을 즉시 원복한다. 원래부터 실패하던 설정은 조치 탓으로 오인하지 않는다.
+- **U-01(sshd) 판정·조치**
+  - check: sshd는 같은 키워드의 **처음** 값을 쓰고 `sshd_config.d` 드롭인도 읽는다. 그런데
+    본 파일의 마지막 값만 봐서 오판했다. → `sshd -T`(실제 적용 값)를 먼저 보고, 안 되면 Include를
+    반영해 처음 값을 찾는다. 전역이 no여도 Match 블록에 예외가 있으면 MANUAL로 드러낸다.
+  - fix: root 외 관리자(sudo/wheel/admin 구성원, sudoers 지정)가 없으면 바꾸지 않는다
+    (지연 lockout 방지).
+  - fix: `PermitRootLogin no`를 sshd_config 맨 앞에 넣는다. Match 블록의 비상용 예외는
+    일괄 치환하지 않고 유지하며 결과에 알린다.
+  - fix: `sshd -t` 문법 검사를 통과해야 변경을 유지하고, 조치 후 실제 적용 값이 no인지
+    확인한다.
+- **WEB-01 조치**: sed가 같은 username을 전부(주석 속 예시, manager 권한 없는 동명 계정 포함)
+  바꾸던 것을 수정했다. 주석 밖의 manager-gui `<user>` 요소만 바꾼다.
+- **백업 무결성(F1)**
+  - sh: `fix_backup`·`fix_backup_remove_path`가 실패하면 해당 항목을 원복하고 실행을 중단한다
+    (`fix_abort_item`, 종료코드 3, changes.log에 ABORTED). 예전에는 cp/tar 실패를 무시하고
+    변경했다.
+  - sh: 같은 항목에서 같은 경로를 다시 백업하지 않아 첫 백업(원본)을 보존한다(U-24/U-31 문제).
+  - sh: 디렉터리 소유자는 숫자 uid:gid로 기록한다(소유자 없는 디렉터리 원복 실패 문제).
+  - sh: 파이프(`| while`) 안에서 백업하던 U-15/17/26/37/67, WEB-26을 here-doc 반복문으로
+    바꿨다. 서브셸 안에서는 중단이 전달되지 않기 때문이다.
+  - ps1: 모든 `Backup-Fix*`가 실패 시 `[백업 실패]` 예외를 던지고, fix.ps1은 해당 항목을
+    원복한 뒤 실행을 중단한다.
+  - ps1: 레지스트리·IIS 설정의 기존 값을 못 읽으면 "원래 없음"으로 기록하지 않고 중단한다.
+    예전에는 원복 때 실제 값을 삭제하거나 빈 값으로 덮어쓸 수 있었다.
+  - ps1: ExpandString은 환경변수를 펼치지 않은 원문으로 백업한다.
+  - ps1: secedit 스냅샷 생성 실패를 확인한다.
+  - ps1: `Backup-FixPathAndRemove`는 복사가 끝까지 성공하고 파일 수가 일치할 때만 삭제한다.
+    정션/심볼릭 링크는 거부한다(PS 5.1의 `-Recurse`가 링크 대상 데이터를 지울 수 있음).
+- **진입점 공통 가드(B1)**
+  - `--apply`/`-Apply` 시 바뀔 항목(auto 포함)을 먼저 보여주고 1회 확인을 받는다. 예전에는
+    `--yes`가 아무 동작도 하지 않아 `--apply`만으로 경고 없이 auto 전체가 적용됐다. 이제
+    `--yes`/`-Yes`는 이 1회 확인만 생략한다(confirm 등급은 계속 항목별 확인).
+  - 비대화형(터미널 없음·입력 리다이렉트)에서는 확인을 "아니오"로 처리한다. ps1도 sh처럼
+    `"y" |`로 확인을 우회할 수 없다.
+  - 적용·원복 시 root/관리자 권한을 확인한다. 08_dbms는 Oracle OS 인증·Linux pwsh 때문에 제외.
+  - 동시 실행을 잠근다(sh: 원자적 mkdir, ps1: named mutex, Ctrl+C에도 해제).
+
+### Tests
+- `03_web` Apache/nginx: vuln 상태에서 `fix.sh --apply --yes` 후 문법 검사 통과, `--rollback`
+  후 설정 파일이 조치 전과 바이트 단위로 동일한지 확인한다.
+  - 백업 공간 부족(16KB tmpfs) 시 설정을 바꾸지 않고 중단하는지(종료코드 3) 확인한다.
+- `01_unix`: vuln 상태에서 auto 일괄 적용 시 다음을 확인한다.
+  - 중간에 죽지 않는다.
+  - 관리자 계정이 없으면 U-01을 바꾸지 않는다.
+  - `--rollback` 후 핵심 설정 파일(passwd/shadow/group/login.defs/sshd_config 등)의 내용·권한·
+    소유자가 원래대로다.
+- CI `static-analysis`: `lib/Common.psm1`에 정의된 함수가 `Export-ModuleMember`에 모두 있는지
+  검사한다. 빠지면 실행 시점에야 "is not recognized"로 죽는데, 1.2.1~1.2.2 작업 중 실제로 두 번
+  겪었다.
+
 ## [1.2.1] - 2026-10-27
 ### 운영 안전성: 진단(run)만 돌려도 생기던 계정 잠금·무기한 대기·민감정보 노출 수정
 운영 서버 실행 관점으로 run/fix 전체를 재점검한 결과, 진단은 설정을 바꾸지 않지만(원칙 3)

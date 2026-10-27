@@ -11,11 +11,10 @@ run_fix() {
         files="$conf $(apache_extra_confs)"
         for f in $files; do
             [ -f "$f" ] || continue
-            grep -qE '^[^#]*Options[^#]*\bIncludes\b' "$f" 2>/dev/null || continue
-            grep -qE '^[^#]*Options[^#]*\-Includes\b' "$f" 2>/dev/null && continue
+            apache_options_enabled "$f" Includes || continue
             fix_backup "$f"
-            sed -i -E '/^[^#]*Options[^#]*Includes/{ s/\bIncludes\b/-Includes/ }' "$f"
-            applied="$applied apache($f)"
+            # +/- 혼용 문법 오류를 만들지 않도록 토큰 단위로 재구성(lib/common.sh apache_options_disable)
+            apache_options_disable "$f" Includes && applied="$applied apache($f)"
         done
     esac
 

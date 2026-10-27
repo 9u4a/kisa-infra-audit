@@ -12,12 +12,14 @@ run_fix() {
         FIX_STATUS="APPLIED"; FIX_DETAIL="소유자/그룹 없는 파일이 이미 없음(조치 불필요)"; FIX_EVIDENCE=""
         return
     fi
-    _n=0
-    printf '%s\n' "$_list" | while IFS= read -r _f; do
+    # 파이프(| while)는 서브셸이라 fix_backup 실패 시의 중단(exit)이 전달되지 않으므로 here-doc 사용
+    while IFS= read -r _f; do
         [ -z "$_f" ] && continue
         fix_backup "$_f"
         chown root:root "$_f" 2>/dev/null
-    done
+    done <<EOF
+$_list
+EOF
     _n=$(printf '%s\n' "$_list" | grep -c .)
     FIX_STATUS="APPLIED"
     FIX_DETAIL="소유자/그룹이 없는 파일 최대 200건을 root:root 로 설정함(임시 조치 — 실제 적절한 소유자로 재검토 권장)"

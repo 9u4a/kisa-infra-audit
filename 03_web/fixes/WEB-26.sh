@@ -9,11 +9,14 @@ run_fix() {
         [ -d "$_dir" ] || return
         _bad=$(find "$_dir" -maxdepth 1 -type f -perm -0006 2>/dev/null)
         [ -z "$_bad" ] && return
-        printf '%s\n' "$_bad" | while IFS= read -r _f; do
+        # 파이프(| while)는 서브셸이라 fix_backup 실패 시의 중단(exit)이 전달되지 않으므로 here-doc 사용
+        while IFS= read -r _f; do
             [ -z "$_f" ] && continue
             fix_backup "$_f"
             chmod o-rwx "$_f" 2>/dev/null
-        done
+        done <<EOF
+$_bad
+EOF
         applied="$applied $_dir"
     }
 

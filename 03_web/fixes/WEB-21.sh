@@ -24,7 +24,10 @@ run_fix() {
         if [ -z "$redirect_on" ]; then
             if [ -n "$ssl_on" ] && [ -n "$server_name" ] && [ -f "$conf" ]; then
                 fix_backup "$conf"
-                printf '\n# KISA WEB-21: HTTP -> HTTPS 리다이렉트\nRedirect permanent / https://%s/\n' "$server_name" >> "$conf"
+                # 서버 전역 Redirect 는 SSL(443) 가상호스트에도 상속돼 HTTPS 요청까지 다시 리다이렉트하는
+                # 무한 루프가 난다 - HTTPS 가 아닐 때만 동작하도록 <If> 로 감싼다(Apache 2.4 core,
+                # mod_alias 문서의 <If> + Redirect 예시와 같은 형식).
+                printf '\n# KISA WEB-21: HTTP -> HTTPS 리다이렉트(평문 요청에만 적용)\n<If "%%{HTTPS} != '"'on'"'">\n    Redirect permanent / https://%s/\n</If>\n' "$server_name" >> "$conf"
                 applied="$applied apache($conf, target=https://$server_name/)"
             else
                 manual_only="$manual_only apache(SSL 미설정 또는 ServerName 을 찾지 못해 리다이렉트 대상을 안전하게 구성 불가 - 먼저 SSL/TLS 를 구성하고 ServerName 을 지정할 것)"

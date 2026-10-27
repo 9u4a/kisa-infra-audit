@@ -381,34 +381,116 @@ function Get-ResultVulnCodes {
     return @($r.items | Where-Object { $_.status -eq "VULN" } | ForEach-Object { $_.code })
 }
 
+# ---- 운영 안전 가드 (운영 안전 기준 F1·F6, 1.2.2) ------------------------------------
+# 백업 실패는 "[백업 실패]" 로 시작하는 예외로 던진다. fixes/*.ps1 은 백업을 변경보다 먼저 하므로
+# 예외가 나면 그 조치는 아무것도 바꾸지 않은 채 멈추고, fix.ps1 은 이 접두어를 보고 해당 항목을
+# 원복한 뒤 실행 전체를 중단한다(예전에는 백업 실패를 삼키고 변경을 계속했다).
+function Test-FixIsAdmin {
+    if ([System.Environment]::OSVersion.Platform -ne 'Win32NT') { return ((& id -u) -eq '0') }
+    $p = New-Object System.Security.Principal.WindowsPrincipal([System.Security.Principal.WindowsIdentity]::GetCurrent())
+    return $p.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Test-FixInteractive {
+    <# 사람이 직접 답할 수 있는 콘솔인지. 입력 리다이렉트("y" | fix.ps1)도 비대화형으로 본다 - sh 쪽이
+       /dev/tty 에서만 답을 읽어 파이프로 확인을 우회할 수 없게 한 것과 같은 원칙 #>
+    try { if ([Console]::IsInputRedirected) { return $false } } catch { }
+    return [Environment]::UserInteractive
+}
+
+function Read-FixConfirm {
+    <# y/Y 만 승인. 비대화형이거나 Read-Host 가 실패(-NonInteractive 등)하면 항상 "아니오" #>
+    param([Parameter(Mandatory)][string]$Prompt)
+    if (-not (Test-FixInteractive)) {
+        Write-Host "$Prompt -> 비대화형 실행이라 '아니오'로 처리"
+        return $false
+    }
+    try { $ans = Read-Host $Prompt } catch { return $false }
+    return ($ans -match '^[yY]$')
+}
+
+function Confirm-FixPlan {
+    <# -Apply 시 실제로 바뀔 항목을 먼저 보여주고 1회 확인. auto 등급은 항목별 확인 없이 적용되므로
+       예전처럼 -Apply 만으로 경고 없이 auto 전체가 적용되던 것을 막는다. -Yes 는 이 확인만 생략 #>
+    param([Parameter(Mandatory)][string[]]$Codes, [Parameter(Mandatory)][hashtable]$GuideByCode, [switch]$Yes)
+    if ($Yes) { return $true }
+    Write-Host "다음 항목을 실제로 변경합니다:"
+    $nAuto = 0
+    foreach ($c in $Codes) {
+        $m = $GuideByCode[$c]
+        $g = if ($m -and $m.fix) { $m.fix } else { "manual" }
+        $t = if ($m) { $m.title } else { $c }
+        if ($g -eq "auto") { Write-Host ("  [auto]    {0,-8} {1}  <- 개별 확인 없이 적용" -f $c, $t); $nAuto++ }
+        elseif ($g -eq "confirm") { Write-Host ("  [confirm] {0,-8} {1}  <- 적용 직전 항목별로 다시 확인" -f $c, $t) }
+    }
+    return (Read-FixConfirm -Prompt "위 목록대로 진행하시겠습니까? (auto $nAuto 건은 추가 확인 없이 적용됨) [y/N]")
+}
+
+function Enter-FixLock {
+    <# 같은 카테고리 조치의 동시 실행 방지(서로의 백업을 덮어쓰고 같은 설정을 번갈아 바꾸는 것 방지).
+       획득하면 Mutex 객체, 다른 실행이 잡고 있으면 $null. 비정상 종료로 버려진 잠금은 인수한다 #>
+    param([Parameter(Mandatory)][string]$CategoryNum)
+    $m = $null
+    foreach ($scope in @("Global", "Local")) {
+        try { $m = New-Object System.Threading.Mutex($false, "$scope\kisa-infra-audit-fix-$CategoryNum"); break } catch { $m = $null }
+    }
+    if (-not $m) { return $null }
+    $got = $false
+    try { $got = $m.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $got = $true }
+    if (-not $got) { $m.Dispose(); return $null }
+    return $m
+}
+
+function Exit-FixLock {
+    param($Mutex)
+    if ($Mutex) { try { $Mutex.ReleaseMutex() } catch { }; $Mutex.Dispose() }
+}
+
+function Save-FixBackupJson {
+    <# 백업 JSON 저장. 같은 항목에서 같은 자원을 다시 백업하면 첫 백업(조치 전 원본)을 보존하고
+       건너뛴다 - 예전에는 두 번째 백업이 이미 바뀐 값으로 덮어써 원복해도 원래대로 돌아가지 않았다 #>
+    param([Parameter(Mandatory)][string]$File, [Parameter(Mandatory)]$Object, [int]$Depth = 4)
+    if (Test-Path -LiteralPath $File) { return $File }
+    try {
+        $Object | ConvertTo-Json -Depth $Depth | Set-Content -Path $File -Encoding UTF8 -ErrorAction Stop
+    } catch {
+        throw "[백업 실패] $File 기록 실패: $($_.Exception.Message)"
+    }
+    return $File
+}
+
 function Get-FixItemBackupDir {
     <# 현재 $Global:FixCode 에 대응하는 백업 디렉터리를 만들고 경로를 반환 #>
+    param([string]$Sub = "")
     $d = Join-Path $Global:FixBackupDir $Global:FixCode
-    New-Item -ItemType Directory -Force -Path $d | Out-Null
+    if ($Sub) { $d = Join-Path $d $Sub }
+    try { New-Item -ItemType Directory -Force -Path $d -ErrorAction Stop | Out-Null }
+    catch { throw "[백업 실패] 백업 디렉터리 생성 실패($d): $($_.Exception.Message)" }
     return $d
 }
 
 # ---- 레지스트리 값 백업/설정/원복 -------------------------------------------------
 function Backup-FixRegistryValue {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Name)
-    $dir = Join-Path (Get-FixItemBackupDir) "registry"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "registry"
     $safe = ("$Path--$Name") -replace '[\\:\s]', '_'
     $file = Join-Path $dir "$safe.json"
+    if (Test-Path -LiteralPath $file) { return $file }
     $existed = $false; $value = $null; $kind = $null
     if (Test-Path -LiteralPath $Path) {
+        # 읽기에 실패했는데 "원래 값 없음"으로 기록하면 원복 때 실제로 있던 값을 지워 버리므로 중단한다.
         try {
             $item = Get-Item -LiteralPath $Path -ErrorAction Stop
             if ($item.GetValueNames() -contains $Name) {
                 $existed = $true
-                $value = $item.GetValue($Name)
+                $value = $item.GetValue($Name, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
                 $kind = $item.GetValueKind($Name).ToString()
             }
-        } catch { }
+        } catch {
+            throw "[백업 실패] 기존 레지스트리 값을 읽을 수 없음($Path\$Name): $($_.Exception.Message)"
+        }
     }
-    [PSCustomObject]@{ Path = $Path; Name = $Name; Existed = $existed; Value = $value; Kind = $kind } |
-        ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
-    return $file
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Path = $Path; Name = $Name; Existed = $existed; Value = $value; Kind = $kind }))
 }
 
 function Restore-FixRegistryBackup {
@@ -454,16 +536,14 @@ function Remove-FixRegistryValue {
 # ---- 서비스 상태 백업/비활성화/원복 ------------------------------------------------
 function Backup-FixServiceState {
     param([Parameter(Mandatory)][string]$Name)
-    $dir = Join-Path (Get-FixItemBackupDir) "service"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "service"
     $file = Join-Path $dir "$Name.json"
+    if (Test-Path -LiteralPath $file) { return $file }
     $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
     $found = [bool]$svc
     $startType = if ($svc) { $svc.StartType.ToString() } else { $null }
     $status = if ($svc) { $svc.Status.ToString() } else { $null }
-    [PSCustomObject]@{ Name = $Name; Found = $found; StartType = $startType; Status = $status } |
-        ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
-    return $file
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Name = $Name; Found = $found; StartType = $startType; Status = $status }))
 }
 
 function Restore-FixServiceBackup {
@@ -502,14 +582,12 @@ function Disable-FixService {
 # ---- 로컬 계정 활성/비활성 상태 백업/원복 ------------------------------------------
 function Backup-FixLocalAccountState {
     param([Parameter(Mandatory)][string]$Name)
-    $dir = Join-Path (Get-FixItemBackupDir) "account"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "account"
     $file = Join-Path $dir "$Name.json"
+    if (Test-Path -LiteralPath $file) { return $file }
     $u = Get-LocalUser -Name $Name -ErrorAction SilentlyContinue
     $enabled = if ($u) { $u.Enabled } else { $null }
-    [PSCustomObject]@{ Name = $Name; Found = [bool]$u; Enabled = $enabled } |
-        ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
-    return $file
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Name = $Name; Found = [bool]$u; Enabled = $enabled }))
 }
 
 function Restore-FixLocalAccountBackup {
@@ -542,14 +620,27 @@ function Set-FixLocalAccountDisabled {
 # 5.1에는 tar가 항상 있다는 보장이 없어(Windows 10 1803+ 는 bsdtar 포함이지만 Server는 버전에
 # 따라 다름) Copy-Item -Recurse 로 내용을 통째로 복사해 보존한다.
 function Backup-FixPathAndRemove {
+    <# 복사가 끝까지 성공하고 파일 수가 일치할 때만 삭제한다(예전에는 Copy-Item 실패와 무관하게 삭제).
+       정션/심볼릭 링크는 거부한다 - PS 5.1 의 -Recurse 복사·삭제는 링크를 따라가 링크 대상(다른
+       폴더·볼륨)의 실제 데이터를 복사하거나 지울 수 있고, 원복하면 링크가 아니라 실폴더로 되살아난다 #>
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return }
-    $dir = Join-Path (Get-FixItemBackupDir) "remove"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        throw "[백업 실패] $Path 는 정션/심볼릭 링크라 안전하게 백업·삭제할 수 없음(링크 대상 데이터 손상 위험) - 수동 조치 필요"
+    }
+    $dir = Get-FixItemBackupDir -Sub "remove"
     $safe = ($Path -replace '[\\:]', '_')
     $dest = Join-Path $dir $safe
-    Copy-Item -LiteralPath $Path -Destination $dest -Recurse -Force
-    Set-Content -Path "$dest.origpath.txt" -Value $Path -Encoding UTF8
+    try {
+        Copy-Item -LiteralPath $Path -Destination $dest -Recurse -Force -ErrorAction Stop
+        $srcCount = @(Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction Stop).Count
+        $dstCount = @(Get-ChildItem -LiteralPath $dest -Recurse -Force -ErrorAction Stop).Count
+        if ($item.PSIsContainer -and $srcCount -ne $dstCount) { throw "파일 수 불일치(원본 $srcCount / 백업 $dstCount)" }
+        Set-Content -Path "$dest.origpath.txt" -Value $Path -Encoding UTF8 -ErrorAction Stop
+    } catch {
+        throw "[백업 실패] 삭제 전 백업 실패 - 삭제하지 않음($Path): $($_.Exception.Message)"
+    }
     Remove-Item -LiteralPath $Path -Recurse -Force
 }
 
@@ -566,12 +657,12 @@ function Restore-FixPathRemoveBackup {
 # ---- IIS 애플리케이션 풀 identity 백업/설정/원복 (WEB-09) --------------------------
 function Backup-FixAppPoolIdentity {
     param([Parameter(Mandatory)][string]$PoolName)
-    $dir = Join-Path (Get-FixItemBackupDir) "apppool"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "apppool"
     $file = Join-Path $dir "$PoolName.json"
-    $current = (Get-ItemProperty "IIS:\AppPools\$PoolName" -Name processModel.identityType -ErrorAction SilentlyContinue).Value
-    [PSCustomObject]@{ PoolName = $PoolName; IdentityType = "$current" } | ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
-    return $file
+    if (Test-Path -LiteralPath $file) { return $file }
+    try { $current = (Get-ItemProperty "IIS:\AppPools\$PoolName" -Name processModel.identityType -ErrorAction Stop).Value }
+    catch { throw "[백업 실패] 애플리케이션 풀 '$PoolName' 현재 identity 를 읽을 수 없음: $($_.Exception.Message)" }
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ PoolName = $PoolName; IdentityType = "$current" }))
 }
 
 function Restore-FixAppPoolIdentityBackup {
@@ -603,17 +694,16 @@ function Set-FixAppPoolIdentity {
 # 서버 설정은 PSPath 필터만 다를 뿐 같은 WebAdministration 공급자를 쓴다).
 function Backup-FixWebConfigProperty {
     param([Parameter(Mandatory)][string]$Filter, [Parameter(Mandatory)][string]$Name, [string]$PSPath = "IIS:\")
-    $dir = Join-Path (Get-FixItemBackupDir) "webconfig"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "webconfig"
     $safe = ("$PSPath--$Filter--$Name") -replace '[\\:/\s]', '_'
     $file = Join-Path $dir "$safe.json"
+    if (Test-Path -LiteralPath $file) { return $file }
+    # 읽기 실패를 $null 로 기록하면 원복 때 설정을 빈 값으로 덮어쓰므로 중단한다.
     try {
         $v = Get-WebConfigurationProperty -Filter $Filter -Name $Name -PSPath $PSPath -ErrorAction Stop
         $value = if ($v.PSObject.Properties.Name -contains "Value") { $v.Value } else { $v }
-    } catch { $value = $null }
-    [PSCustomObject]@{ Filter = $Filter; Name = $Name; PSPath = $PSPath; Value = $value } |
-        ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
-    return $file
+    } catch { throw "[백업 실패] IIS 설정 현재 값을 읽을 수 없음($PSPath [$Filter] $Name): $($_.Exception.Message)" }
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Filter = $Filter; Name = $Name; PSPath = $PSPath; Value = $value }))
 }
 
 function Restore-FixWebConfigPropertyBackup {
@@ -646,12 +736,12 @@ function Set-FixWebConfigProperty {
 
 # ---- 방화벽 프로필 상태 백업/원복 (W-64/PC-15) -------------------------------------
 function Backup-FixFirewallProfiles {
-    $dir = Join-Path (Get-FixItemBackupDir) "firewall"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "firewall"
     $file = Join-Path $dir "profiles.json"
-    $profiles = @(Get-NetFirewallProfile -ErrorAction SilentlyContinue | Select-Object Name, Enabled)
-    $profiles | ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
-    return $file
+    if (Test-Path -LiteralPath $file) { return $file }
+    try { $profiles = @(Get-NetFirewallProfile -ErrorAction Stop | Select-Object Name, Enabled) }
+    catch { throw "[백업 실패] 방화벽 프로필 상태를 읽을 수 없음: $($_.Exception.Message)" }
+    return (Save-FixBackupJson -File $file -Object $profiles)
 }
 
 function Restore-FixFirewallProfilesBackup {
@@ -665,13 +755,13 @@ function Restore-FixFirewallProfilesBackup {
 # ---- NTFS ACL 백업/원복 ------------------------------------------------------------
 function Backup-FixAcl {
     param([Parameter(Mandatory)][string]$Path)
-    $dir = Join-Path (Get-FixItemBackupDir) "acl"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "acl"
     $safe = ($Path -replace '[\\:]', '_')
     $file = Join-Path $dir "$safe.json"
-    $acl = Get-Acl -Path $Path
-    [PSCustomObject]@{ Path = $Path; Sddl = $acl.Sddl } | ConvertTo-Json | Set-Content -Path $file -Encoding UTF8
-    return $file
+    if (Test-Path -LiteralPath $file) { return $file }
+    try { $acl = Get-Acl -Path $Path -ErrorAction Stop }
+    catch { throw "[백업 실패] ACL 을 읽을 수 없음($Path): $($_.Exception.Message)" }
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Path = $Path; Sddl = $acl.Sddl }))
 }
 
 function Restore-FixAclBackup {
@@ -704,14 +794,13 @@ function Remove-FixAclIdentity {
 # ---- SMB 공유 접근 권한 백업/원복 --------------------------------------------------
 function Backup-FixShareAccess {
     param([Parameter(Mandatory)][string]$ShareName)
-    $dir = Join-Path (Get-FixItemBackupDir) "share"
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $dir = Get-FixItemBackupDir -Sub "share"
     $file = Join-Path $dir "$ShareName.json"
-    $access = @(Get-SmbShareAccess -Name $ShareName -ErrorAction SilentlyContinue |
-        Select-Object AccountName, AccessControlType, AccessRight)
-    [PSCustomObject]@{ ShareName = $ShareName; Access = $access } |
-        ConvertTo-Json -Depth 4 | Set-Content -Path $file -Encoding UTF8
-    return $file
+    if (Test-Path -LiteralPath $file) { return $file }
+    try {
+        $access = @(Get-SmbShareAccess -Name $ShareName -ErrorAction Stop | Select-Object AccountName, AccessControlType, AccessRight)
+    } catch { throw "[백업 실패] 공유 '$ShareName' 권한을 읽을 수 없음: $($_.Exception.Message)" }
+    return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ ShareName = $ShareName; Access = $access }))
 }
 
 function Restore-FixShareBackup {
@@ -751,8 +840,13 @@ function Backup-FixSecPolicy {
     }
     $dir = Join-Path $Global:FixBackupDir "_secpolicy"
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    $Global:FixSecPolicyBackupFile = Join-Path $dir "secedit-snapshot.inf"
-    secedit /export /cfg $Global:FixSecPolicyBackupFile /quiet | Out-Null
+    $snap = Join-Path $dir "secedit-snapshot.inf"
+    secedit /export /cfg $snap /quiet | Out-Null
+    # 스냅샷이 없으면 보안 정책을 되돌릴 방법이 없으므로 변경 전에 중단한다(예전에는 결과 미확인).
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $snap) -or (Get-Item $snap).Length -eq 0) {
+        throw "[백업 실패] secedit /export 로 보안 정책 스냅샷을 만들지 못함(exit=$LASTEXITCODE)"
+    }
+    $Global:FixSecPolicyBackupFile = $snap
     return $Global:FixSecPolicyBackupFile
 }
 
@@ -875,4 +969,4 @@ function Invoke-FixRollbackAll {
         }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Protect-SecretText, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Get-FixItemBackupDir, Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Protect-SecretText, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Confirm-FixPlan, Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

@@ -17,11 +17,14 @@ run_fix() {
         [ -d "$d" ] || continue
         bad=$(find "$d" -maxdepth 1 -type f -perm -0007 2>/dev/null)
         [ -z "$bad" ] && continue
-        printf '%s\n' "$bad" | while IFS= read -r f; do
+        # 파이프(| while)는 서브셸이라 fix_backup 실패 시의 중단(exit)이 전달되지 않으므로 here-doc 사용
+        while IFS= read -r f; do
             [ -z "$f" ] && continue
             fix_backup "$f"
             chmod o-rwx "$f" 2>/dev/null
-        done
+        done <<EOF
+$bad
+EOF
         applied="$applied $d(other권한제거)"
     done
 

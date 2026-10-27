@@ -43,7 +43,7 @@ sh 01_unix/run.sh -g 1            # 특정 하위분류만 (1=계정 관리 ... 
 ```sh
 sh 01_unix/fix.sh -r output/<host>_01_<시각>/result.json                 # dry-run(미리보기만)
 sh 01_unix/fix.sh -r <result.json> -i U-01,U-16 --apply                  # 지정 항목만 실제 적용
-sh 01_unix/fix.sh -r <result.json> --apply --yes                         # auto 등급 일괄 적용(confirm은 항상 개별 확인)
+sh 01_unix/fix.sh -r <result.json> --apply --yes                         # 적용 전 변경 목록 확인(1회) 생략(confirm은 항상 개별 확인)
 sh 01_unix/fix.sh --rollback output/<host>_01_fix_<시각>/                 # 백업에서 원복
 ```
 
@@ -58,7 +58,7 @@ sh 01_unix/fix.sh --rollback output/<host>_01_fix_<시각>/                 # �
 ```powershell
 .\02_windows\fix.ps1 -ResultJson output\<host>_02_<시각>\result.json          # dry-run(미리보기만)
 .\02_windows\fix.ps1 -ResultJson <result.json> -Items W-02,W-18 -Apply        # 지정 항목만 실제 적용
-.\02_windows\fix.ps1 -ResultJson <result.json> -Apply -Yes                    # auto 등급 일괄 적용(confirm은 항상 개별 확인)
+.\02_windows\fix.ps1 -ResultJson <result.json> -Apply -Yes                    # 적용 전 변경 목록 확인(1회) 생략(confirm은 항상 개별 확인)
 .\02_windows\fix.ps1 -Rollback output\<host>_02_fix_<시각>\                    # 백업에서 원복
 ```
 
@@ -93,7 +93,7 @@ IIS 는 `fix.ps1`):
 ```sh
 sh 03_web/fix.sh -r output/<host>_03_<시각>/result.json                 # dry-run(미리보기만)
 sh 03_web/fix.sh -r <result.json> -i WEB-04,WEB-16 --apply               # 지정 항목만 실제 적용
-sh 03_web/fix.sh -r <result.json> --apply --yes                          # auto 등급 일괄 적용(confirm은 항상 개별 확인)
+sh 03_web/fix.sh -r <result.json> --apply --yes                          # 적용 전 변경 목록 확인(1회) 생략(confirm은 항상 개별 확인)
 sh 03_web/fix.sh --rollback output/<host>_03_fix_<시각>/                  # 백업에서 원복
 ```
 ```powershell
@@ -124,7 +124,7 @@ sh 08_dbms/run.sh -l                                # 항목 목록 확인 (26�
 ```sh
 sh 08_dbms/fix.sh -e mysql -r output/<host>_08_<시각>/result.json              # dry-run(미리보기만)
 sh 08_dbms/fix.sh -e mysql -r <result.json> -i D-01,D-11 --apply               # 지정 항목만 실제 적용
-sh 08_dbms/fix.sh -e mysql -r <result.json> --apply --yes                      # auto 등급 일괄 적용(confirm은 항상 개별 확인)
+sh 08_dbms/fix.sh -e mysql -r <result.json> --apply --yes                      # 적용 전 변경 목록 확인(1회) 생략(confirm은 항상 개별 확인)
 sh 08_dbms/fix.sh -e mysql --rollback output/<host>_08_fix_<시각>/              # 백업에서 원복
 ```
 ```powershell

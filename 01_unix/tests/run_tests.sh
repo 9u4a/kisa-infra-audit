@@ -64,4 +64,18 @@ PYEOF
     rm -f "$result_file"
 done
 
+# ---- 조치(fix) 운영 안전 회귀 테스트 (fixtures/fix_safety.sh) -----------------------
+# ① fix.sh 가 중간에 죽지 않음(1.1.0~1.2.1 은 OS_FAMILY 미설정으로 첫 항목에서 "parameter not set"
+#    으로 죽었다 - CI 에 조치 테스트가 없어 아무도 몰랐던 회귀)
+# ② 대체 관리자가 없으면 U-01 은 sshd_config 를 바꾸지 않음(지연 lockout 방지)
+# ③ --rollback 후 핵심 설정 파일의 내용·권한·소유자가 조치 전과 같음
+out=$(docker run --rm "$IMAGE" sh 01_unix/tests/fixtures/fix_safety.sh)
+if printf '%s\n' "$out" | grep -qx 'FIX_RC=0' && printf '%s\n' "$out" | grep -qx 'CRASH=no' \
+   && ! printf '%s\n' "$out" | grep -qx 'APPLIED=0' && printf '%s\n' "$out" | grep -qx 'U01=FAILED_ROLLED_BACK' \
+   && printf '%s\n' "$out" | grep -qx 'ROLLBACK=same'; then
+    echo "PASS: fix-apply ($(printf '%s' "$out" | tr '\n' ' '))"
+else
+    echo "FAIL: fix-apply - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
+fi
+
 exit $fail

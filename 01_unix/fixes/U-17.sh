@@ -11,12 +11,15 @@ run_fix() {
         FIX_STATUS="APPLIED"; FIX_DETAIL="조치가 필요한 유닛 파일이 없음"; FIX_EVIDENCE=""
         return
     fi
-    printf '%s\n' "$_list" | while IFS= read -r _f; do
+    # 파이프(| while)는 서브셸이라 fix_backup 실패 시의 중단(exit)이 전달되지 않으므로 here-doc 사용
+    while IFS= read -r _f; do
         [ -z "$_f" ] && continue
         fix_backup "$_f"
         chown root "$_f" 2>/dev/null
         chmod go-w "$_f" 2>/dev/null
-    done
+    done <<EOF
+$_list
+EOF
     FIX_STATUS="APPLIED"
     FIX_DETAIL="$systemd_dir 하위 유닛 파일을 root 소유로, 그룹/기타 쓰기 권한을 제거함"
     FIX_EVIDENCE="$_list"

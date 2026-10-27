@@ -11,7 +11,7 @@
 # 사용법:
 #   fix.sh -e mysql -r <result.json>                       dry-run: 적용 대상·등급만 출력
 #   fix.sh -e mysql -r <result.json> -i D-01,D-05 --apply   지정 항목만 실제 적용
-#   fix.sh -e mysql -r <result.json> --apply --yes          auto 등급 전체 적용(confirm 은 항상 개별 y/N)
+#   fix.sh -e mysql -r <result.json> --apply --yes          적용 전 변경 목록 확인(1회) 생략(confirm 은 항상 개별 y/N)
 #   fix.sh -e mysql --rollback <output/host_08_fix_TS 디렉터리>  백업에서 원복
 
 set -u
@@ -67,9 +67,15 @@ DB_ERR_FILE=$(mktemp 2>/dev/null) || {
     DB_ERR_FILE="${TMPDIR:-/tmp}/.dbms_fix_err.$$"
     ( umask 077; set -C; : > "$DB_ERR_FILE" ) 2>/dev/null || { echo "오류: 임시 파일을 만들 수 없습니다: $DB_ERR_FILE" >&2; exit 2; }
 }
-trap 'rm -f "$DB_ERR_FILE"' EXIT
+trap 'rm -f "$DB_ERR_FILE"; fix_lock_release' EXIT
 trap 'exit 130' INT TERM
 export DB_HOST DB_PORT DB_USER DB_NAME DB_SOCKET DB_ERR_FILE DBMS_ENGINE
+
+# 동시 실행 잠금(lib/common.sh). root 필수 가드는 쓰지 않는다 - Oracle OS 인증("/ as sysdba")은
+# oracle 계정/dba 그룹으로 실행해야 하고, 대부분의 조치가 SQL 이라 root 가 필요 없다.
+if [ "$APPLY" -eq 1 ] || [ -n "$ROLLBACK_DIR" ]; then
+    fix_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
+fi
 
 # 적용/원복은 항목마다 DB에 접속하므로, 잘못된 접속 정보로 로그인 실패를 반복해 계정이 잠기기
 # 전에 1회만 시험하고 실패하면 아무것도 바꾸지 않고 중단한다.
@@ -113,6 +119,9 @@ if [ -z "$VULN_CODES" ]; then
     echo "적용 대상(취약 판정) 항목이 없습니다."
     exit 0
 fi
+
+# shellcheck disable=SC2086
+[ "$APPLY" -eq 1 ] && fix_confirm_plan $VULN_CODES
 
 fix_prepare_dir "$OUT_BASE" "$CATEGORY_NUM"
 export FIX_BACKUP_DIR

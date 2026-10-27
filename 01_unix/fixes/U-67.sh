@@ -10,12 +10,15 @@ run_fix() {
         FIX_STATUS="APPLIED"; FIX_DETAIL="조치가 필요한 로그 파일이 없음"; FIX_EVIDENCE=""
         return
     fi
-    printf '%s\n' "$bad" | while IFS= read -r f; do
+    # 파이프(| while)는 서브셸이라 fix_backup 실패 시의 중단(exit)이 전달되지 않으므로 here-doc 사용
+    while IFS= read -r f; do
         [ -z "$f" ] && continue
         fix_backup "$f"
         chown root "$f" 2>/dev/null
         chmod 644 "$f" 2>/dev/null
-    done
+    done <<EOF
+$bad
+EOF
     FIX_STATUS="APPLIED"
     FIX_DETAIL="$log_dir 내 로그 파일을 root 소유·644 권한으로 설정함(최대 30건)"
     FIX_EVIDENCE="$bad"

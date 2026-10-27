@@ -9,7 +9,8 @@
 # 사용법:
 #   fix.sh -r <result.json>                     dry-run: 적용 대상·등급만 출력, 아무 것도 바꾸지 않음
 #   fix.sh -r <result.json> -i U-01,U-02 --apply  지정 항목만 실제 적용
-#   fix.sh -r <result.json> --apply --yes       auto 등급 전체 적용(confirm 등급은 항상 개별 y/N)
+#   fix.sh -r <result.json> -e debian ...       환경 수동 지정(자동 감지 실패 시 필수)
+#   fix.sh -r <result.json> --apply --yes       적용 전 변경 목록 확인(1회)을 생략(confirm 등급은 항상 개별 y/N)
 #   fix.sh --rollback <output/host_01_fix_TS 디렉터리>   백업에서 원복
 #
 # guide.json 의 fix 등급: auto(영향 없음, 즉시 적용) / confirm(서비스 영향 가능, 항목별 확인
@@ -31,10 +32,11 @@ ITEM_FILTER=""
 APPLY=0
 YES=0
 ROLLBACK_DIR=""
+ENV_OVERRIDE=""
 OUT_BASE="$SCRIPT_DIR/../output"
 
 usage() {
-    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -42,6 +44,7 @@ while [ $# -gt 0 ]; do
         -r) RESULT_JSON=$2; shift 2 ;;
         -i) ITEM_FILTER=$2; shift 2 ;;
         -o) OUT_BASE=$2; shift 2 ;;
+        -e) ENV_OVERRIDE=$2; shift 2 ;;
         --apply) APPLY=1; shift ;;
         --yes) YES=1; shift ;;
         --rollback) ROLLBACK_DIR=$2; shift 2 ;;
@@ -49,6 +52,14 @@ while [ $# -gt 0 ]; do
         *) echo "알 수 없는 옵션: $1" >&2; usage; exit 2 ;;
     esac
 done
+
+# 실제로 바꾸는 경우(적용/원복)에만: root 확인 + 동시 실행 잠금(lib/common.sh, 운영 안전 기준 F1/F6)
+if [ "$APPLY" -eq 1 ] || [ -n "$ROLLBACK_DIR" ]; then
+    fix_require_root
+    fix_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
+    trap 'fix_lock_release' EXIT
+    trap 'exit 130' INT TERM
+fi
 
 if [ -n "$ROLLBACK_DIR" ]; then
     fix_rollback_all "$ROLLBACK_DIR"
@@ -64,6 +75,20 @@ if [ ! -f "$GUIDE_JSON" ]; then
     echo "오류: $GUIDE_JSON 이 없습니다." >&2
     exit 2
 fi
+
+# OS 계열 감지(run.sh 와 동일). 예전에는 여기서 OS_FAMILY 를 정하지 않아, 1.1.0 에서 조치 결과에
+# unverified_note($OS_FAMILY 참조)를 붙인 뒤로 set -u 때문에 첫 항목에서 "parameter not set"으로
+# fix.sh 전체가 죽었다(1.2.2 에서 발견). 조치는 환경을 추측하면 안 되므로 감지 실패 시 -e 를 요구한다.
+if [ -n "$ENV_OVERRIDE" ]; then
+    OS_FAMILY="$ENV_OVERRIDE"
+else
+    detect_os_family
+    if [ "$OS_FAMILY" = "unknown" ]; then
+        log_error "환경을 자동으로 감지하지 못했습니다. -e <rhel|debian|suse|solaris|aix|hpux> 로 지정하세요(변경 없음)."
+        exit 2
+    fi
+fi
+export OS_FAMILY
 
 VULN_CODES=$(result_list_vuln_codes "$RESULT_JSON")
 
@@ -83,6 +108,9 @@ if [ -z "$VULN_CODES" ]; then
     echo "적용 대상(취약 판정) 항목이 없습니다."
     exit 0
 fi
+
+# shellcheck disable=SC2086
+[ "$APPLY" -eq 1 ] && fix_confirm_plan $VULN_CODES
 
 fix_prepare_dir "$OUT_BASE" "$CATEGORY_NUM"
 export FIX_BACKUP_DIR

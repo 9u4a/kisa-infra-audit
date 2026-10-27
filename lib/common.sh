@@ -117,7 +117,7 @@ prompt_os_family() {
 # run_fix 직후 ~ run_check 재검증 전 사이, CHECK_DETAIL이 아직 이전 항목 값을 들고 있을 수
 # 있는 시점에 쓰이므로 이 함수로 공유하면 엉뚱한 CHECK_DETAIL을 건드릴 위험이 있다.
 unverified_note() {
-    case "$OS_FAMILY" in
+    case "${OS_FAMILY:-}" in
         solaris|aix|hpux)
             printf ' [미검증: 문서 기준 구현 - Docker 등으로 실기 검증하지 못했으므로 적용 전 실제 장비에서 재확인 권장]'
             ;;
@@ -840,31 +840,59 @@ fix_prepare_dir() {
     : > "$FIX_LOG"
 }
 
+# fix_abort_item <사유> — 백업 실패처럼 "이대로 바꾸면 원복할 수 없는" 상황(운영 안전 기준 F1).
+# 이 항목에서 이미 백업·변경한 것을 원복하고 조치 실행 전체를 중단한다(이후 항목도 바꾸지 않음).
+# fixes/*.sh 는 run_fix 를 현재 셸에서 실행하므로 exit 가 fix.sh 전체를 끝낸다 - 그래서 fix_backup 을
+# 파이프(| while)·$(...) 같은 서브셸 안에서 부르면 안 된다(here-doc 반복문을 쓸 것).
+fix_abort_item() {
+    log_error "[${FIX_CODE:-?}] $1 — 이 항목의 변경을 원복하고 조치 실행을 중단합니다(이후 항목은 변경하지 않음)."
+    [ -n "${FIX_CODE:-}" ] && fix_rollback_item "$FIX_CODE"
+    printf '%s\t-\tABORTED\t%s (이 항목 원복 후 실행 중단)\n' "${FIX_CODE:-?}" "$1" >> "${FIX_LOG:-/dev/null}"
+    exit 3
+}
+
 # fix_backup <파일경로> — 항목별(FIX_CODE) 백업 디렉터리에 원본을 상대경로 구조로 보존한다.
 # 파일이 원래 존재하지 않았으면(조치가 "새로 생성"인 경우) .WAS_ABSENT 마커만 남겨
 # 원복 시 삭제해야 함을 표시한다. fixes/<코드>.sh 는 파일을 고치기 전에 반드시 이 함수를 부른다.
+# - 백업에 실패하면 변경하지 않고 중단한다(fix_abort_item). 예전에는 cp 실패를 무시하고 조치를
+#   진행해, 디스크가 가득 찬 상황에서 잘린 백업으로 원복 시 원본을 덮어쓸 수 있었다.
+# - 같은 항목에서 같은 경로를 다시 백업하면 첫 백업(조치 전 원본)을 보존하고 건너뛴다 - 예전에는
+#   소유자를 바꾼 뒤 두 번째 백업이 첫 백업을 덮어써 원복해도 바뀐 상태가 남았다(U-24/U-31).
 fix_backup() {
     _f=$1
     _rel=$(printf '%s' "$_f" | sed 's#^/##')
     _dest="$FIX_BACKUP_DIR/$FIX_CODE/$_rel"
-    mkdir -p "$(dirname "$_dest")"
+    if [ -e "$_dest" ] || [ -e "$_dest.DIRMETA" ] || [ -e "$_dest.WAS_ABSENT" ]; then
+        return 0
+    fi
+    mkdir -p "$(dirname "$_dest")" 2>/dev/null || fix_abort_item "백업 디렉터리를 만들 수 없음: $(dirname "$_dest")"
     if [ -d "$_f" ]; then
         # 디렉터리는 내용 전체를 복사하지 않고(대부분의 조치는 디렉터리 자체의 소유자/권한만
-        # 바꾸므로) 메타데이터(소유자·권한)만 기록해 원복 시 재적용한다.
-        _owner=$(stat -c '%U:%G' "$_f" 2>/dev/null)
+        # 바꾸므로) 메타데이터(소유자·권한)만 기록해 원복 시 재적용한다. 소유자는 숫자(uid:gid)로
+        # 남긴다 - 이름으로 남기면 소유자가 없는 디렉터리(U-15)는 "UNKNOWN" 이 되어 원복 chown 이 실패한다.
+        _owner=$(stat -c '%u:%g' "$_f" 2>/dev/null)
         _perm=$(stat -c '%a' "$_f" 2>/dev/null)
-        printf '%s\n%s\n' "$_owner" "$_perm" > "$_dest.DIRMETA"
+        [ -n "$_owner" ] && [ -n "$_perm" ] || fix_abort_item "디렉터리 소유자/권한을 기록할 수 없음: $_f"
+        printf '%s\n%s\n' "$_owner" "$_perm" > "$_dest.DIRMETA" 2>/dev/null || fix_abort_item "백업 기록 실패: $_f"
     elif [ -e "$_f" ]; then
-        cp -p "$_f" "$_dest" 2>/dev/null
+        if ! cp -p "$_f" "$_dest.tmp" 2>/dev/null || ! mv "$_dest.tmp" "$_dest" 2>/dev/null; then
+            rm -f "$_dest.tmp" "$_dest"
+            fix_abort_item "백업 실패(디스크 공간·권한 확인): $_f"
+        fi
+        if command -v cmp >/dev/null 2>&1 && ! cmp -s "$_f" "$_dest"; then
+            rm -f "$_dest"
+            fix_abort_item "백업 검증 실패(원본과 내용이 다름): $_f"
+        fi
     else
-        : > "$_dest.WAS_ABSENT"
+        : > "$_dest.WAS_ABSENT" 2>/dev/null || fix_abort_item "백업 기록 실패: $_f"
     fi
 }
 
 # fix_backup_remove_path <경로> — 파일/디렉터리를 완전히 삭제하기 전에 내용 전체를 tar로
 # 보존한다. fix_backup() 의 디렉터리 처리(소유자/권한 메타데이터만 저장)와 달리, 이 함수는
 # "삭제 자체가 조치"인 항목(WEB-07 기본 샘플/매뉴얼 디렉터리 제거 등) 전용으로 내용 전체를
-# 백업해 원복 시 삭제 이전 상태로 완전히 복원할 수 있게 한다.
+# 백업해 원복 시 삭제 이전 상태로 완전히 복원할 수 있게 한다. tar 가 실패하면 삭제하지 않는다
+# (예전에는 tar 실패를 무시하고 rm -rf 해 원본이 영구 소실될 수 있었다).
 fix_backup_remove_path() {
     _f=$1
     if [ ! -e "$_f" ] && [ ! -L "$_f" ]; then
@@ -872,11 +900,226 @@ fix_backup_remove_path() {
     fi
     _rel=$(printf '%s' "$_f" | sed 's#^/##')
     _dest="$FIX_BACKUP_DIR/$FIX_CODE/$_rel"
-    mkdir -p "$(dirname "$_dest")"
+    mkdir -p "$(dirname "$_dest")" 2>/dev/null || fix_abort_item "백업 디렉터리를 만들 수 없음: $(dirname "$_dest")"
     _parent=$(dirname "$_f")
     _base=$(basename "$_f")
-    (cd "$_parent" 2>/dev/null && tar czf "$_dest.TARBALL.tgz" "$_base") 2>/dev/null
+    if ! (cd "$_parent" && tar czf "$_dest.TARBALL.tgz" "$_base") 2>/dev/null || ! tar tzf "$_dest.TARBALL.tgz" >/dev/null 2>&1; then
+        rm -f "$_dest.TARBALL.tgz"
+        fix_abort_item "삭제 전 백업(tar) 실패 — 삭제하지 않음: $_f"
+    fi
     rm -rf "$_f"
+}
+
+# ---- 설정 파일 편집 헬퍼 (운영 안전 기준 F2, 1.2.2) ------------------------------------
+# fix_write_back <임시파일> <대상파일> — 편집 결과를 mv 대신 "내용만" 덮어써 원래 파일의
+# inode·소유자·권한·SELinux 컨텍스트를 유지한다. mv 로 바꾸면 root:root/umask 권한의 새 파일이
+# 되어 서비스 계정(tomcat 등)이 못 읽거나 SELinux 라벨이 바뀌어 다음 기동이 실패할 수 있다.
+fix_write_back() {
+    cat "$1" > "$2" && rm -f "$1"
+}
+
+# apache_options_disable <파일> <옵션> — Options 지시어에서 옵션(Indexes/FollowSymLinks/Includes)을
+# 끈다. Apache 2.4 는 한 Options 줄에 +/- 가 붙은 옵션과 안 붙은 옵션을 섞으면 문법 오류("Either all
+# Options must start with + or -, or no Option may")로 기동에 실패한다 - 예전 조치는 "Options Indexes
+# FollowSymLinks" 를 "Options -Indexes FollowSymLinks" 로 바꿔 다음 재시작 때 Apache 가 죽었다.
+#   +/- 표기가 없는 줄 → 해당 옵션을 지운다(남는 게 없으면 Options None)
+#   +/- 표기가 있는 줄 → 옵션(또는 +옵션)을 -옵션 으로 바꾼다
+# 바뀐 게 있으면 0, 없으면 1 을 반환한다.
+apache_options_disable() {
+    _ao_f=$1; _ao_tok=$2
+    awk -v tok="$_ao_tok" '
+        BEGIN { changed = 0 }
+        {
+            line = $0
+            lead = line; sub(/[^ \t].*$/, "", lead)
+            body = line; sub(/^[ \t]+/, "", body)
+            n = split(body, a, /[ \t]+/)
+            if (n >= 1 && tolower(a[1]) == "options") {
+                signed = 0
+                for (i = 2; i <= n; i++) if (a[i] ~ /^[+-]/) signed = 1
+                out = ""; hit = 0
+                for (i = 2; i <= n; i++) {
+                    t = a[i]
+                    if (t == "") continue
+                    if (tolower(t) == tolower(tok) || tolower(t) == "+" tolower(tok)) {
+                        hit = 1
+                        if (signed) t = "-" tok; else continue
+                    }
+                    out = out " " t
+                }
+                if (hit) {
+                    if (out == "") out = " None"
+                    line = lead a[1] out
+                    changed = 1
+                }
+            }
+            print line
+        }
+        END { exit(changed ? 0 : 1) }
+    ' "$_ao_f" > "$_ao_f.kisa_tmp"
+    _ao_rc=$?
+    if [ "$_ao_rc" -eq 0 ]; then fix_write_back "$_ao_f.kisa_tmp" "$_ao_f"; else rm -f "$_ao_f.kisa_tmp"; fi
+    return "$_ao_rc"
+}
+
+# apache_options_enabled <파일> <옵션> — 주석이 아닌 Options 줄에 옵션이 켜져(무표기 또는 +) 있으면 0
+apache_options_enabled() {
+    awk -v tok="$2" '
+        { body = $0; sub(/^[ \t]+/, "", body); n = split(body, a, /[ \t]+/)
+          if (n >= 1 && tolower(a[1]) == "options")
+              for (i = 2; i <= n; i++) if (tolower(a[i]) == tolower(tok) || tolower(a[i]) == "+" tolower(tok)) { found = 1; exit } }
+        END { exit(found ? 0 : 1) }
+    ' "$1"
+}
+
+# nginx_http_insert <파일> <지시어 줄> — 첫 "http {" 블록 바로 안쪽에 지시어를 넣는다. server_tokens /
+# error_page / disable_symlinks 는 http·server·location 컨텍스트에서만 허용되는데, 예전 조치는 파일
+# 맨 앞(1i)이나 맨 끝(main 컨텍스트)에 넣어 "directive is not allowed here" 로 다음 reload/재시작이
+# 실패했다. http 블록을 찾지 못하면 아무것도 바꾸지 않고 1 을 반환한다(수동 조치 안내).
+nginx_http_insert() {
+    _ni_f=$1; _ni_line=$2
+    grep -qE '^[[:space:]]*http[[:space:]]*\{' "$_ni_f" 2>/dev/null || return 1
+    awk -v ins="$_ni_line" '
+        !done && /^[ \t]*http[ \t]*\{/ { print; print "    # KISA 조치"; print "    " ins; done = 1; next }
+        { print }
+    ' "$_ni_f" > "$_ni_f.kisa_tmp" && fix_write_back "$_ni_f.kisa_tmp" "$_ni_f"
+}
+
+# web_config_test <apache|nginx> — 설정 문법 검사. 0=통과, 1=실패(WEB_CONFIG_TEST_OUT 에 출력),
+# 2=검사 도구 없음. 실행 중인 서버에는 영향이 없다(설정 파일만 파싱).
+web_config_test() {
+    WEB_CONFIG_TEST_OUT=""
+    case "$1" in
+        apache)
+            for _t in apachectl apache2ctl httpd; do
+                command -v "$_t" >/dev/null 2>&1 || continue
+                WEB_CONFIG_TEST_OUT=$("$_t" -t 2>&1) && return 0
+                return 1
+            done
+            return 2 ;;
+        nginx)
+            command -v nginx >/dev/null 2>&1 || return 2
+            WEB_CONFIG_TEST_OUT=$(nginx -t 2>&1) && return 0
+            return 1 ;;
+    esac
+    return 2
+}
+
+# sshd_global_lines [설정파일] — sshd 가 전역(Match 블록 밖)으로 읽는 설정 줄을 "읽는 순서대로"
+# 출력한다. Include 를 펼치고(상대경로는 /etc/ssh 기준), 각 파일에서 Match 이후는 제외한다.
+# sshd 는 같은 키워드가 여러 번 나오면 **처음 값**을 쓴다(sshd_config(5)) - 마지막 값을 보면
+# sshd_config.d 드롭인에서 먼저 지정된 값을 놓쳐 오판한다.
+_sshd_filter_global() {
+    awk '{ sub(/^[ \t]+/, ""); if ($0 == "" || substr($0, 1, 1) == "#") next
+           k = tolower($1); if (k == "match") exit
+           if (k == "include") { $1 = ""; print "@@INCLUDE" $0; next }
+           print }' "$1" 2>/dev/null
+}
+sshd_global_lines() {
+    _sg_cfg=${1:-/etc/ssh/sshd_config}
+    [ -f "$_sg_cfg" ] || return 0
+    _sshd_filter_global "$_sg_cfg" | while IFS= read -r _sg_l; do
+        case "$_sg_l" in
+            @@INCLUDE*)
+                set -f
+                # shellcheck disable=SC2086
+                set -- ${_sg_l#@@INCLUDE}
+                set +f
+                for _sg_p in "$@"; do
+                    case "$_sg_p" in /*) : ;; *) _sg_p="/etc/ssh/$_sg_p" ;; esac
+                    # shellcheck disable=SC2086
+                    for _sg_inc in $_sg_p; do
+                        [ -f "$_sg_inc" ] && _sshd_filter_global "$_sg_inc" | grep -v '^@@INCLUDE'
+                    done
+                done ;;
+            *) printf '%s\n' "$_sg_l" ;;
+        esac
+    done
+}
+
+# sshd_effective_value <키워드> — 실제로 적용되는 전역 값을 SSHD_VALUE 에, 근거를 SSHD_VALUE_SOURCE 에
+# 담는다($(...) 로 부르면 서브셸이라 근거 변수가 전달되지 않으므로 출력 대신 변수로 돌려준다).
+# sshd -T(유효 설정 출력)가 되면 그 값을, 안 되면(권한 부족·/run/sshd 없음 등) 파일 분석 첫 값을 쓴다.
+sshd_effective_value() {
+    _se_k=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    SSHD_VALUE=""
+    if command -v sshd >/dev/null 2>&1; then
+        SSHD_VALUE=$(sshd -T 2>/dev/null | awk -v k="$_se_k" '$1 == k { print $2; exit }')
+        if [ -n "$SSHD_VALUE" ]; then SSHD_VALUE_SOURCE="sshd -T(실제 적용 값)"; return 0; fi
+    fi
+    SSHD_VALUE_SOURCE="설정 파일 분석(Include 반영, 처음 나온 값 우선)"
+    SSHD_VALUE=$(sshd_global_lines | awk -v k="$_se_k" 'tolower($1) == k { print $2; exit }')
+}
+
+# sshd_match_overrides <키워드> — Match 블록 안에서 키워드를 지정한 줄(파일:내용). 전역은 no 여도
+# 특정 사용자/주소에 예외를 둔 경우를 드러내기 위함.
+sshd_match_overrides() {
+    _so_k=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+    for _so_f in /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf; do
+        [ -f "$_so_f" ] || continue
+        awk -v k="$_so_k" -v f="$_so_f" '{ s = $0; sub(/^[ \t]+/, "", s); if (s == "" || substr(s, 1, 1) == "#") next
+            split(s, a, /[ \t]+/); if (tolower(a[1]) == "match") m = 1
+            else if (m && tolower(a[1]) == k) print f ": " s }' "$_so_f"
+    done
+}
+
+# ---- fix 진입점 공통 가드 (운영 안전 기준 F1·F6, 1.2.2) ------------------------------
+# fix_require_root — 적용/원복을 root 로만 허용한다. 권한이 모자라면 일부 파일만 바뀌고
+# 원복(chown/cp -p)도 실패해 "반쯤 바뀐" 상태가 남기 때문이다. 08_dbms 는 Oracle OS 인증
+# (oracle 계정/dba 그룹)으로 실행해야 해 이 가드를 쓰지 않는다.
+fix_require_root() {
+    [ "$(id -u 2>/dev/null)" = "0" ] && return 0
+    log_error "조치 적용/원복은 root 권한이 필요합니다(권한 부족으로 일부만 바뀌거나 원복이 실패하는 것을 막기 위해 중단, 변경 없음)."
+    exit 2
+}
+
+# fix_lock_acquire <out_base> <category_num> — 같은 카테고리의 조치가 동시에 돌면 서로의 백업을
+# 덮어쓰고 같은 파일을 번갈아 고치므로 원자적 mkdir 잠금으로 막는다. 종료 시 fix_lock_release.
+fix_lock_acquire() {
+    ( umask 077; mkdir -p "$1" ) 2>/dev/null
+    FIX_LOCK_DIR="$1/.fix_$2.lock"
+    if ! mkdir "$FIX_LOCK_DIR" 2>/dev/null; then
+        _lpid=$(cat "$FIX_LOCK_DIR/pid" 2>/dev/null)
+        if [ -n "$_lpid" ] && kill -0 "$_lpid" 2>/dev/null; then
+            log_error "다른 조치(fix) 실행이 진행 중입니다(PID $_lpid). 끝난 뒤 다시 실행하세요. (잠금: $FIX_LOCK_DIR)"
+            FIX_LOCK_DIR=""
+            exit 2
+        fi
+        log_warn "이전 실행이 남긴 잠금을 정리합니다(PID ${_lpid:-알 수 없음}, 실행 중 아님)."
+        rm -rf "$FIX_LOCK_DIR"
+        mkdir "$FIX_LOCK_DIR" 2>/dev/null || { log_error "잠금을 만들 수 없습니다: $FIX_LOCK_DIR"; FIX_LOCK_DIR=""; exit 2; }
+    fi
+    echo $$ > "$FIX_LOCK_DIR/pid"
+}
+
+fix_lock_release() {
+    [ -n "${FIX_LOCK_DIR:-}" ] && rm -rf "$FIX_LOCK_DIR"
+    FIX_LOCK_DIR=""
+}
+
+# fix_confirm_plan <코드...> — --apply 시 실제로 바뀔 항목을 먼저 모두 보여주고 1회 확인받는다.
+# auto 등급은 항목별 확인 없이 적용되므로, 예전처럼 --apply 만 붙이면 경고 없이 auto 전체가
+# 적용되던 문제를 막는다. --yes(YES=1)는 이 1회 확인만 생략한다(confirm 등급은 여전히 항목별 확인).
+# 비대화형(터미널 없음)에서 --yes 없이 실행하면 아무것도 바꾸지 않고 끝낸다.
+fix_confirm_plan() {
+    [ "${YES:-0}" -eq 1 ] && return 0
+    echo "다음 항목을 실제로 변경합니다:"
+    _n_auto=0
+    for _c in "$@"; do
+        _g=$(guide_field "$GUIDE_JSON" "$_c" "fix"); [ -z "$_g" ] && _g="manual"
+        _t=$(guide_field "$GUIDE_JSON" "$_c" "title")
+        case "$_g" in
+            auto) printf '  [auto]    %-8s %s  ← 개별 확인 없이 적용\n' "$_c" "$_t"; _n_auto=$((_n_auto + 1)) ;;
+            confirm) printf '  [confirm] %-8s %s  ← 적용 직전 항목별로 다시 확인\n' "$_c" "$_t" ;;
+        esac
+    done
+    printf '위 목록대로 진행하시겠습니까? (auto %s건은 추가 확인 없이 적용됨) [y/N] ' "$_n_auto"
+    _ans=""
+    read -r _ans < /dev/tty 2>/dev/null || _ans=""
+    case "$_ans" in
+        y|Y) return 0 ;;
+        *) echo; echo "중단 — 아무것도 변경하지 않았습니다. (비대화형 실행은 --yes 로 이 확인을 생략할 수 있음)"; exit 0 ;;
+    esac
 }
 
 # fix_rollback_item <코드> — 해당 항목에서 fix_backup 한 모든 파일/디렉터리를 원상 복구한다.

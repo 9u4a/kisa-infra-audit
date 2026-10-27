@@ -64,4 +64,26 @@ PYEOF
     done
 done
 
+# ---- 조치(fix) 운영 안전 회귀 테스트 (fixtures/fix_safety.sh) -----------------------
+# ① auto 조치 적용 후에도 설정 문법 검사 통과(예전 WEB-04 의 "Options -Indexes FollowSymLinks"
+#    +/- 혼용, WEB-16/22 의 nginx main 컨텍스트 삽입은 다음 재시작 때 서비스를 죽였다)
+# ② --rollback 후 설정 파일이 조치 전과 바이트 단위로 같음
+# ③ 백업 공간이 없어 백업이 실패하면 설정을 바꾸지 않고 중단(종료코드 3, changes.log ABORTED)
+for engine in apache nginx; do
+    image="kisa-web-${engine}-test"
+    out=$(docker run --rm "$image" sh 03_web/tests/fixtures/fix_safety.sh "$engine" apply)
+    if printf '%s\n' "$out" | grep -qx 'FIX_RC=0' && printf '%s\n' "$out" | grep -qx 'SYNTAX_RC=0' \
+       && ! printf '%s\n' "$out" | grep -qx 'APPLIED=0' && printf '%s\n' "$out" | grep -qx 'ROLLBACK=same'; then
+        echo "PASS: $engine/fix-apply ($(printf '%s' "$out" | tr '\n' ' '))"
+    else
+        echo "FAIL: $engine/fix-apply - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
+    fi
+done
+out=$(docker run --rm --tmpfs /fixout:size=16k -e FIX_OUT=/fixout kisa-web-apache-test sh 03_web/tests/fixtures/fix_safety.sh apache backupfail)
+if printf '%s\n' "$out" | grep -qx 'FIX_RC=3' && printf '%s\n' "$out" | grep -qx 'CONF=unchanged' && printf '%s\n' "$out" | grep -qx 'ABORTED=1'; then
+    echo "PASS: apache/fix-backupfail ($(printf '%s' "$out" | tr '\n' ' '))"
+else
+    echo "FAIL: apache/fix-backupfail - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
+fi
+
 exit $fail

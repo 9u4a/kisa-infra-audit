@@ -2,6 +2,7 @@
 run_fix() {
     detect_web_engines
     applied=""
+    manual_only=""
 
     case " $WEB_ENGINES " in *" apache "*)
         conf=$(apache_conf_path)
@@ -28,8 +29,12 @@ run_fix() {
         done
         if [ -z "$hit" ] && [ -f "$conf" ]; then
             fix_backup "$conf"
-            sed -i "1i server_tokens off;" "$conf"
-            applied="$applied nginx($conf)"
+            # server_tokens 는 http/server/location 컨텍스트 전용 - 파일 맨 앞(main)에 넣으면 nginx 기동 실패
+            if nginx_http_insert "$conf" "server_tokens off;"; then
+                applied="$applied nginx($conf)"
+            else
+                manual_only="$manual_only nginx($conf 에서 http 블록을 찾지 못함 - http 블록에 'server_tokens off;' 수동 추가)"
+            fi
         fi
     esac
 
@@ -47,7 +52,7 @@ run_fix() {
                 awk '
                     !done && /<Connector[^>]*port="8080"/ { sub(/<Connector/, "<Connector server=\"WebServer\""); done=1 }
                     { print }
-                ' "$f" > "$f.kisa_tmp" && mv "$f.kisa_tmp" "$f"
+                ' "$f" > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
                 applied="$applied tomcat($f)"
             fi
         fi
@@ -55,8 +60,12 @@ run_fix() {
 
     if [ -n "$applied" ]; then
         FIX_STATUS="APPLIED"
-        FIX_DETAIL="응답 헤더의 서버 정보 노출을 제한함:$applied"
+        FIX_DETAIL="응답 헤더의 서버 정보 노출을 제한함:$applied${manual_only:+ / 수동 조치 필요:$manual_only}"
         FIX_EVIDENCE="$applied"
+    elif [ -n "$manual_only" ]; then
+        FIX_STATUS="ERROR"
+        FIX_DETAIL="자동 조치 불가 - 수동 조치 필요:$manual_only"
+        FIX_EVIDENCE=""
     else
         FIX_STATUS="NA"
         FIX_DETAIL="서버 정보를 노출하는 엔진이 없음(이미 정상)"

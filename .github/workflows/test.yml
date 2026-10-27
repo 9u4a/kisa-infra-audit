@@ -67,6 +67,23 @@ jobs:
           done < <(find . -name "*.py" -not -path "./output/*" -not -path "*/__pycache__/*" -not -path "./.git/*")
           exit $err
 
+      # lib/Common.psm1 에 함수를 추가하고 Export-ModuleMember 목록에 빠뜨리면 run.ps1/fix.ps1 이
+      # 실행 시점에 "is not recognized" 로 죽는다(파싱/PSSA 로는 안 잡힘 - 1.2.1/1.2.2 작업 중 실제로 두 번 겪음).
+      - name: Common.psm1 함수 공개 목록 검사
+        run: |
+          python3 - <<'EOF'
+          import re, sys
+          t = open("lib/Common.psm1", encoding="utf-8-sig").read()
+          defined = set(re.findall(r'^function\s+([A-Za-z]+-[A-Za-z]+)', t, re.M))
+          m = re.search(r'Export-ModuleMember\s+-Function\s+(.*?)\s+-Variable', t, re.S)
+          exported = {x.strip() for x in m.group(1).split(',')} if m else set()
+          missing, extra = sorted(defined - exported), sorted(exported - defined)
+          if missing or extra:
+              print(f"정의됐지만 공개 안 됨: {missing} / 공개 목록에만 있음: {extra}")
+              sys.exit(1)
+          print(f"OK: {len(defined)}개 함수 모두 공개")
+          EOF
+
   network:
     # 05_network 는 오프라인 설정파일 분석이라 Docker/실제 장비가 필요 없다 - Cisco IOS
     # vuln/hardened 픽스처 2종으로 38항목 전체 판정 로직을 회귀 테스트한다(05_network/

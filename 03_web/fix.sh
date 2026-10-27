@@ -10,7 +10,7 @@
 # 사용법:
 #   fix.sh -r <result.json>                       dry-run: 적용 대상·등급만 출력
 #   fix.sh -r <result.json> -i WEB-01,WEB-16 --apply  지정 항목만 실제 적용
-#   fix.sh -r <result.json> --apply --yes         auto 등급 전체 적용(confirm 등급은 항상 개별 y/N)
+#   fix.sh -r <result.json> --apply --yes         적용 전 변경 목록 확인(1회)을 생략(confirm 등급은 항상 개별 y/N)
 #   fix.sh --rollback <output/host_03_fix_TS 디렉터리>   백업에서 원복
 #
 # guide.json 의 fix 등급: auto(영향 없음, 즉시 적용) / confirm(서비스 영향 가능, 항목별 확인
@@ -51,6 +51,14 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# 실제로 바꾸는 경우(적용/원복)에만: root 확인 + 동시 실행 잠금(lib/common.sh, 운영 안전 기준 F1/F6)
+if [ "$APPLY" -eq 1 ] || [ -n "$ROLLBACK_DIR" ]; then
+    fix_require_root
+    fix_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
+    trap 'fix_lock_release' EXIT
+    trap 'exit 130' INT TERM
+fi
+
 if [ -n "$ROLLBACK_DIR" ]; then
     fix_rollback_all "$ROLLBACK_DIR"
     exit $?
@@ -85,6 +93,9 @@ if [ -z "$VULN_CODES" ]; then
     exit 0
 fi
 
+# shellcheck disable=SC2086
+[ "$APPLY" -eq 1 ] && fix_confirm_plan $VULN_CODES
+
 fix_prepare_dir "$OUT_BASE" "$CATEGORY_NUM"
 export FIX_BACKUP_DIR
 TOTAL=$(echo "$VULN_CODES" | wc -w | tr -d ' ')
@@ -96,6 +107,24 @@ echo "대상 항목  : ${TOTAL}개 (진단 결과 중 VULN$( [ -n "$ITEM_FILTER"
 echo "------------------------------------------------------------------------"
 
 N_APPLIED=0; N_SKIPPED=0; N_DECLINED=0; N_FAILED=0; N_MANUAL=0; N_PREVIEW=0
+
+# 설정 문법 검사 기준선(운영 안전 기준 F2): 적용 전에 통과하던 엔진만 항목마다 다시 검사해, 조치가
+# 설정을 깨뜨렸으면(다음 reload/재시작 때 서비스가 안 뜨는 상태) 그 항목을 즉시 원복한다. 원래부터
+# 검사에 실패하던 설정은 조치 탓으로 오인하지 않도록 기준선에서 제외하고 경고만 한다.
+WEB_BASE_OK=""
+if [ "$APPLY" -eq 1 ]; then
+    detect_web_engines
+    for _e in apache nginx; do
+        case " $WEB_ENGINES " in *" $_e "*)
+            web_config_test "$_e"
+            case $? in
+                0) WEB_BASE_OK="$WEB_BASE_OK $_e" ;;
+                1) log_warn "$_e 설정이 조치 전부터 문법 검사에 실패합니다 - 이 엔진은 적용 후 문법 검증을 할 수 없습니다: $(printf '%s' "$WEB_CONFIG_TEST_OUT" | tail -n 2 | tr '\n' ' ')" ;;
+                *) log_warn "$_e 설정 문법 검사 도구(apachectl/httpd/nginx)를 찾지 못해 적용 후 문법 검증을 할 수 없습니다." ;;
+            esac
+        esac
+    done
+fi
 
 for code in $VULN_CODES; do
     title=$(guide_field "$GUIDE_JSON" "$code" "title")
@@ -153,6 +182,16 @@ for code in $VULN_CODES; do
         run_fix
     fi
     unset -f run_fix 2>/dev/null || true
+
+    if [ "$FIX_STATUS" = "APPLIED" ]; then
+        for _e in $WEB_BASE_OK; do
+            if ! web_config_test "$_e"; then
+                FIX_STATUS="ERROR"
+                FIX_DETAIL="$FIX_DETAIL / 적용 후 $_e 설정 문법 검사 실패(그대로 두면 다음 재시작 때 서비스 기동 실패) - 원복: $(printf '%s' "$WEB_CONFIG_TEST_OUT" | tail -n 3 | tr '\n' ' ')"
+                break
+            fi
+        done
+    fi
 
     CHECK_STATUS="ERROR"; CHECK_DETAIL="check 스크립트 없음"; CHECK_EVIDENCE=""
     if [ -f "$check_file" ]; then

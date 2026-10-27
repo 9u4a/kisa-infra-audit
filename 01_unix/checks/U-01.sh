@@ -20,20 +20,32 @@ _u01_check_sshd() {
         CHECK_EVIDENCE=""
         return 0
     fi
-    value=$(grep -iE '^[[:space:]]*PermitRootLogin[[:space:]]' "$sshd_cfg" 2>/dev/null | awk '{print $2}' | tail -n1)
-    evidence=$(grep -inE '^[[:space:]]*PermitRootLogin[[:space:]]' "$sshd_cfg" 2>/dev/null)
-    [ -z "$evidence" ] && evidence="(PermitRootLogin 설정 없음 → 기본값 적용)"
+    # sshd 는 같은 키워드의 "처음" 값을 쓰고 sshd_config.d 드롭인(Include)도 읽는다 - 예전처럼 본 파일의
+    # 마지막 값만 보면 드롭인에서 먼저 지정된 값을 놓친다(lib/common.sh sshd_effective_value).
+    sshd_effective_value PermitRootLogin
+    value=$SSHD_VALUE
+    evidence=$(sshd_global_lines | grep -iE '^PermitRootLogin[[:space:]]')
+    [ -z "$evidence" ] && evidence="(전역 PermitRootLogin 설정 없음 → 기본값 적용)"
+    overrides=$(sshd_match_overrides PermitRootLogin | grep -viE 'PermitRootLogin[[:space:]]+no([[:space:]]|$)')
     case "$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')" in
         no)
-            CHECK_STATUS="GOOD"; CHECK_DETAIL="sshd_config 에 PermitRootLogin no 설정됨" ;;
+            if [ -n "$overrides" ]; then
+                CHECK_STATUS="MANUAL"
+                CHECK_DETAIL="전역은 PermitRootLogin no 이나 Match 블록에서 root 접속을 예외 허용함 - 예외 대상의 적절성 확인 필요"
+            else
+                CHECK_STATUS="GOOD"; CHECK_DETAIL="PermitRootLogin no 가 적용됨"
+            fi ;;
         ""|prohibit-password|without-password)
             CHECK_STATUS="MANUAL"
             CHECK_DETAIL="PermitRootLogin 이 명시적으로 no 가 아님(값: '${value:-미설정, 기본값}'). 기본 정책 확인 필요" ;;
         *)
-            CHECK_STATUS="VULN"; CHECK_DETAIL="sshd_config 에 PermitRootLogin ${value} 설정되어 root 원격 접속이 허용됨" ;;
+            CHECK_STATUS="VULN"; CHECK_DETAIL="PermitRootLogin ${value} 가 적용되어 root 원격 접속이 허용됨" ;;
     esac
-    CHECK_EVIDENCE="$sshd_cfg:
-$evidence"
+    CHECK_EVIDENCE="판정 근거: $SSHD_VALUE_SOURCE
+전역 설정(sshd 가 읽는 순서):
+$evidence${overrides:+
+Match 블록 예외:
+$overrides}"
     return 0
 }
 

@@ -6,11 +6,14 @@ run_fix() {
         FIX_STATUS="APPLIED"; FIX_DETAIL="제거 대상 위장 device 파일이 없음"; FIX_EVIDENCE=""
         return
     fi
-    printf '%s\n' "$fake" | while IFS= read -r f; do
+    # 파이프(| while)는 서브셸이라 fix_backup 실패 시의 중단(exit)이 전달되지 않으므로 here-doc 사용
+    while IFS= read -r f; do
         [ -z "$f" ] && continue
         fix_backup "$f"
         rm -f "$f"
-    done
+    done <<EOF
+$fake
+EOF
     FIX_STATUS="APPLIED"
     FIX_DETAIL="/dev 내 major/minor 번호가 없는 일반 파일을 제거함"
     FIX_EVIDENCE="$fake"
