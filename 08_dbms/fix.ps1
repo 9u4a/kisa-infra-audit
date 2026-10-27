@@ -46,8 +46,23 @@ if ($SqlHost) { $env:DB_HOST = $SqlHost }
 if ($SqlPort) { $env:DB_PORT = $SqlPort }
 if ($SqlUser) { $env:DB_USER = $SqlUser }
 if ($SqlDb)   { $env:DB_NAME = $SqlDb }
+if ($env:DB_USER -and -not $env:DB_PASSWORD) {
+    Write-Error "SQL 인증(-SqlUser/DB_USER) 사용 시 `$env:DB_PASSWORD 가 필요합니다(비밀번호 프롬프트 대기 방지)."
+    exit 2
+}
 if ($env:DB_PASSWORD) { $env:SQLCMDPASSWORD = $env:DB_PASSWORD }
 $Global:DbErrFile = Join-Path ([System.IO.Path]::GetTempPath()) "kisa-dbms-fix-err-$PID.txt"
+$Global:DbConnFailed = $false
+
+# 적용/원복은 항목마다 DB에 접속하므로, 잘못된 접속 정보로 로그인 실패를 반복해 계정이 잠기기
+# 전에 1회만 시험하고 실패하면 아무것도 바꾸지 않고 중단한다.
+if ($Apply -or $Rollback) {
+    if (-not (Test-MssqlPreflight)) {
+        Remove-Item -Path $Global:DbErrFile -Force -ErrorAction SilentlyContinue
+        Write-Error "DB 접속 사전 점검 실패 - 계정 잠금 방지를 위해 재시도하지 않고 중단합니다(변경 없음): $Global:DbConnFailMsg"
+        exit 2
+    }
+}
 
 if ($Rollback) {
     Invoke-FixRollbackAll -RunDir $Rollback

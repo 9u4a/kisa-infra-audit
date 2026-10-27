@@ -63,9 +63,22 @@ if [ -z "$ENGINE_OVERRIDE" ]; then
 fi
 DBMS_ENGINE="$ENGINE_OVERRIDE"
 
-DB_ERR_FILE=$(mktemp 2>/dev/null || echo "/tmp/.dbms_fix_err.$$")
+DB_ERR_FILE=$(mktemp 2>/dev/null) || {
+    DB_ERR_FILE="${TMPDIR:-/tmp}/.dbms_fix_err.$$"
+    ( umask 077; set -C; : > "$DB_ERR_FILE" ) 2>/dev/null || { echo "오류: 임시 파일을 만들 수 없습니다: $DB_ERR_FILE" >&2; exit 2; }
+}
 trap 'rm -f "$DB_ERR_FILE"' EXIT
+trap 'exit 130' INT TERM
 export DB_HOST DB_PORT DB_USER DB_NAME DB_SOCKET DB_ERR_FILE DBMS_ENGINE
+
+# 적용/원복은 항목마다 DB에 접속하므로, 잘못된 접속 정보로 로그인 실패를 반복해 계정이 잠기기
+# 전에 1회만 시험하고 실패하면 아무것도 바꾸지 않고 중단한다.
+if [ "$APPLY" -eq 1 ] || [ -n "$ROLLBACK_DIR" ]; then
+    if ! db_preflight; then
+        echo "오류: DB 접속 사전 점검 실패 - 계정 잠금 방지를 위해 재시도하지 않고 중단합니다(변경 없음): $DB_CONN_FAIL_MSG" >&2
+        exit 2
+    fi
+fi
 
 if [ -n "$ROLLBACK_DIR" ]; then
     fix_rollback_all "$ROLLBACK_DIR"

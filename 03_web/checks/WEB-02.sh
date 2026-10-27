@@ -13,6 +13,10 @@ run_check() {
                 CHECK_STATUS="NA"; CHECK_DETAIL="tomcat-users.xml 이 없음"; CHECK_EVIDENCE=""
                 return
             fi
+            if [ ! -r "$f" ]; then
+                CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 를 읽을 수 없음(권한 부족) - 비밀번호 확인 불가"; CHECK_EVIDENCE=""
+                return
+            fi
             mgr_lines=$(strip_xml_comments "$f" | grep -E 'roles="[^"]*manager-gui')
             if [ -z "$mgr_lines" ]; then
                 CHECK_STATUS="GOOD"; CHECK_DETAIL="manager-gui 계정이 없어 해당 없음(관리자 페이지 미사용)"; CHECK_EVIDENCE=""

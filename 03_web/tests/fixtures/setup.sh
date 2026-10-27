@@ -28,8 +28,17 @@ case "$ENGINE" in
         ;;
     tomcat)
         WEBXML=/usr/local/tomcat/conf/web.xml
+        USERS=/usr/local/tomcat/conf/tomcat-users.xml
         if [ "$MODE" = "vuln" ]; then
             sed -i '0,/<param-value>false<\/param-value>/s//<param-value>true<\/param-value>/' "$WEBXML"
+        fi
+        # WEB-01: vuln=기본 계정명(tomcat), hardened=기본값 아님. 비밀번호에 '>' 와 '/' 를 넣어
+        # 증적에 비밀번호 원문이 실리던 버그(속성 사이를 [^/]* 로 통째로 잡음)와 '>' 에서 요소가
+        # 잘려 계정을 놓치던 문제를 재현한다 - run_tests.sh 가 결과물에 이 문자열이 없는지 확인.
+        if [ "$MODE" = "vuln" ]; then
+            sed -i 's#</tomcat-users>#  <user username="tomcat" password="Leak>Check/Pw9" roles="manager-gui"/>\n</tomcat-users>#' "$USERS"
+        else
+            sed -i 's#</tomcat-users>#  <user username="ops_admin" password="Leak>CheckPw9Strong" roles="manager-gui"/>\n</tomcat-users>#' "$USERS"
         fi
         ;;
     *)

@@ -15,7 +15,8 @@ run_check() {
                 CHECK_EVIDENCE=""
                 return
             fi
-            plain_accounts=$(awk -F: '$2 != "x" && $2 != "*" && $2 != "!" && length($2) > 0 {print $1":"$2}' "$passwd_file")
+            # 2번째 필드(평문/해시)는 결과물에 원문을 남기지 않고 길이만 기록한다.
+            plain_accounts=$(awk -F: '$2 != "x" && $2 != "*" && $2 != "!" && length($2) > 0 {print $1": 2번째 필드 " length($2) "자(원문 미저장)"}' "$passwd_file")
             if [ -f /etc/shadow ] && [ -z "$plain_accounts" ]; then
                 CHECK_STATUS="GOOD"
                 CHECK_DETAIL="쉐도우 비밀번호 사용 중이며 /etc/passwd 에 평문 비밀번호 필드가 없음"
@@ -38,7 +39,7 @@ run_check() {
                 CHECK_STATUS="ERROR"; CHECK_DETAIL="$passwd_file 를 읽을 수 없음"; CHECK_EVIDENCE=""
                 return
             fi
-            plain_accounts=$(awk -F: '$2 != "!" && $2 != "*" && length($2) > 0 {print $1":"$2}' "$passwd_file")
+            plain_accounts=$(awk -F: '$2 != "!" && $2 != "*" && length($2) > 0 {print $1": 2번째 필드 " length($2) "자(원문 미저장)"}' "$passwd_file")
             if [ -f "$secpw" ] && [ -z "$plain_accounts" ]; then
                 CHECK_STATUS="GOOD"
                 CHECK_DETAIL="$secpw 에 비밀번호가 분리 저장되어 있으며 $passwd_file 에 평문/해시 필드가 없음"
@@ -67,7 +68,7 @@ run_check() {
                 CHECK_EVIDENCE="$tcb 디렉터리 존재"
                 return
             fi
-            plain_accounts=$(awk -F: '$2 != "x" && $2 != "*" && length($2) > 0 {print $1":"$2}' "$passwd_file")
+            plain_accounts=$(awk -F: '$2 != "x" && $2 != "*" && length($2) > 0 {print $1": 2번째 필드 " length($2) "자(원문 미저장)"}' "$passwd_file")
             if [ -f /etc/shadow ] && [ -z "$plain_accounts" ]; then
                 CHECK_STATUS="GOOD"
                 CHECK_DETAIL="표준 모드 쉐도우(/etc/shadow) 사용 중이며 $passwd_file 에 평문 비밀번호 필드가 없음"

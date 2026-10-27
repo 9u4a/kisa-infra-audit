@@ -15,7 +15,8 @@ if (-not $tasks -or $tasks.Count -eq 0) {
 }
 
 $evidence = $tasks | ForEach-Object {
-    $action = ($_.Actions | ForEach-Object { "$($_.Execute) $($_.Arguments)" }) -join "; "
+    # 실행 인자에 자격증명(net use /user:x 비밀번호 등)이 들어 있을 수 있어 가린 뒤 증적에 남긴다.
+    $action = ($_.Actions | ForEach-Object { Protect-SecretText "$($_.Execute) $($_.Arguments)" }) -join "; "
     "$($_.TaskPath)$($_.TaskName) [$($_.State)] -> $action"
 }
 

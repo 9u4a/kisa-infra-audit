@@ -14,7 +14,8 @@ run_fix() {
     o3=$(oracle_query "ALTER SYSTEM SET remote_os_roles = FALSE SCOPE=SPFILE;" 2>&1)
 
     restarted=0
-    restart_out=$(oracle_query "SHUTDOWN IMMEDIATE;
+    # 재기동 도중 시간 제한으로 sqlplus 가 끊기면 STARTUP 없이 DB가 내려간 채로 남으므로 제한 해제
+    restart_out=$(DB_CMD_TIMEOUT=0 oracle_query "SHUTDOWN IMMEDIATE;
 STARTUP;" 2>&1)
     rc=$?
     [ $rc -eq 0 ] && restarted=1

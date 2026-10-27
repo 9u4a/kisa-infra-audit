@@ -34,7 +34,8 @@ done
 HOST=$(hostname 2>/dev/null || echo unknown)
 TS=$(date +%Y%m%d-%H%M%S)
 RUN_LOG_DIR="$OUT_BASE/${HOST}_audit_${TS}"
-mkdir -p "$RUN_LOG_DIR"
+# 실행자만 접근(700) - lib/common.sh make_private_dir 와 같은 이유(이 런처는 common.sh 를 소싱하지 않음)
+( umask 077; mkdir -p "$RUN_LOG_DIR" ) && chmod 700 "$RUN_LOG_DIR"
 
 echo "=== 주요정보통신기반시설 통합 진단 ==="
 echo "호스트     : $HOST"

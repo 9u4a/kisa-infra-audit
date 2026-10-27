@@ -45,9 +45,13 @@ import json, sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 result_path, expected_path, label = sys.argv[1], sys.argv[2], sys.argv[3]
-actual = {it["code"]: it["status"] for it in json.load(open(result_path, encoding="utf-8"))["items"]}
+raw = open(result_path, encoding="utf-8").read()
+actual = {it["code"]: it["status"] for it in json.loads(raw)["items"]}
 expected = json.load(open(expected_path, encoding="utf-8"))
 failures = [f"{c}: 기대={e} 실제={actual.get(c)}" for c, e in expected.items() if actual.get(c) != e]
+# fixtures/setup.sh 가 tomcat-users.xml 에 넣은 비밀번호 원문이 결과물에 남으면 안 된다(민감정보 미저장)
+if "Leak>Check" in raw or "Leak\\u003eCheck" in raw:
+    failures.append("tomcat-users.xml 비밀번호 원문이 result.json 에 저장됨")
 if failures:
     print(f"FAIL: {label} - {len(failures)}건 불일치")
     for f in failures:

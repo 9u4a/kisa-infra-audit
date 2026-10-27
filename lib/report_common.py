@@ -44,9 +44,11 @@ def write_result_json(path: str, items: list[dict], category: str, host: str, en
             key=_sort_key,
         ),
     }
+    # "</" -> "<\/" (JSON 상 같은 값): result.json 은 report.html 의 <script> 안에 그대로 붙으므로,
+    # 설정 파일 등에서 온 증적에 "</script>" 가 섞여도 HTML 이 깨지거나 스크립트가 실행되지 않게 한다.
+    text = json.dumps(obj, ensure_ascii=False, indent=2).replace("</", "<\\/")
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-        f.write("\n")
+        f.write(text + "\n")
 
 
 def write_csv(path: str, items: list[dict], guide_by_code: dict) -> None:

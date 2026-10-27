@@ -14,7 +14,7 @@ if (-not $items -or $items.Count -eq 0) {
     return New-CheckResult -Code "W-62" -Status "GOOD" -Detail "등록된 시작 프로그램이 없음"
 }
 
-$evidence = $items | ForEach-Object { "$($_.Name) | $($_.Command) | $($_.Location)" }
+$evidence = $items | ForEach-Object { "$($_.Name) | $(Protect-SecretText $_.Command) | $($_.Location)" }
 
 return New-CheckResult -Code "W-62" -Status "MANUAL" `
     -Detail "시작 프로그램이 $($items.Count)건 등록되어 있음 — 정기 검사 절차 존재 여부 및 불필요/의심스러운 항목은 수동 검토 필요" `

@@ -28,7 +28,8 @@ if (-not $OutBase) { $OutBase = Join-Path $ScriptDir "output" }
 $HostName = $env:COMPUTERNAME
 $Ts = Get-Date -Format "yyyyMMdd-HHmmss"
 $RunLogDir = Join-Path $OutBase "$($HostName)_audit_$Ts"
-New-Item -ItemType Directory -Force -Path $RunLogDir | Out-Null
+Import-Module (Join-Path $ScriptDir "lib\Common.psm1") -Force
+New-PrivateDirectory -Path $RunLogDir
 
 Write-Host "=== 주요정보통신기반시설 통합 진단 ==="
 Write-Host "호스트     : $HostName"

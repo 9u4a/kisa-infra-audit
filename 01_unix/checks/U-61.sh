@@ -53,14 +53,22 @@ $line" ;;
     done
     IFS=$old_ifs
 
+    # community 문자열은 비밀번호에 준하므로 증적/판정 문구에 원문을 남기지 않는다.
     CHECK_EVIDENCE="$conf
-$lines"
+$(printf '%s\n' "$lines" | _u61_mask)"
 
     if [ -z "$unrestricted" ]; then
         CHECK_STATUS="GOOD"
         CHECK_DETAIL="SNMP 접근이 특정 네트워크로 제한되어 있음"
     else
         CHECK_STATUS="VULN"
-        CHECK_DETAIL="SNMP 접근 제어(허용 네트워크) 없이 전체 허용된 설정이 존재함:$unrestricted"
+        CHECK_DETAIL="SNMP 접근 제어(허용 네트워크) 없이 전체 허용된 설정이 존재함:$(printf '%s\n' "$unrestricted" | _u61_mask)"
     fi
+}
+
+# com2sec <secname> <source> <community> / rocommunity|rwcommunity <community> [<source>]
+_u61_mask() {
+    awk '{ i = ($1 == "com2sec") ? 4 : 2
+           if (i <= NF) { s = $i; $i = (length(s) <= 4) ? "***(" length(s) "자)" : substr(s, 1, 2) "***(" length(s) "자)" }
+           print }'
 }

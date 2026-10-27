@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import html
 import json
 import os
 import sys
@@ -193,8 +194,9 @@ def render_html(path: str, category: str, host_rows: list[dict], item_rows: list
     for h in host_rows:
         rate_s = f"{h['rate']}%" if h["rate"] is not None else "N/A"
         c = h["counts"]
+        # host/env 는 대상 호스트가 써 준 result.json 값이라 HTML 이스케이프 후 삽입한다.
         host_html.append(
-            f"<tr><td>{h['host']}</td><td>{h['env']}</td>"
+            f"<tr><td>{html.escape(str(h['host']))}</td><td>{html.escape(str(h['env']))}</td>"
             f"<td class=\"rate\" style=\"color:{rate_color(h['rate'])}\">{rate_s}</td>"
             f"<td>{c['VULN']}</td><td>{c['MANUAL']}</td><td>{c['ERROR']}</td><td>{c['NA']}</td><td>{c['GOOD']}</td></tr>"
         )
@@ -203,19 +205,19 @@ def render_html(path: str, category: str, host_rows: list[dict], item_rows: list
         if it["vuln"] == 0:
             continue
         item_html.append(
-            f"<tr><td class=\"code\">{it['code']}</td><td>{it['severity']}</td><td>{it['title']}</td>"
+            f"<tr><td class=\"code\">{html.escape(str(it['code']))}</td><td>{html.escape(str(it['severity']))}</td><td>{html.escape(str(it['title']))}</td>"
             f"<td>{it['vuln']}/{it['applicable']}</td>"
             f"<td class=\"rate\" style=\"color:{rate_color(100 - it['vuln_rate'])}\">{it['vuln_rate']}%</td></tr>"
         )
-    html = _HTML_TEMPLATE.format(
-        category=category,
+    page = _HTML_TEMPLATE.format(
+        category=html.escape(str(category)),
         host_count=len(host_rows),
         generated_at=f"{datetime.now():%Y-%m-%d %H:%M:%S}",
         host_rows="".join(host_html) or "<tr><td colspan=8>데이터 없음</td></tr>",
         item_rows="".join(item_html) or "<tr><td colspan=5>취약 항목 없음</td></tr>",
     )
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(html)
+        f.write(page)
 
 
 def main() -> None:

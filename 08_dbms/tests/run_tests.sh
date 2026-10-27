@@ -88,4 +88,81 @@ PYEOF
     done
 done
 
+# ---- 운영 안전 회귀 테스트 ---------------------------------------------------------
+# ① 잘못된 비밀번호로 run.sh 를 돌려도 DB 서버가 본 로그인 실패는 정확히 1회여야 한다(항목마다
+#    재시도하면 Oracle FAILED_LOGIN_ATTEMPTS 등으로 운영 계정이 잠김 - lib/common.sh db_preflight).
+# ② 이때 DB 조회 항목은 "사전 점검 실패" 사유의 ERROR 로 남아야 한다(거짓 GOOD/VULN 금지).
+# ③ 비밀번호 없이 실행해도 프롬프트에서 멈추지 않고 끝나야 한다(psql -w, _db_run).
+for engine in mysql postgres; do
+    image="kisa-dbms-${engine}-test"
+    net="kisa-dbms-net-$$-$engine-safety"
+    docker network create "$net" >/dev/null
+    if [ "$engine" = "mysql" ]; then
+        db_cid=$(docker run -d --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! mysql:8)
+        dbuser="root"
+    else
+        db_cid=$(docker run -d --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! postgres:16)
+        dbuser="postgres"
+    fi
+    ready=0; i=0
+    while [ "$i" -lt 30 ]; do
+        if [ "$engine" = "mysql" ]; then
+            docker run --rm --network "$net" "$image" sh -c "mysqladmin ping -h dbhost -uroot -pTestRoot123! --silent" >/dev/null 2>&1 && { ready=1; break; }
+        else
+            docker run --rm --network "$net" "$image" sh -c "pg_isready -h dbhost -U postgres" >/dev/null 2>&1 && { ready=1; break; }
+        fi
+        i=$((i + 1)); sleep 2
+    done
+    if [ "$ready" -ne 1 ]; then
+        echo "FAIL: $engine/safety - DB 서버가 60초 내에 준비되지 않음"; fail=1
+    else
+        mysql_aborted() {
+            docker run --rm --network "$net" "$image" sh -c \
+                "mysql -h dbhost -uroot -pTestRoot123! -N -B -e \"SHOW GLOBAL STATUS LIKE 'Aborted_connects'\" 2>/dev/null" | awk '{print $2}'
+        }
+        before=0
+        [ "$engine" = "mysql" ] && before=$(mysql_aborted)
+        [ "$engine" = "postgres" ] && before=$(docker logs "$db_cid" 2>&1 | grep -c 'password authentication failed' || true)
+
+        safety_json="result_${engine}_safety.json"
+        rc=0
+        docker run --rm --network "$net" -e DB_HOST=dbhost -e DB_PASSWORD='WrongPass!9' "$image" sh -c "
+            timeout 300 sh 08_dbms/run.sh -e $engine --host dbhost --user $dbuser -o /tmp/out >/dev/null 2>&1
+            echo \"rc=\$?\" >&2
+            cat /tmp/out/*/result.json" > "$safety_json" 2>"$safety_json.rc" || rc=$?
+
+        if [ "$engine" = "mysql" ]; then
+            after=$(mysql_aborted)
+        else
+            after=$(docker logs "$db_cid" 2>&1 | grep -c 'password authentication failed' || true)
+        fi
+        attempts=$((after - before))
+        run_rc=$(sed -n 's/^rc=//p' "$safety_json.rc")
+
+        nopw_rc=$(docker run --rm --network "$net" -e DB_HOST=dbhost "$image" sh -c "
+            timeout 300 sh 08_dbms/run.sh -e $engine --host dbhost --user $dbuser -o /tmp/out >/dev/null 2>&1; echo \$?" || true)
+
+        if [ "$attempts" -ne 1 ]; then
+            echo "FAIL: $engine/safety - 잘못된 비밀번호로 로그인 실패 ${attempts}회 발생(기대 1회)"; fail=1
+        elif [ "$run_rc" = "124" ] || [ "$nopw_rc" = "124" ]; then
+            echo "FAIL: $engine/safety - run.sh 가 300초 안에 끝나지 않음(대기/프롬프트 의심)"; fail=1
+        elif python3 - "$safety_json" "$engine/safety" <<'PYEOF'
+import json, sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+path, label = sys.argv[1], sys.argv[2]
+items = json.load(open(path, encoding="utf-8"))["items"]
+blocked = [it for it in items if it["status"] == "ERROR" and "사전 점검 실패" in it["detail"]]
+judged = [it["code"] for it in items if it["status"] in ("GOOD", "VULN") and "사전 점검" not in it["detail"]]
+if not blocked:
+    print(f"FAIL: {label} - '사전 점검 실패' ERROR 항목이 없음"); sys.exit(1)
+print(f"PASS: {label} (로그인 실패 1회, 차단된 DB 조회 항목 {len(blocked)}개, 접속 없이 판정된 항목 {judged})")
+PYEOF
+        then :; else fail=1; fi
+        rm -f "$safety_json" "$safety_json.rc"
+    fi
+    docker rm -f "$db_cid" >/dev/null 2>&1 || true
+    docker network rm "$net" >/dev/null 2>&1 || true
+done
+
 exit $fail

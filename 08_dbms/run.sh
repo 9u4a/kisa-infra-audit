@@ -87,8 +87,14 @@ else
     fi
 fi
 
-DB_ERR_FILE=$(mktemp 2>/dev/null || echo "/tmp/.dbms_err.$$")
+# mktemp 가 없을 때도 예측 가능한 /tmp 고정 경로를 그대로 쓰지 않는다(root 권한으로 기존
+# 심볼릭 링크를 따라가 덮어쓰는 공격 방지) - noclobber 로 새 파일만 만들고, 이미 있으면 중단.
+DB_ERR_FILE=$(mktemp 2>/dev/null) || {
+    DB_ERR_FILE="${TMPDIR:-/tmp}/.dbms_err.$$"
+    ( umask 077; set -C; : > "$DB_ERR_FILE" ) 2>/dev/null || { log_error "임시 파일을 만들 수 없습니다: $DB_ERR_FILE"; exit 2; }
+}
 trap 'rm -f "$DB_ERR_FILE"' EXIT
+trap 'exit 130' INT TERM
 
 export DB_HOST DB_PORT DB_USER DB_NAME DB_SOCKET DB_ERR_FILE DBMS_ENGINE
 
@@ -127,6 +133,17 @@ echo "대상 항목  : ${TOTAL}개"
 echo "시작 시각  : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "----------------------------------------------------------------------"
 log_to_file "진단 시작: 엔진=$DBMS_ENGINE 대상=$TOTAL 항목"
+
+# 접속을 항목마다 시도하기 전에 1회만 시험한다 - 실패하면 이후 DB 조회 항목은 접속 없이 ERROR
+# 처리된다(lib/common.sh db_preflight). 설정 파일·프로세스 기반 항목은 그대로 진단한다.
+if db_preflight; then
+    echo "DB 접속    : 사전 점검 성공"
+    log_to_file "DB 접속 사전 점검 성공"
+else
+    log_warn "DB 접속 사전 점검 실패 - 계정 잠금 방지를 위해 재시도하지 않고 DB 조회 항목은 ERROR 로 처리합니다: $DB_CONN_FAIL_MSG"
+    log_to_file "DB 접속 사전 점검 실패(재시도 안 함): $DB_CONN_FAIL_MSG"
+fi
+echo "----------------------------------------------------------------------"
 
 N_VULN=0; N_MANUAL=0; N_ERROR=0; N_NA=0; N_GOOD=0
 _n=0

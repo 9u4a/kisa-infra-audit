@@ -167,8 +167,23 @@ banner_start() {
 # mysql/psql 의 배치(-B/-A) 출력은 컬럼을 TAB 으로 구분하므로, DBMS 증적(evidence)을 그대로
 # 담으면 생성된 result.json 이 깨진다(Python json.loads 가 "Invalid control character" 로 거부하는
 # 실제 버그를 08_dbms Docker 검증 중 발견). 이스케이프 전에 TAB/CR 을 먼저 정리한다.
+# "</" 는 "<\/" 로 바꾼다(JSON 상 같은 값) - result.json 은 report.html 의 <script> 안에 그대로
+# 붙으므로, 일반 사용자가 만든 파일명 등 증적에 "</script>" 가 섞이면 보고서를 연 감사자 브라우저
+# 에서 HTML/JS 가 실행될 수 있다.
 json_escape() {
-    printf '%s' "$1" | tr '\t\r' '  ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk '{printf "%s\\n", $0}' | sed '$ s/\\n$//'
+    printf '%s' "$1" | tr '\t\r' '  ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's#</#<\\/#g' | awk '{printf "%s\\n", $0}' | sed '$ s/\\n$//'
+}
+
+# mask_secret <값>  -- 비밀번호·community 같은 값을 결과물(result.json/raw/run.log/report.html)에
+# 원문으로 남기지 않도록 앞 2자와 길이만 남긴다. 예) "s3cretComm" -> "s3***(10자)"
+mask_secret() {
+    _ms=$1
+    _ms_len=${#_ms}
+    if [ "$_ms_len" -le 4 ]; then
+        printf '***(%s자)' "$_ms_len"
+    else
+        printf '%s***(%s자)' "$(printf '%s' "$_ms" | cut -c1-2)" "$_ms_len"
+    fi
 }
 
 result_add() {
@@ -599,6 +614,53 @@ detect_dbms_engine() {
     fi
 }
 
+# ---- DBMS 공통: 운영 안전장치 (무기한 대기·계정 잠금 방지) ------------------------
+# 1) 모든 DB 클라이언트 호출은 _db_run 으로 감싸 DB_CMD_TIMEOUT 초 안에 끝나지 않으면 중단한다.
+#    timeout 명령이 없는 환경에서는 그대로 실행한다(대상 무설치 원칙). timeout 이 감싼 자식은
+#    TTY 를 읽을 수 없어 비밀번호 프롬프트로 멈추는 일도 함께 막힌다.
+# 2) run.sh 가 db_preflight 로 접속을 딱 1번 시험해 실패하면 DB_CONN_FAILED=1 을 세운다. 이후
+#    *_query 는 접속을 시도하지 않고 사유만 DB_ERR_FILE 에 남긴다 - 잘못된 비밀번호로 항목 수
+#    (최대 18회)만큼 로그인을 반복해 Oracle FAILED_LOGIN_ATTEMPTS(기본 10회)·MSSQL CHECK_POLICY
+#    등으로 운영 계정이 잠기는 것을 막는다.
+# DB_CMD_TIMEOUT=0 이면 제한하지 않는다 - 인스턴스 재기동(SHUTDOWN/STARTUP)처럼 도중에 끊으면
+# DB가 내려간 채로 남는 조치에서만 쓴다(fixes/oracle/D-19·D-26).
+DB_CMD_TIMEOUT=${DB_CMD_TIMEOUT:-120}
+
+_db_run() {
+    if [ "$DB_CMD_TIMEOUT" != "0" ] && command -v timeout >/dev/null 2>&1; then
+        timeout "$DB_CMD_TIMEOUT" "$@"
+        _dbr_rc=$?
+        [ "$_dbr_rc" -eq 124 ] && printf 'DB 명령이 %s초 안에 끝나지 않아 중단함(무기한 대기 방지)\n' "$DB_CMD_TIMEOUT" >&2
+        return "$_dbr_rc"
+    fi
+    "$@"
+}
+
+_db_conn_blocked() {
+    [ "${DB_CONN_FAILED:-0}" = "1" ] || return 1
+    printf 'DB 접속 사전 점검 실패로 접속하지 않음(계정 잠금 방지): %s\n' "${DB_CONN_FAIL_MSG:-}" > "${DB_ERR_FILE:-/dev/null}"
+    return 0
+}
+
+# db_preflight  -- DBMS_ENGINE 에 맞춰 접속을 1회 시험. 실패 시 0이 아닌 값 반환 + DB_CONN_FAILED=1
+db_preflight() {
+    DB_CONN_FAILED=0; DB_CONN_FAIL_MSG=""
+    case "${DBMS_ENGINE:-}" in
+        mysql) _pf_out=$(mysql_query "SELECT 1;") ;;
+        postgres) _pf_out=$(psql_query "SELECT 1;") ;;
+        oracle) _pf_out=$(oracle_query "SELECT 1 FROM dual;") ;;
+        *) return 0 ;;
+    esac
+    _pf_rc=$?
+    if [ "$_pf_rc" -ne 0 ]; then
+        DB_CONN_FAILED=1
+        DB_CONN_FAIL_MSG=$( { head -n 1 "${DB_ERR_FILE:-/dev/null}"
+                              printf '%s\n' "$_pf_out" | grep -E '^(ORA-|SP2-)' | head -n 1; } 2>/dev/null | tr '\n' ' ')
+    fi
+    export DB_CONN_FAILED DB_CONN_FAIL_MSG
+    return "$_pf_rc"
+}
+
 # ---- DBMS 공통: MySQL 연결/쿼리 ---------------------------------------------
 # 접속 정보는 run.sh 가 파싱한 DB_HOST/DB_PORT/DB_USER/DB_SOCKET 환경변수를 사용하고,
 # 비밀번호는 절대 인자로 노출하지 않고 MYSQL_PWD 환경변수로만 전달한다
@@ -614,13 +676,12 @@ mysql_args() {
 
 # mysql_query <sql>  -- 결과를 탭 구분으로 stdout 에 출력, 실패 시 0이 아닌 값 반환
 mysql_query() {
-    if [ -n "${DB_PASSWORD:-}" ]; then
+    _db_conn_blocked && return 1
+    (
+        [ -n "${DB_PASSWORD:-}" ] && export MYSQL_PWD="$DB_PASSWORD"
         # shellcheck disable=SC2046
-        MYSQL_PWD="$DB_PASSWORD" mysql $(mysql_args) -e "$1" 2>"${DB_ERR_FILE:-/dev/null}"
-    else
-        # shellcheck disable=SC2046
-        mysql $(mysql_args) -e "$1" 2>"${DB_ERR_FILE:-/dev/null}"
-    fi
+        _db_run mysql $(mysql_args) -e "$1"
+    ) 2>"${DB_ERR_FILE:-/dev/null}"
 }
 
 mysql_config_path() {
@@ -631,8 +692,9 @@ mysql_config_path() {
 }
 
 # ---- DBMS 공통: PostgreSQL 연결/쿼리 ----------------------------------------
+# -w: 비밀번호가 필요해도 프롬프트를 띄우지 않고 즉시 실패(대화형 대기 방지).
 psql_args() {
-    _a="-X -q -t -A --no-psqlrc"
+    _a="-X -q -t -A -w --no-psqlrc"
     [ -n "${DB_HOST:-}" ] && _a="$_a -h $DB_HOST"
     [ -n "${DB_PORT:-}" ] && _a="$_a -p $DB_PORT"
     [ -n "${DB_USER:-}" ] && _a="$_a -U $DB_USER"
@@ -641,14 +703,16 @@ psql_args() {
 }
 
 # psql_query <sql>  -- 결과를 |로 구분된 행으로 stdout 에 출력, 실패 시 0이 아닌 값 반환
+# 쿼리 시간 제한은 PGOPTIONS(statement_timeout) 대신 _db_run 으로 건다 - pgbouncer 경유
+# 접속은 options 시작 파라미터를 거부해 접속 자체가 실패할 수 있기 때문.
 psql_query() {
-    if [ -n "${DB_PASSWORD:-}" ]; then
+    _db_conn_blocked && return 1
+    (
+        [ -n "${DB_PASSWORD:-}" ] && export PGPASSWORD="$DB_PASSWORD"
+        export PGCONNECT_TIMEOUT="${PGCONNECT_TIMEOUT:-5}"
         # shellcheck disable=SC2046
-        PGPASSWORD="$DB_PASSWORD" psql $(psql_args) -c "$1" 2>"${DB_ERR_FILE:-/dev/null}"
-    else
-        # shellcheck disable=SC2046
-        psql $(psql_args) -c "$1" 2>"${DB_ERR_FILE:-/dev/null}"
-    fi
+        _db_run psql $(psql_args) -c "$1"
+    ) 2>"${DB_ERR_FILE:-/dev/null}"
 }
 
 postgres_config_path() {
@@ -683,18 +747,25 @@ oracle_connect_line() {
 }
 
 # oracle_query <sql>  -- 결과를 stdout 에 출력, 실패 시(SQL 오류/접속 실패) 0이 아닌 값 반환
+# whenever 는 반드시 connect 보다 먼저 선언한다 - 뒤에 두면 접속 실패(ORA-01017 등)에 적용되지
+# 않아 이후 SELECT 가 SP2-0640(Not connected)과 함께 rc=0 으로 끝나고, 오류 문구가 "결과 있음"으로
+# 읽혀 거짓 VULN 이 난다. 같은 이유로 출력에 ORA-/SP2- 행이 있으면 실패로 본다.
 oracle_query() {
+    _db_conn_blocked && return 1
     _out=$(
-        { oracle_connect_line
-          printf 'whenever sqlerror exit sql.sqlcode\n'
+        { printf 'whenever sqlerror exit sql.sqlcode\n'
           printf 'whenever oserror exit failure\n'
+          oracle_connect_line
           printf 'set heading off feedback off pagesize 0 verify off linesize 500 trimspool on\n'
           printf 'set colsep |\n'
           printf '%s\n' "$1"
           printf 'exit\n'
-        } | sqlplus -s /nolog 2>"${DB_ERR_FILE:-/dev/null}"
+        } | _db_run sqlplus -s /nolog 2>"${DB_ERR_FILE:-/dev/null}"
     )
     _rc=$?
+    if [ "$_rc" -eq 0 ] && printf '%s\n' "$_out" | grep -qE '^(ORA-[0-9]+|SP2-[0-9]+)'; then
+        _rc=1
+    fi
     printf '%s\n' "$_out"
     return $_rc
 }
@@ -724,13 +795,21 @@ oracle_listener_ora() {
 }
 
 # ---- 결과 디렉토리 준비 -----------------------------------------------------
+# make_private_dir <dir>  -- 실행자만 접근 가능한(700) 디렉터리 생성. 진단 증적(계정 목록·설정 발췌)과
+# 조치 백업(/etc/shadow 사본 등)이 같은 서버의 다른 사용자에게 읽히지 않게 한다. umask 를 전역으로
+# 바꾸지 않는 이유: fix 스크립트가 새로 만드는 대상 설정 파일까지 600 이 되어 서비스가 못 읽을 수 있음.
+make_private_dir() {
+    ( umask 077; mkdir -p "$1" ) && chmod 700 "$1"
+}
+
 # prepare_output_dir <base_dir> <category_num>  -> OUT_DIR 에 경로 저장
 prepare_output_dir() {
     _base=$1; _cat_num=$2
     _host=$(hostname 2>/dev/null || echo unknown-host)
     _ts=$(date '+%Y%m%d-%H%M%S')
     OUT_DIR="${_base}/${_host}_${_cat_num}_${_ts}"
-    mkdir -p "$OUT_DIR/raw"
+    make_private_dir "$OUT_DIR"
+    make_private_dir "$OUT_DIR/raw"
     RUN_LOG="$OUT_DIR/run.log"
     : > "$RUN_LOG"
 }
@@ -755,7 +834,8 @@ fix_prepare_dir() {
     _ts=$(date '+%Y%m%d-%H%M%S')
     FIX_OUT_DIR="${_base}/${_host}_${_cat_num}_fix_${_ts}"
     FIX_BACKUP_DIR="$FIX_OUT_DIR/backup"
-    mkdir -p "$FIX_BACKUP_DIR"
+    make_private_dir "$FIX_OUT_DIR"
+    make_private_dir "$FIX_BACKUP_DIR"
     FIX_LOG="$FIX_OUT_DIR/changes.log"
     : > "$FIX_LOG"
 }

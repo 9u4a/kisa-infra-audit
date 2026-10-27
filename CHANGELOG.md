@@ -6,6 +6,72 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-27
+### 운영 안전성: 진단(run)만 돌려도 생기던 계정 잠금·무기한 대기·민감정보 노출 수정
+운영 서버 실행 관점으로 run/fix 전체를 재점검한 결과, 진단은 설정을 바꾸지 않지만(원칙 3)
+**진단만 돌려도** 운영 계정 잠금·무기한 대기·비밀번호 평문 저장이 생길 수 있었다.
+이번 버전은 그중 진단 경로(A1·A2)를 고친다. 조치(fix) 경로의 위험(설정 파손, 접속 차단,
+원복 불가 등)은 다음 버전에서 다룬다.
+
+### Fixed
+- **DB 계정 잠금 방지(08_dbms)**
+  - 문제: 잘못된 비밀번호로 실행하면 항목마다 다시 접속했다(Oracle 18회, PostgreSQL 15회,
+    MySQL 11회, MSSQL 14회). Oracle 기본 프로파일(FAILED_LOGIN_ATTEMPTS=10), MSSQL
+    CHECK_POLICY 로그인(sa 포함)은 운영 계정이 잠길 수 있었다.
+  - 수정: `run.sh`/`run.ps1`이 항목 루프 전에 접속을 **1회만** 시험한다
+    (`lib/common.sh` `db_preflight`, `lib/Common.psm1` `Test-MssqlPreflight`). 실패하면 이후
+    DB 조회 항목은 접속 없이 "사전 점검 실패" ERROR로 처리하고, 설정 파일·프로세스 기반 항목은
+    그대로 진단한다.
+  - `fix.sh`/`fix.ps1`은 적용·원복 전 사전 점검에 실패하면 아무것도 바꾸지 않고 중단한다.
+- **무기한 대기 방지(08_dbms)**
+  - psql: `-w`(비밀번호 프롬프트 금지)와 `PGCONNECT_TIMEOUT=5`를 적용했다.
+  - DB 클라이언트 호출 전체: `timeout`이 있으면 `DB_CMD_TIMEOUT`(기본 120초)으로 제한한다.
+  - sqlcmd: `-l 5 -t 60`을 적용했다.
+  - MSSQL: SQL 인증 계정만 지정하고 비밀번호가 없으면, 프롬프트에서 멈추지 않고 시작 전에 종료한다.
+  - 예외: Oracle D-19/D-26 조치의 `SHUTDOWN IMMEDIATE; STARTUP;`은 시간 제한을 해제한다.
+    도중에 끊기면 DB가 내려간 채로 남기 때문이다.
+- **Oracle 접속 실패를 결과로 오인하던 문제**
+  - 원인: `whenever sqlerror`가 `connect` 다음 줄에 있어 접속 실패에는 적용되지 않았다.
+    SP2-0640 문구가 "결과 있음"으로 읽혀 거짓 VULN이 날 수 있었다.
+  - 수정: `whenever`를 앞으로 옮기고, 출력에 `ORA-`/`SP2-` 행이 있으면 실패로 처리한다.
+- **WEB-01: Tomcat 관리자 비밀번호 평문 저장 + 기본 계정 누락**
+  - 원인: 속성 사이를 `[^/]*`로 통째로 잡아 `password="..."` 원문이 증적·result.json·
+    report.html에 저장됐다. 또 비밀번호에 `/`가 있으면 계정을 놓쳐 거짓 GOOD이 났다.
+  - 수정: `<user>` 요소를 따옴표 속성 단위로 잘라 username만 추출한다.
+  - 함께 수정: WEB-01/02는 파일을 읽을 수 없으면 GOOD 대신 ERROR로 판정한다.
+- **민감정보 마스킹**
+  - U-60/U-61: SNMP community 원문(기본값 public/private은 판정 근거라 유지)
+  - U-04: passwd 비밀번호 필드
+  - W-37/W-62: 예약 작업·시작 프로그램 명령줄 속 자격증명(`/user:x 비밀번호`, `password=`,
+    `ConvertTo-SecureString` 등)
+  - 공용 헬퍼: `mask_secret`, `Protect-SecretText`
+- **결과·백업 폴더 권한**
+  - sh: 진단 결과·조치 백업·통합 로그 폴더를 700으로 만든다(`make_private_dir`).
+  - ps1: 상속을 끊고 실행자·Administrators·SYSTEM에만 권한을 준다(`New-PrivateDirectory`).
+  - 효과: 공유 폴더·C:\Temp에 도구를 두거나 root로 실행해도 다른 사용자가 증적과 백업
+    (/etc/shadow 사본 등)을 읽을 수 없다.
+- **report.html 스크립트 주입**
+  - 원인: 일반 사용자가 만든 파일명 등 증적에 `</script>`가 섞이면 감사자 브라우저에서
+    HTML/JS가 실행될 수 있었다.
+  - 수정: `json_escape`와 `report_common.py`가 `</`를 `<\/`로 바꾼다. `merge.py`는
+    호스트명·환경 값을 HTML 이스케이프한다.
+- **임시 파일**: `08_dbms` run/fix의 임시 파일이 mktemp가 없을 때 예측 가능한 /tmp 고정 경로를
+  덮어쓰던 문제를 고쳤다(noclobber로 생성). INT/TERM 시에도 정리한다.
+
+### Tests
+- `08_dbms/tests/run_tests.sh`: MySQL/PostgreSQL 운영 안전 테스트를 추가했다.
+  - 잘못된 비밀번호로 실행하면 DB 서버가 본 로그인 실패가 정확히 1회인지 확인한다
+    (MySQL `Aborted_connects`, PostgreSQL 서버 로그).
+  - DB 조회 항목이 "사전 점검 실패" ERROR로 남는지 확인한다.
+  - 비밀번호 없이 실행해도 300초 안에 끝나는지 확인한다.
+  - 측정 방법은 대조군(사전 점검 없이 3회 접속 → 3 증가)으로 검증했다.
+- `03_web` tomcat 픽스처: manager-gui 계정을 넣고 비밀번호에 `>`·`/`를 넣었다.
+  - vuln=기본 계정명(WEB-01 VULN), hardened=비기본 계정명(WEB-01 GOOD)으로 상태 전환
+    검증 항목이 추가됐다.
+  - 결과물에 비밀번호 원문이 없는지 확인한다.
+  - 이전 코드에서는 hardened에서 비밀번호 유출, vuln에서 거짓 GOOD으로 실패함을 확인했다.
+- `01_unix` vuln 픽스처: U-04가 주입한 passwd 비밀번호 필드 원문이 결과물에 없는지 확인한다.
+
 ## [1.2.0] - 2026-10-07
 ### 방향 전환: 환경/벤더 확장 중단, 테스트·유지보수로 전환
 사용자 결정에 따라 더 이상 새 환경/벤더로 확장하지 않는다(Solaris/AIX/HP-UX 추가 항목,

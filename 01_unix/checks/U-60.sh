@@ -51,7 +51,8 @@ run_check() {
         ok=0
         if [ "$has_alpha" -eq 1 ] && [ "$has_digit" -eq 1 ] && [ "$len" -ge 10 ]; then ok=1; fi
         if [ "$has_alpha" -eq 1 ] && [ "$has_digit" -eq 1 ] && [ "$has_special" -eq 1 ] && [ "$len" -ge 8 ]; then ok=1; fi
-        [ "$ok" -eq 0 ] && weak="$weak ${s}(길이/복잡도 미달)"
+        # 기본값(public/private)은 이미 알려진 값이라 그대로 두고, 그 외 실제 community 는 마스킹한다.
+        [ "$ok" -eq 0 ] && weak="$weak $(mask_secret "$s")(길이/복잡도 미달)"
     done
 
     CHECK_EVIDENCE="$conf

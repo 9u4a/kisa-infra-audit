@@ -76,14 +76,59 @@ function Show-Progress {
     Write-Host $label -ForegroundColor $color
 }
 
+# 실행자·Administrators·SYSTEM 만 접근 가능한 폴더 생성(상속 차단). 진단 증적(계정 목록·예약 작업
+# 명령줄 등)과 조치 백업이 도구를 둔 공유 폴더/C:\Temp 의 상속 권한 때문에 일반 사용자에게 읽히지
+# 않게 한다. Linux(pwsh 7, MSSQL 호스트)에서는 chmod 700.
+function New-PrivateDirectory {
+    param([Parameter(Mandatory)][string]$Path)
+    New-Item -ItemType Directory -Force -Path $Path | Out-Null
+    try {
+        if ([System.Environment]::OSVersion.Platform -ne 'Win32NT') {
+            & chmod 700 $Path
+            return
+        }
+        $di = Get-Item -LiteralPath $Path
+        $acl = $di.GetAccessControl([System.Security.AccessControl.AccessControlSections]::Access)
+        $acl.SetAccessRuleProtection($true, $false)
+        foreach ($r in @($acl.Access)) { $null = $acl.RemoveAccessRule($r) }
+        $inherit = [System.Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit'
+        $sids = @(
+            (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')),
+            (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')),
+            [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        )
+        foreach ($sid in $sids) {
+            $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+                $sid, 'FullControl', $inherit, [System.Security.AccessControl.PropagationFlags]::None, 'Allow')))
+        }
+        $di.SetAccessControl($acl)
+    } catch {
+        Write-Warning "결과 폴더 접근 권한을 제한하지 못함($Path): $($_.Exception.Message)"
+    }
+}
+
 function New-OutputDir {
     param([string]$BaseDir, [string]$CategoryNum)
     $ts = Get-Date -Format "yyyyMMdd-HHmmss"
     $outDir = Join-Path $BaseDir "$($env:COMPUTERNAME)_${CategoryNum}_$ts"
+    New-PrivateDirectory -Path $outDir
     New-Item -ItemType Directory -Force -Path (Join-Path $outDir "raw") | Out-Null
     $Script:RunLogPath = Join-Path $outDir "run.log"
     New-Item -ItemType File -Force -Path $Script:RunLogPath | Out-Null
     return $outDir
+}
+
+function Protect-SecretText {
+    <# 명령줄 등 자유 텍스트에서 흔한 자격증명 패턴의 값을 *** 로 가린다(증적 저장 전 적용).
+       예) "net use \\s\c /user:dom\u P@ss" / "app.exe -password x" / "pwd=x;" / ConvertTo-SecureString "x" #>
+    param([string]$Text)
+    if (-not $Text) { return $Text }
+    $t = $Text
+    $t = $t -replace '(?i)((?:^|\s)[-/](?:p|pw|pwd|pass|passwd|password)(?:\s+|[:=]))(?![-/])("[^"]*"|''[^'']*''|\S+)', '$1***'
+    $t = $t -replace '(?i)((?:password|passwd|pwd|secret|token|apikey|api_key)\s*[=:]\s*)("[^"]*"|''[^'']*''|[^\s;&]+)', '$1***'
+    $t = $t -replace '(?i)(/user:\S+\s+)(?![-/])(\S+)', '$1***'
+    $t = $t -replace '(?i)(ConvertTo-SecureString\s+(?:-String\s+)?)("[^"]*"|''[^'']*'')', '$1***'
+    return $t
 }
 
 function New-CheckResult {
@@ -204,12 +249,21 @@ function Get-SecPrivilegeAccounts {
 # 비밀번호는 인자로 절대 넘기지 않고 SQLCMDPASSWORD 환경변수로만 전달한다
 # (run.ps1 이 $env:DB_PASSWORD 를 이 변수에 매핑, 08_dbms/CLAUDE.md "접속정보 취급" 원칙).
 # $Global:DbQueryOk 로 "쿼리 실패"와 "쿼리 성공+결과 0건"을 구분한다(PC-15에서 배운 원칙과 동일).
+# 운영 안전장치: -l(로그인 제한 시간)/-t(쿼리 제한 시간)로 무기한 대기를 막고, run.ps1/fix.ps1 이
+# Test-MssqlPreflight 로 접속을 1회만 시험해 실패하면 $Global:DbConnFailed 를 세워 이후 호출은
+# 접속하지 않는다 - 잘못된 비밀번호로 항목 수만큼 로그인을 반복해 CHECK_POLICY=ON 로그인(sa 포함)이
+# Windows 계정 잠금 임계값에 걸려 잠기는 것을 막는다.
 function Invoke-MssqlQuery {
     param([Parameter(Mandatory)][string]$Sql)
+    if ($Global:DbConnFailed) {
+        $Global:DbQueryOk = $false
+        "DB 접속 사전 점검 실패로 접속하지 않음(계정 잠금 방지): $Global:DbConnFailMsg" | Out-File -FilePath $Global:DbErrFile -Encoding utf8
+        return $null
+    }
     # -C: 서버 인증서를 신뢰(자체 서명 인증서가 흔한 사내/컨테이너 환경 대응). mssql-tools18(sqlcmd
     # Go 재작성판, 현재 표준 배포판)은 기본적으로 암호화 연결을 강제하며 인증서 검증에 실패하면
     # 접속 자체가 안 되므로 필요하다 (구버전 mssql-tools 의 sqlcmd 는 이 옵션이 없을 수 있음).
-    $sqlArgs = @('-h', '-1', '-W', '-s', '|', '-b', '-C')
+    $sqlArgs = @('-h', '-1', '-W', '-s', '|', '-b', '-C', '-l', '5', '-t', '60')
     $target = if ($env:DB_HOST) { $env:DB_HOST } else { 'localhost' }
     if ($env:DB_PORT) { $target = "$target,$($env:DB_PORT)" }
     $sqlArgs += @('-S', $target)
@@ -225,6 +279,18 @@ function Invoke-MssqlQuery {
         $_.Exception.Message | Out-File -FilePath $Global:DbErrFile -Encoding utf8
         return $null
     }
+}
+
+function Test-MssqlPreflight {
+    <# 접속을 1회 시험. 실패하면 $Global:DbConnFailed/$Global:DbConnFailMsg 를 세우고 $false 반환 #>
+    $Global:DbConnFailed = $false
+    $Global:DbConnFailMsg = ""
+    $null = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT 1;"
+    if ($Global:DbQueryOk) { return $true }
+    $msg = if (Test-Path $Global:DbErrFile) { (Get-Content -Path $Global:DbErrFile -TotalCount 2) -join " " } else { "" }
+    $Global:DbConnFailMsg = $msg
+    $Global:DbConnFailed = $true
+    return $false
 }
 
 # ---- IIS 연동 (03_web IIS) --------------------------------------------------------
@@ -300,6 +366,7 @@ function New-FixOutputDir {
     $ts = Get-Date -Format "yyyyMMdd-HHmmss"
     $Global:FixOutDir = Join-Path $BaseDir "$($env:COMPUTERNAME)_${CategoryNum}_fix_$ts"
     $Global:FixBackupDir = Join-Path $Global:FixOutDir "backup"
+    New-PrivateDirectory -Path $Global:FixOutDir
     New-Item -ItemType Directory -Force -Path $Global:FixBackupDir | Out-Null
     $Global:FixLog = Join-Path $Global:FixOutDir "changes.log"
     New-Item -ItemType File -Force -Path $Global:FixLog | Out-Null
@@ -808,4 +875,4 @@ function Invoke-FixRollbackAll {
         }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-OutputDir, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Get-FixItemBackupDir, Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Protect-SecretText, New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Get-FixItemBackupDir, Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
