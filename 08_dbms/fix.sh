@@ -134,7 +134,7 @@ echo "모드       : $([ "$APPLY" -eq 1 ] && echo '실제 적용' || echo 'DRY-R
 echo "대상 항목  : ${TOTAL}개 (진단 결과 중 VULN$( [ -n "$ITEM_FILTER" ] && echo ", -i 필터 적용"))"
 echo "------------------------------------------------------------------------"
 
-N_APPLIED=0; N_SKIPPED=0; N_DECLINED=0; N_FAILED=0; N_MANUAL=0; N_PREVIEW=0
+N_APPLIED=0; N_SKIPPED=0; N_DECLINED=0; N_FAILED=0; N_MANUAL=0; N_PREVIEW=0; N_PARTIAL=0
 
 for code in $VULN_CODES; do
     title=$(guide_field "$GUIDE_JSON" "$code" "title")
@@ -199,7 +199,20 @@ for code in $VULN_CODES; do
         run_check_isolated "$check_file"
     fi
 
-    if { [ "$FIX_STATUS" = "APPLIED" ] || [ "$FIX_STATUS" = "NA" ]; } && [ "$CHECK_STATUS" != "VULN" ] && [ "$CHECK_STATUS" != "ERROR" ]; then
+    # PARTIAL/MANUAL(조치 후속 F-R6): 진단 범위 중 자동으로 바꿀 수 없는 부분(비밀번호 재설정, 다른 DB 접근까지 끊는
+    # 전역·와일드카드 권한 회수 등)이 남았다는 정직한 보고다. 재검증은 VULN 으로 남는 게 정상이라 원복하지 않는다 -
+    # 원복하면 이미 안전하게 적용한 부분까지 되돌린다. PARTIAL = 일부 적용(남은 부분 수동), MANUAL = 바꾼 것 없음.
+    if [ "$FIX_STATUS" = "PARTIAL" ] || [ "$FIX_STATUS" = "MANUAL" ]; then
+        echo "[$code] $title"
+        if [ "$FIX_STATUS" = "PARTIAL" ]; then
+            echo "  일부 적용 — 남은 부분은 수동 조치 필요(재검증: $CHECK_STATUS, 원복하지 않음): $FIX_DETAIL"
+            _fs="PARTIAL_MANUAL"; N_PARTIAL=$((N_PARTIAL + 1))
+        else
+            echo "  자동 조치 불가 — 수동 조치 필요(변경 없음, 재검증: $CHECK_STATUS): $FIX_DETAIL"
+            _fs="MANUAL"; N_MANUAL=$((N_MANUAL + 1))
+        fi
+        printf '%s\t%s\t%s\t%s (recheck=%s)\n' "$code" "$grade" "$_fs" "$FIX_DETAIL" "$CHECK_STATUS" | fix_log_stamp >> "$FIX_LOG"
+    elif { [ "$FIX_STATUS" = "APPLIED" ] || [ "$FIX_STATUS" = "NA" ]; } && [ "$CHECK_STATUS" != "VULN" ] && [ "$CHECK_STATUS" != "ERROR" ]; then
         echo "[$code] $title"
         echo "  적용 완료 — 재검증 결과: $CHECK_STATUS ($FIX_DETAIL)"
         printf '%s\t%s\tAPPLIED\t%s (recheck=%s)\n' "$code" "$grade" "$FIX_DETAIL" "$CHECK_STATUS" | fix_log_stamp >> "$FIX_LOG"
@@ -219,7 +232,7 @@ done
 
 echo "------------------------------------------------------------------------"
 if [ "$APPLY" -eq 1 ]; then
-    echo "적용 완료: $N_APPLIED, 실패(원복됨): $N_FAILED, 확인거부: $N_DECLINED, 스크립트없음: $N_SKIPPED, 수동조치: $N_MANUAL"
+    echo "적용 완료: $N_APPLIED, 일부 적용(남은 부분 수동): $N_PARTIAL, 실패(원복됨): $N_FAILED, 확인거부: $N_DECLINED, 스크립트없음: $N_SKIPPED, 수동조치: $N_MANUAL"
     echo "백업 위치: $FIX_BACKUP_DIR"
     echo "원복하려면: $0 -e $DBMS_ENGINE --rollback $FIX_OUT_DIR"
 else

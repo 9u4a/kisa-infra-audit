@@ -1,0 +1,18 @@
+Building configuration...
+
+Current configuration : 600 bytes
+!
+version 15.2
+service password-encryption
+!
+hostname SnmpFixRouter
+!
+ip access-list standard V6ACL
+ permit 10.1.1.0 0.0.0.255
+!
+snmp-server community Fx7#ViewComm01 view v1 RW
+snmp-server community Fx7#Ipv6Comm02 RW ipv6 V6ACL 10
+snmp-server community Fx7#Ipv6Comm03 ipv6 V6ACL
+snmp-server community weak view v2 RO
+!
+end

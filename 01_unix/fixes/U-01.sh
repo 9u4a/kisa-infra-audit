@@ -31,6 +31,24 @@ run_fix() {
         return
     fi
 
+    # F-R8: 진단(U-01)은 Telnet 이 쓰이는데 root 직접 접속이 막혀 있지 않아도 VULN 이다. 이 조치는 sshd 만
+    # 고치므로 그 경우 재검증이 계속 VULN 이 되어 원복까지 갔다 - 아무것도 바꾸기 전에 SKIPPED 로 알린다.
+    # Telnet 판정은 진단과 같은 함수(checks/U-01.sh _u01_linux_telnet)를 서브셸에서 불러 쓴다.
+    _u01_chk="${FIX_FILE_DIR:-$(dirname "$0")/fixes}/../checks/U-01.sh"
+    if [ -f "$_u01_chk" ]; then
+        # shellcheck disable=SC1090
+        _u01_tel=$( . "$_u01_chk"; _u01_linux_telnet; printf '%s' "$U01_TEL" ) 2>/dev/null
+    else
+        _u01_tel="unknown"
+    fi
+    if [ "$_u01_tel" = "VULN" ]; then
+        sshd_effective_value PermitRootLogin
+        FIX_STATUS="SKIPPED"
+        FIX_DETAIL="Telnet 서비스가 사용 중이고 root 직접 접속이 차단되지 않아 sshd 설정만으로는 해소되지 않음 - 변경하지 않음. U-52(Telnet 비활성화)로 먼저 조치한 뒤 U-01 을 다시 실행할 것(현재 sshd PermitRootLogin: ${SSHD_VALUE:-미설정})"
+        FIX_EVIDENCE=""
+        return
+    fi
+
     base_ok=1
     if command -v sshd >/dev/null 2>&1; then sshd -t -f "$sshd_cfg" >/dev/null 2>&1 || base_ok=0; else base_ok=0; fi
 

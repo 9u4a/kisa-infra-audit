@@ -72,21 +72,54 @@ PYEOF
 done
 
 # ---- 조치(fix) 운영 안전 회귀 테스트 (fixtures/fix_safety.sh) -----------------------
-# ① auto 조치 적용 후에도 설정 문법 검사 통과(예전 WEB-04 의 "Options -Indexes FollowSymLinks"
-#    +/- 혼용, WEB-16/22 의 nginx main 컨텍스트 삽입은 다음 재시작 때 서비스를 죽였다)
-# ② --rollback 후 설정 파일이 조치 전과 바이트 단위로 같음
-# ③ 백업 공간이 없어 백업이 실패하면 설정을 바꾸지 않고 중단(종료코드 3, changes.log ABORTED)
-for engine in apache nginx; do
-    image="kisa-web-${engine}-test"
-    out=$(docker run --rm "$image" sh 03_web/tests/fixtures/fix_safety.sh "$engine" apply)
-    if printf '%s\n' "$out" | grep -qx 'FIX_RC=0' && printf '%s\n' "$out" | grep -qx 'SYNTAX_RC=0' \
-       && ! printf '%s\n' "$out" | grep -qx 'APPLIED=0' && printf '%s\n' "$out" | grep -qx 'ROLLBACK=same'; then
-        echo "PASS: $engine/fix-apply ($(printf '%s' "$out" | tr '\n' ' '))"
+# ① 조치 적용 후에도 설정 문법 검사 통과(Apache httpd -t/apache2ctl -t, nginx -t, Tomcat configtest - 예전 WEB-04 의
+#    "Options -Indexes FollowSymLinks" +/- 혼용, WEB-16/22 의 nginx main 컨텍스트 삽입은 다음 재시작 때 서비스를 죽였다)
+# ② 성공(APPLIED)·실패 원복(FAILED_*) 항목이 케이스마다 기대한 집합과 정확히 같음 - 예전에는 APPLIED 0건만 아니면
+#    통과라, WEB-18(Debian)·WEB-04/12/19(Options All)·Tomcat /etc 배치 조치가 원복으로 끝나도 몰랐다(F-R4/F-R5).
+#    FAILED_NOT_ROLLED_BACK 은 항상 실패.
+# ③ --rollback 후 설정 트리 전체(경로·종류·권한·소유자·내용·심볼릭 링크 대상)가 조치 전과 같음 - Debian 의
+#    mods-enabled/sites-enabled 링크가 sed -i 로 일반 파일이 되던 문제 포함
+# ④ 백업 공간이 없어 백업이 실패하면 설정을 바꾸지 않고 중단(종료코드 3, changes.log ABORTED)
+# confirm 모드는 confirm 등급에도 y 로 답한다(WEB-21 은 SSL 미구성이라 "수동 조치 필요" ERROR → 원복이 정상 기대값).
+# 형식: 이미지 접미사|fix_safety 인자|기대 APPLIED_CODES|기대 FAILED_CODES
+FIX_CASES='apache|apache apply|WEB-04,WEB-14,WEB-16,WEB-22,WEB-26|
+apache|apache confirm WEB-04,WEB-08,WEB-12,WEB-14,WEB-16,WEB-21,WEB-22,WEB-26|WEB-04,WEB-08,WEB-12,WEB-14,WEB-16,WEB-22,WEB-26|WEB-21
+nginx|nginx apply|WEB-04,WEB-14,WEB-16,WEB-26|
+nginx|nginx confirm WEB-04,WEB-07,WEB-12,WEB-14,WEB-16,WEB-21,WEB-26|WEB-04,WEB-07,WEB-12,WEB-14,WEB-16,WEB-26|WEB-21
+apache-debian|apache-debian apply|WEB-04,WEB-14,WEB-16,WEB-18,WEB-22|
+apache-debian|apache-debian confirm WEB-04,WEB-08,WEB-12,WEB-14,WEB-16,WEB-18,WEB-21,WEB-22|WEB-04,WEB-08,WEB-12,WEB-14,WEB-16,WEB-18,WEB-22|WEB-21
+apache-debian|apache-debian-opts confirm WEB-04,WEB-12,WEB-19|WEB-04,WEB-12,WEB-19|
+tomcat|tomcat confirm WEB-01,WEB-03,WEB-04,WEB-08,WEB-13,WEB-14,WEB-16,WEB-22,WEB-26|WEB-01,WEB-03,WEB-04,WEB-08,WEB-13,WEB-14,WEB-16,WEB-22,WEB-26|
+tomcat|tomcat-etc confirm WEB-01,WEB-03,WEB-04,WEB-08,WEB-13,WEB-14,WEB-16,WEB-22,WEB-26|WEB-01,WEB-03,WEB-04,WEB-08,WEB-13,WEB-14,WEB-16,WEB-22|'
+n=0
+while IFS='|' read -r img args exp_app exp_fail; do
+    [ -n "$img" ] || continue
+    n=$((n + 1))
+    cname="kisa-web-fix-$n"
+    docker rm "$cname" >/dev/null 2>&1 || true
+    # shellcheck disable=SC2086
+    out=$(docker run --name "$cname" "kisa-web-${img}-test" sh 03_web/tests/fixtures/fix_safety.sh $args < /dev/null)
+    docker rm "$cname" >/dev/null 2>&1
+    kv() { printf '%s\n' "$out" | sed -n "s/^$1=//p"; }
+    why=""
+    [ "$(kv FIX_RC)" = 0 ] || why="$why FIX_RC"
+    [ "$(kv BASE_SYNTAX_RC)" = 0 ] || why="$why 조치전문법"
+    [ "$(kv SYNTAX_RC)" = 0 ] || why="$why 조치후문법"
+    [ "$(kv APPLIED_CODES)" = "$exp_app" ] || why="$why APPLIED(기대=$exp_app)"
+    [ "$(kv FAILED_CODES)" = "$exp_fail" ] || why="$why FAILED(기대=$exp_fail)"
+    [ "$(kv NOT_ROLLED_BACK)" = 0 ] || why="$why 원복실패"
+    [ "$(kv ROLLBACK)" = same ] || why="$why 원복후상태다름"
+    if [ -z "$why" ]; then
+        echo "PASS: fix/$args ($(printf '%s' "$out" | grep -E '^(APPLIED|FAILED)_CODES=' | tr '\n' ' '))"
     else
-        echo "FAIL: $engine/fix-apply - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
+        echo "FAIL: fix/$args -$why"; printf '%s\n' "$out" | sed 's/^/    /'; fail=1
     fi
-done
-out=$(docker run --rm --tmpfs /fixout:size=16k -e FIX_OUT=/fixout kisa-web-apache-test sh 03_web/tests/fixtures/fix_safety.sh apache backupfail)
+done <<EOF_FIX
+$FIX_CASES
+EOF_FIX
+docker rm kisa-web-fix-backupfail >/dev/null 2>&1 || true
+out=$(docker run --name kisa-web-fix-backupfail --tmpfs /fixout:size=16k -e FIX_OUT=/fixout kisa-web-apache-test sh 03_web/tests/fixtures/fix_safety.sh apache backupfail < /dev/null)
+docker rm kisa-web-fix-backupfail >/dev/null 2>&1
 if printf '%s\n' "$out" | grep -qx 'FIX_RC=3' && printf '%s\n' "$out" | grep -qx 'CONF=unchanged' && printf '%s\n' "$out" | grep -qx 'ABORTED=1'; then
     echo "PASS: apache/fix-backupfail ($(printf '%s' "$out" | tr '\n' ' '))"
 else
@@ -94,14 +127,15 @@ else
 fi
 
 # ---- 진단(run.sh) 운영 안전 실기 검사 (lib/tests/run_safety.sh, 01_unix 와 같은 기준) ---------
-# S1 전후 상태 동일 / S2 제한 시간 / S5 tomcat-users.xml 비밀번호 원문이 출력물 어디에도 없음 / S6 일반 사용자 거짓 양호
+# S1 전후 상태 동일 / S2 제한 시간 / S5 비밀값(tomcat-users.xml 비밀번호·keystorePass, Apache ProxyPass URL 비밀번호,
+# nginx proxy_pass 토큰 - setup.sh vuln 이 심음) 원문이 출력물 어디에도 없음 / S6 일반 사용자 거짓 양호
 for engine in apache nginx tomcat apache-debian; do
     run_e=$(run_engine "$engine")
     rs_dir="rs_web_${engine}_$$"
     docker rm -f "kisa-rs-web-$engine" >/dev/null 2>&1 || true
     docker create --name "kisa-rs-web-$engine" "kisa-web-${engine}-test" sh -c "
         sh 03_web/tests/fixtures/setup.sh $engine vuln >/dev/null 2>&1
-        RUN_CMD='sh 03_web/run.sh -e $run_e' SECRETS='Leak>Check|Pw9Strong|KsLeak9Pass' sh lib/tests/run_safety.sh
+        RUN_CMD='sh 03_web/run.sh -e $run_e' SECRETS='Leak>Check|Pw9Strong|KsLeak9Pass|Px9#Leak!Pw|Nx7-Leak!Tok' sh lib/tests/run_safety.sh
     " >/dev/null
     docker start -a "kisa-rs-web-$engine" >/dev/null
     docker cp "kisa-rs-web-$engine:/rs" "$rs_dir" >/dev/null 2>&1

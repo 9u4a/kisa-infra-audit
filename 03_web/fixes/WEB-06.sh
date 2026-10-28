@@ -8,8 +8,9 @@ run_fix() {
         return
         ;;
     esac
-    home=$(tomcat_home)
-    f="$home/conf/server.xml"
+    # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
+    tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
+    f="$tcdir/server.xml"
     if [ ! -f "$f" ]; then
         FIX_STATUS="ERROR"; FIX_DETAIL="$f 파일을 찾을 수 없음"; FIX_EVIDENCE=""
         return
@@ -20,7 +21,7 @@ run_fix() {
         return
     fi
     fix_backup "$f"
-    sed -i -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I' "$f"
+    web_sed_inplace "$f" -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I'
     FIX_STATUS="APPLIED"
     FIX_DETAIL="Tomcat Context allowLinking 을 false 로 설정함"
     FIX_EVIDENCE="$hit"

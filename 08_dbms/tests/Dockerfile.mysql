@@ -1,5 +1,9 @@
 # 08_dbms/tests/Dockerfile.mysql — mysql:8 이미지를 클라이언트로도 재사용(mysql CLI가 이미
 # 들어있음). 실제 DB 서버는 별도 컨테이너로 띄우고 이 이미지는 run.sh를 실행하는 쪽이다.
+# util-linux(script): confirm 등급 조치(fix.sh 가 /dev/tty 에서 y/N 을 읽음)를 가상 터미널로 시험하기 위함
+# (run_tests.sh 조치 회귀 테스트 - postgres:16 이미지에는 처음부터 들어 있음).
+# diffutils·procps-ng: lib/tests/run_safety.sh 가 쓰는 diff·pkill·sysctl(없으면 전후 비교가 빈 결과가 되어 거짓 통과).
 FROM mysql:8
+RUN microdnf install -y util-linux diffutils procps-ng && microdnf clean all
 COPY . /infra
 WORKDIR /infra

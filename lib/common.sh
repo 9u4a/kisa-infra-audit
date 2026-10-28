@@ -475,16 +475,23 @@ check_service_disabled() {
 프로세스 실행 중(ps -ef | grep -E '$_proc_pattern'): $_p"
     fi
 
+    _sd_timeout=""
     if command -v systemctl >/dev/null 2>&1; then
         for _u in $_units; do
-            if run_to 10 systemctl is-active --quiet "$_u" 2>/dev/null; then
+            _sd_rc=0
+            run_to 10 systemctl is-active --quiet "$_u" 2>/dev/null || _sd_rc=$?
+            if [ "$_sd_rc" -eq 0 ]; then
                 _found="$_found
 systemd 유닛 활성(active): $_u"
                 continue
             fi
+            # systemctl 이 응답하지 않으면(시간 초과) "비활성"으로 보지 않는다(S6 - 예전에는 GOOD 이었다)
+            case "$_sd_rc" in 124|137) _sd_timeout="$_sd_timeout $_u"; continue ;; esac
             # 지금 꺼져 있어도 enabled 면 재부팅 시(소켓 유닛은 첫 연결 시) 기동된다 - 예전에는 is-active 만 봐서
             # GOOD 이었다(진단 검수 U-R16).
-            _en=$(run_to 10 systemctl is-enabled "$_u" 2>/dev/null | head -n1)
+            _en=$( { run_to 10 systemctl is-enabled "$_u" 2>/dev/null; echo "__rc=$?"; } | sed -n '1p;$p')
+            case "$_en" in *__rc=124|*__rc=137) _sd_timeout="$_sd_timeout $_u"; continue ;; esac
+            _en=$(printf '%s\n' "$_en" | sed -n '1p')
             case "$_en" in
                 enabled|enabled-runtime|indirect) _found="$_found
 systemd 유닛 활성화(is-enabled=$_en, 재부팅/연결 시 기동): $_u" ;;
@@ -516,6 +523,10 @@ $_il"
     elif [ "$_detect_ok" -eq 0 ]; then
         CHECK_STATUS="ERROR"
         CHECK_DETAIL="${_label} 서비스 실행 여부를 확인할 ps/pgrep 명령을 찾지 못함"
+        CHECK_EVIDENCE=""
+    elif [ -n "$_sd_timeout" ]; then
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="${_label}: systemctl 이 응답하지 않아(시간 초과) 유닛 상태를 확인하지 못함:$_sd_timeout"
         CHECK_EVIDENCE=""
     elif [ "${_inetd_unread:-0}" -eq 1 ]; then
         CHECK_STATUS="ERROR"
@@ -616,6 +627,30 @@ snmpd_conf_lines() {
         }
         close(f)
         if (rc < 0) print "!unread\t" f
+    }
+    BEGIN { ni = 0; rd(main, 0); for (j = 1; j <= ni; j++) rd(inc[j], incd[j]) }'
+}
+
+# snmpd_conf_files <주 설정 파일> -- snmpd_conf_lines 와 같은 규칙(includeFile/includeDir *.conf, 깊이 5, 중복 제외)으로
+# 따라간 설정 파일 경로를 한 줄에 하나씩 출력한다(조치 U-59~61 용 - 진단이 보는 파일을 조치도 똑같이 고치도록).
+# 읽지 못한 파일은 "!unread<TAB>경로" 줄로 알린다(F-R8).
+snmpd_conf_files() {
+    awk -v main="$1" '
+    function rd(f, d,   line, rc, a, k, cmd, lst) {
+        if (d > 5 || (f in seen)) return
+        seen[f] = 1
+        while ((rc = (getline line < f)) > 0) {
+            if (line ~ /^[[:space:]]*(#|$)/) continue
+            split(line, a, /[ \t]+/); k = (a[1] == "" ? 2 : 1)
+            if (tolower(a[k]) == "includefile") { inc[++ni] = a[k + 1]; incd[ni] = d + 1; continue }
+            if (tolower(a[k]) == "includedir") {
+                cmd = "ls -1 \"" a[k + 1] "\" 2>/dev/null"
+                while ((cmd | getline lst) > 0) if (lst ~ /\.conf$/) { inc[++ni] = a[k + 1] "/" lst; incd[ni] = d + 1 }
+                close(cmd)
+            }
+        }
+        close(f)
+        if (rc < 0) print "!unread\t" f; else print f
     }
     BEGIN { ni = 0; rd(main, 0); for (j = 1; j <= ni; j++) rd(inc[j], incd[j]) }'
 }
@@ -915,6 +950,12 @@ web_finish() {
 # truststorePass, certificateKeystorePassword, password, secret 등)을 **** 로 가린다(S5, 진단 검수 WEB-R9).
 web_mask_xml_secrets() {
     sed -E "s/([A-Za-z]*([Pp]ass|[Pp]assword|[Ss]ecret|[Pp]wd))([[:space:]]*=[[:space:]]*)(\"[^\"]*\"|'[^']*')/\\1\\3\"****\"/g"
+}
+
+# web_mask_url_secrets (stdin -> stdout) -- Apache/Nginx 설정 줄 증적(ProxyPass·proxy_pass·Redirect 등)에 든 URL 의
+# 사용자 정보(scheme://user:pass@)와 비밀류 쿼리 값(token/key/password/secret/auth 등)을 **** 로 가린다(S5, 1.3.3).
+web_mask_url_secrets() {
+    sed -E 's#(://)[^/@[:space:]"'"'"']+@#\1****@#g; s/([?&;]([A-Za-z_]*([Tt][Oo][Kk][Ee][Nn]|[Kk][Ee][Yy]|[Pp][Aa][Ss][Ss][A-Za-z]*|[Pp][Ww][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Aa][Uu][Tt][Hh][A-Za-z]*|[Ss][Ii][Gg][A-Za-z]*))=)[^&[:space:]"'"'"';]*/\1****/g'
 }
 
 # web_apache_option_hits <옵션> <파일...> -> 옵션이 켜진(무표기·+옵션·All) 주석 아닌 Options 줄을 "파일:줄: 내용"
@@ -1395,6 +1436,63 @@ oracle_profile_limits() {
     oracle_query "SELECT p.profile || '|' || p.resource_name || '|' || CASE WHEN p.limit = 'DEFAULT' THEN d.limit ELSE p.limit END FROM dba_profiles p JOIN dba_profiles d ON d.profile = 'DEFAULT' AND d.resource_name = p.resource_name WHERE p.resource_name IN ($1) AND (p.profile = 'DEFAULT' OR p.profile IN (SELECT profile FROM dba_users WHERE account_status = 'OPEN')) ORDER BY p.profile, p.resource_name;"
 }
 
+# oracle_profiles_unrestricted <'RES1','RES2'>  -- oracle_profile_limits 대상 프로파일 중, 주어진 자원의 실효값이
+# 모두 미설정(UNLIMITED/NULL/빈 값)인 프로파일 이름을 공백으로 구분해 출력한다(checks/oracle/D-03·05·09 의 취약 판정과
+# 같은 기준). 조회 실패 시 0이 아닌 값.
+oracle_profiles_unrestricted() {
+    _opu=$(oracle_profile_limits "$1") || return 1
+    printf '%s\n' "$_opu" | awk -F'|' '
+        NF >= 3 { p=$1; v=$3; gsub(/[ \t\r]/, "", p); gsub(/[ \t\r]/, "", v)
+                  if (!(p in seen)) { seen[p]=1; order[++n]=p }
+                  if (v != "" && v != "UNLIMITED" && v != "NULL") ok[p]=1 }
+        END { for (i = 1; i <= n; i++) if (!(order[i] in ok)) printf "%s ", order[i] }'
+}
+
+# oracle_fix_profile_limits <'RES1','RES2'> <LIMIT 절>  -- 조치(fixes/oracle/D-03·05·09) 공통. 진단과 같은 범위(DEFAULT +
+# OPEN 계정이 쓰는 사용자 정의 프로파일)에서 미설정 프로파일마다 ALTER PROFILE ... LIMIT <LIMIT 절> 을 적용한다(조치 후속
+# F-R6 - 예전 조치는 DEFAULT 만 바꿔 사용자 정의 프로파일이 남아 재검증 VULN → 원복으로 끝났다). DEFAULT 를 먼저 고치고
+# 다시 조회해, 값을 'DEFAULT' 로 상속하던 사용자 정의 프로파일은 건드리지 않는다(상속 유지). 원복 SQL 은 프로파일마다
+# 조치 직전의 원래 값(상속이면 DEFAULT 키워드 그대로)으로 큐에 넣는다. FIX_STATUS/FIX_DETAIL/FIX_EVIDENCE 를 채운다.
+oracle_fix_profile_limits() {
+    FIX_EVIDENCE=""
+    _ofp_bad=$(oracle_profiles_unrestricted "$1") || {
+        FIX_STATUS="ERROR"; FIX_DETAIL="프로파일 조회 실패: $(head -n1 "${DB_ERR_FILE:-/dev/null}" 2>/dev/null)"; return
+    }
+    if [ -z "$_ofp_bad" ]; then
+        FIX_STATUS="NA"; FIX_DETAIL="미설정 프로파일이 없음(이미 정상)"; return
+    fi
+    _ofp_order=""
+    for _ofp_p in $_ofp_bad; do
+        if [ "$_ofp_p" = "DEFAULT" ]; then _ofp_order="DEFAULT $_ofp_order"; else _ofp_order="$_ofp_order $_ofp_p"; fi
+    done
+    _ofp_done=""
+    for _ofp_p in $_ofp_order; do
+        if [ "$_ofp_p" != "DEFAULT" ]; then
+            # DEFAULT 를 고친 뒤 상속('DEFAULT')으로 해소된 프로파일은 건너뛴다
+            _ofp_now=$(oracle_profiles_unrestricted "$1") || { FIX_STATUS="ERROR"; FIX_DETAIL="${_ofp_done:+적용:$_ofp_done / }프로파일 재조회 실패"; return; }
+            case " $_ofp_now " in *" $_ofp_p "*) ;; *) continue ;; esac
+        fi
+        case "$_ofp_p" in
+            *\"*|*\'*) FIX_STATUS="ERROR"; FIX_DETAIL="${_ofp_done:+적용:$_ofp_done / }처리할 수 없는 프로파일 이름: $_ofp_p"; return ;;
+        esac
+        if [ "$_ofp_p" = "DEFAULT" ]; then _ofp_id="DEFAULT"; else _ofp_id="\"$_ofp_p\""; fi
+        _ofp_raw=$(oracle_query "SELECT resource_name || ' ' || limit FROM dba_profiles WHERE profile = '$_ofp_p' AND resource_name IN ($1) ORDER BY resource_name;") || {
+            FIX_STATUS="ERROR"; FIX_DETAIL="${_ofp_done:+적용:$_ofp_done / }$_ofp_p 현재 값 조회 실패"; return
+        }
+        _ofp_rb=$(printf '%s\n' "$_ofp_raw" | awk 'NF >= 2 { printf " %s %s", $1, $2 }')
+        if [ -z "$_ofp_rb" ]; then
+            FIX_STATUS="ERROR"; FIX_DETAIL="${_ofp_done:+적용:$_ofp_done / }$_ofp_p 현재 값을 읽지 못해 원복할 수 없으므로 변경하지 않음"; return
+        fi
+        fix_db_queue_rollback "oracle" "ALTER PROFILE $_ofp_id LIMIT$_ofp_rb;"
+        _ofp_out=$(oracle_query "ALTER PROFILE $_ofp_id LIMIT $2;" 2>&1) || {
+            FIX_STATUS="ERROR"; FIX_DETAIL="${_ofp_done:+적용:$_ofp_done / }ALTER PROFILE $_ofp_p 실패: $_ofp_out"; FIX_EVIDENCE="$_ofp_out"; return
+        }
+        _ofp_done="$_ofp_done $_ofp_p(변경 전:$_ofp_rb)"
+    done
+    FIX_STATUS="APPLIED"
+    FIX_DETAIL="프로파일에 $2 설정함:$_ofp_done"
+}
+
 # oracle_conf_active <file>  -- .ora 파일에서 # 주석을 지운 내용을 출력(진단 검수 D-R6: 주석 처리된 설정을
 # 유효한 설정으로 읽어 거짓 GOOD 이 났다). 읽지 못하면 0이 아닌 값 반환.
 oracle_conf_active() {
@@ -1436,8 +1534,23 @@ run_to() {
     if [ -z "${_RUN_TO_K+x}" ]; then
         _RUN_TO_K=""; timeout -k 1 1 true >/dev/null 2>&1 && _RUN_TO_K="-k 5"
     fi
+    # 진단(run) 중 한 번 시간 초과한 명령은 같은 실행 안에서 다시 기다리지 않고 바로 124 를 돌려준다(S2).
+    # D-Bus 장애로 systemctl 이 멈추면 서비스 항목마다 10초씩 수십 번 기다려 진단이 수십 분 걸렸다(run_safety 의
+    # HANG_CMDS 검사로 확인). 표시는 출력 폴더($OUT_DIR, 항목 서브셸도 공유)의 .run_to_timeout/<명령 이름> - 조치(fix)는
+    # OUT_DIR 이 없어 적용되지 않는다. nice/ionice 접두(전수 검색 find)는 명령마다 범위가 달라 기억하지 않는다.
+    _rt_mark=""
+    case "${1:-}" in
+        nice|ionice|*/nice|*/ionice|"") : ;;
+        *) [ -n "${OUT_DIR:-}" ] && [ -d "$OUT_DIR" ] && _rt_mark="$OUT_DIR/.run_to_timeout/$(basename "$1")" ;;
+    esac
+    [ -n "$_rt_mark" ] && [ -e "$_rt_mark" ] && return 124
+    _rt_rc=0
     # shellcheck disable=SC2086
-    if command -v timeout >/dev/null 2>&1; then timeout $_RUN_TO_K "$_rt_s" "$@"; else "$@"; fi
+    if command -v timeout >/dev/null 2>&1; then timeout $_RUN_TO_K "$_rt_s" "$@" || _rt_rc=$?; else "$@" || _rt_rc=$?; fi
+    if { [ "$_rt_rc" -eq 124 ] || [ "$_rt_rc" -eq 137 ]; } && [ -n "$_rt_mark" ]; then
+        mkdir -p "$OUT_DIR/.run_to_timeout" 2>/dev/null && : > "$_rt_mark" 2>/dev/null
+    fi
+    return "$_rt_rc"
 }
 
 # low_prio <명령...> — 가능하면 nice -n 19 + ionice -c3(idle) 로 실행해 운영 서비스의 CPU/디스크 I/O 와
@@ -1653,6 +1766,23 @@ fix_backup() {
     fi
 }
 
+# fix_backup_owner <경로> — 소유자·권한만 바꾸는 조치용 백업. 내용을 복사하지 않고 숫자 uid:gid 와 권한만
+# <백업>.OWNMETA 에 남긴다(심볼릭 링크는 링크 자체 기준). fix_backup 의 cp -p 사본은 원래 소유자를 그대로 가져
+# U-15(소유자 없는 파일) 조치의 재검증 find 가 백업 폴더의 사본을 다시 찾아 항상 VULN → 원복되었다.
+fix_backup_owner() {
+    _f=$1
+    _rel=$(printf '%s' "$_f" | sed 's#^/##')
+    _dest="$FIX_BACKUP_DIR/$FIX_CODE/$_rel"
+    if [ -e "$_dest" ] || [ -e "$_dest.OWNMETA" ] || [ -e "$_dest.DIRMETA" ] || [ -e "$_dest.WAS_ABSENT" ]; then
+        return 0
+    fi
+    mkdir -p "$(dirname "$_dest")" 2>/dev/null || fix_abort_item "백업 디렉터리를 만들 수 없음: $(dirname "$_dest")"
+    _owner=$(stat -c '%u:%g' "$_f" 2>/dev/null)
+    _perm=$(stat -c '%a' "$_f" 2>/dev/null)
+    [ -n "$_owner" ] && [ -n "$_perm" ] || fix_abort_item "소유자/권한을 기록할 수 없음: $_f"
+    printf '%s\n%s\n' "$_owner" "$_perm" > "$_dest.OWNMETA" 2>/dev/null || fix_abort_item "백업 기록 실패: $_f"
+}
+
 # fix_backup_remove_path <경로> — 파일/디렉터리를 완전히 삭제하기 전에 내용 전체를 tar로
 # 보존한다. fix_backup() 의 디렉터리 처리(소유자/권한 메타데이터만 저장)와 달리, 이 함수는
 # "삭제 자체가 조치"인 항목(WEB-07 기본 샘플/매뉴얼 디렉터리 제거 등) 전용으로 내용 전체를
@@ -1688,37 +1818,49 @@ fix_write_back() {
 # Options must start with + or -, or no Option may")로 기동에 실패한다 - 예전 조치는 "Options Indexes
 # FollowSymLinks" 를 "Options -Indexes FollowSymLinks" 로 바꿔 다음 재시작 때 Apache 가 죽었다.
 #   +/- 표기가 없는 줄 → 해당 옵션을 지운다(남는 게 없으면 Options None)
-#   +/- 표기가 있는 줄 → 옵션(또는 +옵션)을 -옵션 으로 바꾼다
-# 바뀐 게 있으면 0, 없으면 1 을 반환한다.
+#   +/- 표기가 있는 줄 → 옵션(또는 +옵션)을 지우고 끝에 -옵션 을 붙인다(상위에서 상속된 값까지 끔)
+# 1.3.3(F-R5): All(= Indexes Includes FollowSymLinks ExecCGI, MultiViews 제외)은 끌 옵션을 뺀 나머지로 풀어 쓰고,
+# Includes 를 끌 때는 IncludesNOEXEC 도 지운다(진단 web_apache_option_hits 와 같은 기준). 예전에는 둘 다 몰라
+# WEB-04/12/19 조치가 아무것도 바꾸지 못하고 재검증 VULN → 원복으로 끝났다.
+# 바뀐 게 있으면 0, 없으면 1 을 반환한다. 파일 내용만 덮어써 심볼릭 링크(Debian sites-enabled)를 유지한다.
 apache_options_disable() {
     _ao_f=$1; _ao_tok=$2
     awk -v tok="$_ao_tok" '
-        BEGIN { changed = 0 }
+        BEGIN { changed = 0; ltok = tolower(tok); nall = split("Indexes Includes FollowSymLinks ExecCGI", all, " ") }
+        function add(t, key) { if (!(key in seen)) { seen[key] = 1; out = out " " t } }
         {
             line = $0
+            cr = ""; if (line ~ /\r$/) { cr = "\r"; sub(/\r$/, "", line) }
             lead = line; sub(/[^ \t].*$/, "", lead)
             body = line; sub(/^[ \t]+/, "", body)
             n = split(body, a, /[ \t]+/)
             if (n >= 1 && tolower(a[1]) == "options") {
                 signed = 0
                 for (i = 2; i <= n; i++) if (a[i] ~ /^[+-]/) signed = 1
-                out = ""; hit = 0
+                out = ""; hit = 0; split("", seen)
                 for (i = 2; i <= n; i++) {
                     t = a[i]
                     if (t == "") continue
-                    if (tolower(t) == tolower(tok) || tolower(t) == "+" tolower(tok)) {
+                    s = substr(t, 1, 1); w = tolower(t)
+                    if (s == "+" || s == "-") w = substr(w, 2); else s = ""
+                    if (s == "-") { add(t, "-" w); continue }
+                    if (w == "all") {
                         hit = 1
-                        if (signed) t = "-" tok; else continue
+                        for (k = 1; k <= nall; k++)
+                            if (tolower(all[k]) != ltok) add((signed ? "+" : "") all[k], tolower(all[k]))
+                        continue
                     }
-                    out = out " " t
+                    if (w == ltok || (ltok == "includes" && w == "includesnoexec")) { hit = 1; continue }
+                    add(t, w)
                 }
                 if (hit) {
+                    if (signed) add("-" tok, "-" ltok)
                     if (out == "") out = " None"
                     line = lead a[1] out
                     changed = 1
                 }
             }
-            print line
+            print line cr
         }
         END { exit(changed ? 0 : 1) }
     ' "$_ao_f" > "$_ao_f.kisa_tmp"
@@ -1727,14 +1869,23 @@ apache_options_disable() {
     return "$_ao_rc"
 }
 
-# apache_options_enabled <파일> <옵션> — 주석이 아닌 Options 줄에 옵션이 켜져(무표기 또는 +) 있으면 0
+# apache_options_enabled <파일> <옵션> — 주석이 아닌 Options 줄에 옵션이 켜져(무표기·+옵션·All, Includes 는
+# IncludesNOEXEC 포함) 있으면 0. 진단의 web_apache_option_hits 와 같은 기준(1.3.3, F-R5).
 apache_options_enabled() {
-    awk -v tok="$2" '
-        { body = $0; sub(/^[ \t]+/, "", body); n = split(body, a, /[ \t]+/)
-          if (n >= 1 && tolower(a[1]) == "options")
-              for (i = 2; i <= n; i++) if (tolower(a[i]) == tolower(tok) || tolower(a[i]) == "+" tolower(tok)) { found = 1; exit } }
-        END { exit(found ? 0 : 1) }
-    ' "$1"
+    [ -n "$(web_apache_option_hits "$2" "$1")" ]
+}
+
+# web_sed_inplace <파일> <sed 인자...> — sed -i 대신 쓴다. sed -i 는 새 파일을 만들어 바꿔치기하므로 Debian 의
+# sites-enabled/mods-enabled·conf-enabled 심볼릭 링크를 일반 파일로 바꿔 버리고(링크 대상은 그대로 남아
+# 원복해도 링크가 돌아오지 않음 - fix_safety 실기로 발견) 소유자·SELinux 라벨도 바뀔 수 있다. 결과를
+# fix_write_back 으로 내용만 덮어쓴다. sed 실패 시 원본을 건드리지 않고 1.
+web_sed_inplace() {
+    _wsi_f=$1; shift
+    if sed "$@" "$_wsi_f" > "$_wsi_f.kisa_tmp" 2>/dev/null; then
+        fix_write_back "$_wsi_f.kisa_tmp" "$_wsi_f"
+    else
+        rm -f "$_wsi_f.kisa_tmp"; return 1
+    fi
 }
 
 # nginx_http_insert <파일> <지시어 줄> — 첫 "http {" 블록 바로 안쪽에 지시어를 넣는다. server_tokens /
@@ -1809,7 +1960,7 @@ sshd_effective_value() {
     _se_k=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
     SSHD_VALUE=""
     if command -v sshd >/dev/null 2>&1; then
-        SSHD_VALUE=$(sshd -T 2>/dev/null | awk -v k="$_se_k" '$1 == k { print $2; exit }')
+        SSHD_VALUE=$(run_to 15 sshd -T 2>/dev/null | awk -v k="$_se_k" '$1 == k { print $2; exit }')
         if [ -n "$SSHD_VALUE" ]; then SSHD_VALUE_SOURCE="sshd -T(실제 적용 값)"; return 0; fi
     fi
     SSHD_VALUE_SOURCE="설정 파일 분석(Include 반영, 처음 나온 값 우선)"
@@ -2124,6 +2275,18 @@ fix_rollback_item() {
                 _orig="${_orig%.WAS_ABSENT}"
                 if [ -d "$_orig" ]; then rmdir "$_orig" 2>/dev/null || _rb_fail "조치가 만든 디렉터리를 지우지 못함(비어 있지 않음): $_orig"
                 else rm -f "$_orig" || _rb_fail "조치가 만든 파일 삭제 실패: $_orig"; fi
+                ;;
+            *.OWNMETA)
+                # fix_backup_owner 가 남긴 소유자·권한(파일·심볼릭 링크 공용). 링크는 링크 자체 소유자만 되돌린다.
+                _orig="/${_bak#"$_dir"/}"
+                _orig="${_orig%.OWNMETA}"
+                if [ -e "$_orig" ] || [ -L "$_orig" ]; then
+                    _owner=$(sed -n '1p' "$_bak")
+                    _perm=$(sed -n '2p' "$_bak")
+                    if ! chown -h "$_owner" "$_orig" 2>/dev/null || { [ ! -L "$_orig" ] && ! chmod "$_perm" "$_orig" 2>/dev/null; }; then
+                        _rb_fail "소유자/권한 원복 실패: $_orig"
+                    fi
+                fi
                 ;;
             *.DIRMETA)
                 _orig="/${_bak#"$_dir"/}"

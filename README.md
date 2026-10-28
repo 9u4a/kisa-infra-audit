@@ -233,6 +233,7 @@ sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL만, Oracle
 | 1.2.1~1.3.0 ✅ | 운영 안전성 우선: DB 계정 잠금·무기한 대기·비밀값 저장 방지, 조치 안전장치(백업·문법검사·접속 차단 사전검사·원복 정직성), 업무 영향 항목 등급 하향 |
 | 1.3.1 ✅ | Windows Server(CI 러너) 실기 검증: IIS 진단·조치 실적용·원복, MSSQL(LocalDB), 방화벽 안전장치 |
 | 1.3.2 ✅ | 진단(run) 전체 검수: 실행 검수 하네스 + 전 파일 코드 대조(약 130건 수정, [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)) |
+| 1.3.3 ✅ | 조치 후속 과제 F-R1~F-R9 해결, 실검증 테스트 교차검증(거짓 PASS 경로 16건 수정 - 원복 누락·무기한 대기 등 실제 결함 추가 발견) |
 | 1.x | 기존 지원 환경 내 버그 수정 및 자동화 정밀도 개선, CI 커버리지 확대(IIS/MSSQL/Oracle/rhel 등) |
 
 ## 라이선스 · 출처

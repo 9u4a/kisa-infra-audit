@@ -10,8 +10,9 @@ run_fix() {
         ;;
     esac
 
-    home=$(tomcat_home)
-    f="$home/conf/tomcat-users.xml"
+    # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
+    tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
+    f="$tcdir/tomcat-users.xml"
     if [ ! -f "$f" ]; then
         FIX_STATUS="ERROR"; FIX_DETAIL="$f 파일을 찾을 수 없음"; FIX_EVIDENCE=""
         return

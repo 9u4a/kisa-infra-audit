@@ -54,15 +54,21 @@ $overrides}"
 # / GOOD / VULN, U01_TEL_EVD. 진단 검수 U-R17: 예전에는 sshd 가 없으면 telnet 을 보지 않고 GOOD 이었다.
 _u01_linux_telnet() {
     U01_TEL=""; U01_TEL_EVD=""
-    _use=""
+    _use=""; _sd_unk=""
     command -v pgrep >/dev/null 2>&1 && [ -n "$(pgrep -f 'in\.telnetd|telnetd' 2>/dev/null)" ] && _use="프로세스"
     if command -v systemctl >/dev/null 2>&1; then
-        run_to 10 systemctl is-active --quiet telnet.socket 2>/dev/null && _use="$_use telnet.socket(active)"
+        _rc=0; run_to 10 systemctl is-active --quiet telnet.socket 2>/dev/null || _rc=$?
+        [ "$_rc" -eq 0 ] && _use="$_use telnet.socket(active)"
+        # systemctl 이 응답하지 않으면 telnet.socket 상태를 모른다 - "미사용"으로 보지 않는다(U01_TEL=UNKNOWN)
+        case "$_rc" in 124|137) _sd_unk=1 ;; esac
         case "$(run_to 10 systemctl is-enabled telnet.socket 2>/dev/null | head -n1)" in enabled*) _use="$_use telnet.socket(enabled)" ;; esac
     fi
     grep -qE '^[[:space:]]*disable[[:space:]]*=[[:space:]]*no' /etc/xinetd.d/telnet 2>/dev/null && _use="$_use xinetd"
     awk '$0 !~ /^[[:space:]]*#/ && $1 == "telnet" { f = 1 } END { exit !f }' /etc/inetd.conf 2>/dev/null && _use="$_use inetd"
-    [ -n "$_use" ] || return 0
+    if [ -z "$_use" ]; then
+        [ -n "$_sd_unk" ] && { U01_TEL="UNKNOWN"; U01_TEL_EVD="systemctl 시간 초과로 telnet.socket 상태 확인 못 함"; }
+        return 0
+    fi
     _pts=$(grep -E '^[[:space:]]*pts/' /etc/securetty 2>/dev/null | tr '\n' ' ')
     _pam=$(grep -vE '^[[:space:]]*#' /etc/pam.d/login 2>/dev/null | grep -E 'pam_securetty\.so')
     U01_TEL_EVD="Telnet 사용 근거:$_use
@@ -87,6 +93,9 @@ run_check() {
             if [ "$U01_TEL" = "VULN" ]; then
                 CHECK_STATUS="VULN"
                 CHECK_DETAIL="Telnet 서비스가 사용 중이며 root 직접 접속이 차단되지 않음(/etc/securetty 의 pts 항목 또는 pam_securetty 미적용) / SSH: $CHECK_DETAIL"
+            elif [ "$U01_TEL" = "UNKNOWN" ] && [ "$CHECK_STATUS" = "GOOD" ]; then
+                CHECK_STATUS="ERROR"
+                CHECK_DETAIL="$CHECK_DETAIL / Telnet: systemctl 이 응답하지 않아 telnet.socket 사용 여부를 확인하지 못함"
             elif [ "$U01_TEL" = "GOOD" ] && [ "$CHECK_STATUS" = "GOOD" ]; then
                 CHECK_DETAIL="$CHECK_DETAIL / Telnet: securetty·pam_securetty 로 root 직접 접속 차단됨"
             fi

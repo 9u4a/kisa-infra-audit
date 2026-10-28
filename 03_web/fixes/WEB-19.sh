@@ -25,14 +25,15 @@ run_fix() {
             [ -f "$f" ] || continue
             grep -qE '^[^#]*ssi[[:space:]]+on' "$f" 2>/dev/null || continue
             fix_backup "$f"
-            sed -i -E 's/^([[:space:]]*)ssi[[:space:]]+on/\1ssi off/' "$f"
+            web_sed_inplace "$f" -E 's/^([[:space:]]*)ssi[[:space:]]+on/\1ssi off/'
             applied="$applied nginx($f)"
         done
     esac
 
     case " $WEB_ENGINES " in *" tomcat "*)
-        home=$(tomcat_home)
-        f="$home/conf/web.xml"
+        # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
+        tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
+        f="$tcdir/web.xml"
         if [ -f "$f" ]; then
             hit=$(strip_xml_comments "$f" | grep -E 'SSIServlet|SSIFilter')
             [ -n "$hit" ] && manual_only="$manual_only tomcat($f: SSIServlet/SSIFilter 매핑을 수동으로 제거 필요 - 다중 라인 XML 블록이라 자동 제거 미지원)"

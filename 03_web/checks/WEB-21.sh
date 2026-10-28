@@ -19,7 +19,7 @@ run_check() {
 $f: $l"
             done
             evidence="$evidence
-[Apache] HTTPS 리다이렉트 설정 검색: ${hit:-없음}"
+[Apache] HTTPS 리다이렉트 설정 검색: $(printf '%s' "${hit:-없음}" | web_mask_url_secrets)"
             [ -z "$hit" ] && violations="$violations apache"
         fi
     esac
@@ -34,7 +34,7 @@ $f: $l"
 $f: $l"
             done
             evidence="$evidence
-[Nginx] HTTPS 리다이렉트(return 30x https / rewrite https) 검색: ${hit:-없음}"
+[Nginx] HTTPS 리다이렉트(return 30x https / rewrite https) 검색: $(printf '%s' "${hit:-없음}" | web_mask_url_secrets)"
             [ -z "$hit" ] && violations="$violations nginx"
         fi
     esac

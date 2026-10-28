@@ -1,16 +1,7 @@
 # D-09 (중) 일정 횟수의 로그인 실패 시 이에 대한 잠금정책 설정 [Oracle] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
+# 조치 후속 F-R6: 진단(checks/oracle/D-09.sh)이 OPEN 계정이 쓰는 사용자 정의 프로파일까지 보므로, 조치도 같은 범위의
+# FAILED_LOGIN_ATTEMPTS=UNLIMITED 프로파일을 모두 고친다(lib/common.sh oracle_fix_profile_limits - DEFAULT 먼저, 상속으로
+# 해소되면 건너뜀, 원복 SQL 은 조치 직전 값 그대로).
 run_fix() {
-    before=$(oracle_query "SELECT limit FROM dba_profiles WHERE profile = 'DEFAULT' AND resource_name = 'FAILED_LOGIN_ATTEMPTS';" | tr -d ' \r')
-    [ -z "$before" ] && before="DEFAULT"
-
-    fix_db_queue_rollback "oracle" "ALTER PROFILE DEFAULT LIMIT FAILED_LOGIN_ATTEMPTS $before;"
-    out=$(oracle_query "ALTER PROFILE DEFAULT LIMIT FAILED_LOGIN_ATTEMPTS 5;" 2>&1)
-    rc=$?
-    if [ $rc -ne 0 ]; then
-        FIX_STATUS="ERROR"; FIX_DETAIL="ALTER PROFILE 실패: $out"; FIX_EVIDENCE="$out"
-        return
-    fi
-    FIX_STATUS="APPLIED"
-    FIX_DETAIL="DEFAULT 프로파일에 FAILED_LOGIN_ATTEMPTS=5 설정함(변경 전: $before)"
-    FIX_EVIDENCE="$out"
+    oracle_fix_profile_limits "'FAILED_LOGIN_ATTEMPTS'" "FAILED_LOGIN_ATTEMPTS 5"
 }

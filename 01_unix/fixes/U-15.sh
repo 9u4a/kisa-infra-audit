@@ -16,8 +16,10 @@ run_fix() {
     # 파이프(| while)는 서브셸이라 fix_backup 실패 시의 중단(exit)이 전달되지 않으므로 here-doc 사용
     while IFS= read -r _f; do
         [ -z "$_f" ] && continue
-        fix_backup "$_f"
-        chown root:root "$_f" 2>/dev/null
+        # 내용 사본(fix_backup)은 원래 소유자를 그대로 가져 재검증 find 에 다시 걸린다 - 소유자·권한만 기록한다.
+        # 심볼릭 링크는 대상이 아니라 링크 자체의 소유자를 바꾼다(chown -h).
+        fix_backup_owner "$_f"
+        chown -h root:root "$_f" 2>/dev/null
     done <<EOF
 $_list
 EOF

@@ -20,8 +20,9 @@ run_fix() {
     fi
 
     if [ -z "$applied" ]; then
-        FIX_STATUS="ERROR"
-        FIX_DETAIL="chrony/ntp 설정 파일 또는 systemd 유닛을 찾지 못해 자동 조치 불가(패키지 설치 필요 - 패키지 설치는 이 도구의 범위 밖)"
+        # 아무것도 바꾸지 않았으므로 SKIPPED(fix.sh 가 재검증·원복 없이 사유만 기록)
+        FIX_STATUS="SKIPPED"
+        FIX_DETAIL="변경 없음 - chrony/ntp 설정 파일 또는 systemd 유닛을 찾지 못해 자동 조치 불가(패키지 설치 필요 - 패키지 설치는 이 도구의 범위 밖)"
         FIX_EVIDENCE=""
     else
         FIX_STATUS="APPLIED"

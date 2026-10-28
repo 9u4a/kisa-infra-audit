@@ -32,7 +32,7 @@ run_fix() {
             if [ -f "$conf" ]; then
                 fix_backup "$conf"
                 if grep -qE '^[[:space:]]*User[[:space:]]' "$conf"; then
-                    sed -i -E "s/^[[:space:]]*User[[:space:]]+.*/User $u/" "$conf"
+                    web_sed_inplace "$conf" -E "s/^[[:space:]]*User[[:space:]]+.*/User $u/"
                 else
                     printf '\nUser %s\nGroup %s\n' "$u" "$u" >> "$conf"
                 fi
@@ -60,9 +60,9 @@ run_fix() {
             if [ -f "$conf" ]; then
                 fix_backup "$conf"
                 if grep -qE '^[[:space:]]*user[[:space:]]' "$conf"; then
-                    sed -i -E "s/^[[:space:]]*user[[:space:]]+.*/user $u;/" "$conf"
+                    web_sed_inplace "$conf" -E "s/^[[:space:]]*user[[:space:]]+.*/user $u;/"
                 else
-                    sed -i "1i user $u;" "$conf"
+                    web_sed_inplace "$conf" "1i user $u;"
                 fi
                 if command -v nginx >/dev/null 2>&1; then
                     nginx -s reload 2>/dev/null

@@ -15,6 +15,8 @@ run_fix() {
         line=$(grep -iE '^[[:space:]]*Banner[[:space:]]' /etc/ssh/sshd_config | grep -viE 'none' | tail -n1)
         if [ -z "$line" ]; then
             fix_backup /etc/ssh/sshd_config
+            # /etc/issue.net 도 덮어쓰므로 백업한다(예전에는 백업 없이 덮어써 원복 후에도 원래 내용이 사라졌다)
+            fix_backup /etc/issue.net
             printf '%s\n' "$banner_text" > /etc/issue.net
             if grep -qiE '^[[:space:]]*Banner[[:space:]]' /etc/ssh/sshd_config; then
                 sed -i -E 's#^([[:space:]]*Banner[[:space:]]+).*#\1/etc/issue.net#I' /etc/ssh/sshd_config

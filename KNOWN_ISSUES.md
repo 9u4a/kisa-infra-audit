@@ -130,15 +130,44 @@
 
 | ID | 내용 | 상태 |
 |---|---|---|
-| F-R1 | W-23 조치가 Lsa 경로와 존재하지 않는 `IIS:\` FTP 경로에 쓴다. 진단은 `LanmanServer\Parameters`·FTP 사이트 설정을 본다. | 열림 |
-| F-R2 | PC-06 진단이 "설치"까지 보게 되어, 프로세스 중지 조치로는 해소되지 않는다. | 열림 |
-| F-R3 | IIS WEB-04/18/22(하위 application 설정), WEB-16(사이트별 재정의): 조치가 사이트 루트·서버 전역만 바꾼다. | 열림 |
-| F-R4 | WEB-18 Debian: `LoadModule` 만 주석 처리하고 mods-enabled 의 DAV 지시어를 남겨 문법 검사에 실패하고 원복된다. a2dismod 방식(`*-enabled` 링크 제거)이 필요하다. | 열림 |
-| F-R5 | `apache_options_disable` 가 `Options All`·IncludesNOEXEC 를 모른다(WEB-04/12/19 조치 원복). 조치가 아직 `$(tomcat_home)/conf` 만 쓴다(/etc/tomcat 배치 미대응). fix_safety 에 Debian Apache 케이스가 없다. | 열림 |
-| F-R6 | PG D-08(md5 로 저장된 role), MySQL D-11(전역·테이블 권한), Oracle D-03/05/09(사용자 정의 프로파일): 조치가 새 판정 범위를 다루지 않는다. | 열림 |
-| F-R7 | 05_network N-19/N-20 조치가 옛 정규식을 써서, view/ipv6 토큰이 있는 community 는 수동 안내로 나온다. | 열림 |
-| F-R8 | U-59~61 조치가 includeFile/includeDir 로 불러온 파일을 고치지 않는다. U-61 은 `rocommunity6 default` 를 다루지 않는다. U-01 이 telnet 때문에 VULN 이면 sshd 만 고치는 U-01 조치는 원복된다(telnet 차단은 U-52). | 열림 |
-| F-R9 | U-32 조치가 Debian 의 nologin 시스템 계정 중 홈이 없는 계정(`list` → `/var/list` 등) 때문에 재검증 VULN → 원복되는 것으로 보인다(미확인). | 열림(확인 필요) |
+| F-R1 | W-23 조치가 Lsa 경로와 존재하지 않는 `IIS:\` FTP 경로에 쓴다. 진단은 `LanmanServer\Parameters`·FTP 사이트 설정을 본다. | 해결(1.3.3): 진단과 같은 대상(LanmanServer·Lsa, FTP 사이트별/siteDefaults 익명 인증). CI 재현 케이스 SMB·FTP 적용 GOOD → 원복 VULN 확인 |
+| F-R2 | PC-06 진단이 "설치"까지 보게 되어, 프로세스 중지 조치로는 해소되지 않는다. | 해결(1.3.3): fix 등급 manual(제품별 제거는 업무 판단, 프로세스 종료는 원복 불가) - guide.json deviation, fixes/PC-06.ps1 삭제 |
+| F-R3 | IIS WEB-04/18/22(하위 application 설정), WEB-16(사이트별 재정의): 조치가 사이트 루트·서버 전역만 바꾼다. | 해결(1.3.3): `Invoke-FixIisConfigPaths`(진단과 같은 경로 순회), `Invoke-FixIisRemoveServerHeader`(WEB-16·**W-33 도 같은 결함**이었음). IIS 픽스처에 하위 app/vdir·사이트 재정의 재현 추가 |
+| F-R4 | WEB-18 Debian: `LoadModule` 만 주석 처리하고 mods-enabled 의 DAV 지시어를 남겨 문법 검사에 실패하고 원복된다. a2dismod 방식(`*-enabled` 링크 제거)이 필요하다. | 해결(1.3.3): mods-enabled 링크 백업 후 제거. 추가로 `sed -i` 가 심볼릭 링크를 일반 파일로 바꿔 원복 후에도 링크가 사라지던 문제(조치 8개 공통)를 `web_sed_inplace` 로 수정 |
+| F-R5 | `apache_options_disable` 가 `Options All`·IncludesNOEXEC 를 모른다(WEB-04/12/19 조치 원복). 조치가 아직 `$(tomcat_home)/conf` 만 쓴다(/etc/tomcat 배치 미대응). fix_safety 에 Debian Apache 케이스가 없다. | 해결(1.3.3): All 전개·IncludesNOEXEC, Tomcat 조치 12개가 `tomcat_conf_dir` 사용, fix_safety 에 apache-debian·tomcat·tomcat-etc 추가. WEB-08(0/-1 값 무시), WEB-12(Options 없음을 NA 로 표시)도 수정 |
+| F-R6 | PG D-08(md5 로 저장된 role), MySQL D-11(전역·테이블 권한), Oracle D-03/05/09(사용자 정의 프로파일): 조치가 새 판정 범위를 다루지 않는다. | 해결(1.3.3): PG D-08 role 별 승인+운영자 입력, MySQL D-11 DB·테이블 권한 회수(원복 가능, 전역 권한은 수동 안내), Oracle 사용자 정의 프로파일. 새 상태 PARTIAL/MANUAL(원복 없이 수동 필요 보고). **PG D-08 원복이 원래부터 항상 실패**(ALTER SYSTEM 을 트랜잭션 블록으로 보냄)하던 것도 수정 |
+| F-R7 | 05_network N-19/N-20 조치가 옛 정규식을 써서, view/ipv6 토큰이 있는 community 는 수동 안내로 나온다. | 해결(1.3.3): `parse_snmp_community` 재사용(N-18 포함), view/ipv6 ACL 유지한 채 재발급 |
+| F-R8 | U-59~61 조치가 includeFile/includeDir 로 불러온 파일을 고치지 않는다. U-61 은 `rocommunity6 default` 를 다루지 않는다. U-01 이 telnet 때문에 VULN 이면 sshd 만 고치는 U-01 조치는 원복된다(telnet 차단은 U-52). | 해결(1.3.3): include 파일까지 조치(`snmpd_conf_files`), `*6`·`com2sec -Cn` 처리, changes.log 에 community 원문 미기록. U-01 은 telnet 원인이면 변경 없이 SKIPPED("U-52 먼저") |
+| F-R9 | U-32 조치가 Debian 의 nologin 시스템 계정 중 홈이 없는 계정(`list` → `/var/list` 등) 때문에 재검증 VULN → 원복되는 것으로 보인다(미확인). | 해결(1.3.3): 재현됨. 조치 대상을 진단과 같은 기준으로, nologin 계정 홈은 root:root 755 로 생성(서비스 계정에 쓰기 공간을 주지 않음) |
+
+### 1-7. 실검증 테스트 교차검증 — 2026-10-28 (1.3.3)
+
+독립 리뷰어가 run/fix 안전 테스트 자체를 검토해 **실제 문제를 놓치고 통과(거짓 PASS)하는 경로 16건**을 찾았다. 모두
+고친 뒤, 일부러 문제를 넣어(음성 대조) 테스트가 실제로 FAIL 하는지 확인했다.
+
+| ID | 심각도 | 내용 | 상태 |
+|---|---|---|---|
+| T-01 | 상 | 01_unix fix_safety 원복 비교가 8개 파일뿐 - 실제로 `/etc/issue.net`(U-62 백업 없이 덮어씀)·`/etc/gshadow`(U-09 미백업)가 원복 후 달랐는데 PASS | 해결: 파일시스템 전체(경로·종류·권한·소유자·크기)+내용 해시, U-62·U-09 백업 추가 |
+| T-02 | 상 | 01_unix·03_web fix-apply 가 "APPLIED 1건 이상"만 확인 - FAILED_NOT_ROLLED_BACK 도 PASS. 실제로 U-13·U-15·U-65 가 원복되고 있었음 | 해결: 기대 APPLIED/SKIPPED 집합 고정. **U-15 는 백업 사본을 재검증이 다시 찾아 항상 원복**되던 실제 버그(소유자 메타 백업으로 변경), U-13·U-65 는 변경 없음을 SKIPPED 로 |
+| T-03 | 상 | 08_dbms 에 진단 실행 검수(run_safety) 자체가 없었음 | 해결: 연결 + DB 서버 상태(전역 변수·계정·권한·pg_settings·hba) 진단 전후 비교 |
+| T-04 | 상 | Windows S5 에 심은 비밀값 3개 중 진단이 실제 읽는 것은 1개(W-37) - 07·IIS·MSSQL 은 빈 검사 | 해결: 카테고리별로 진단이 읽는 위치에 심고 양성 대조(evidence 에 마스킹 형태 확인) |
+| T-05 | 중 | S6 가 root VULN 항목만 비교, 비 root 결과 누락·시간 초과도 PASS | 해결: 비 root GOOD/NA 0건·항목 집합 동일·NR_RC=124 FAIL. 원격 DB 는 `--nr-same` |
+| T-06 | 중 | 프로세스 비교가 이름만, 새 프로세스만, 컨테이너에 데몬 없음 | 해결: PID+명령행 양방향, 상주 프로세스 배치 |
+| T-07 | 중 | S5 검색 범위가 root 출력 폴더뿐, 원문 형태만 | 해결: stdout/stderr·비 root 출력 포함, JSON·HTML 이스케이프 해제 후 검색 |
+| T-08 | 중 | SQL 읽기 전용 판정이 `/* */ DROP`, `SELECT INTO`, `pg_reload_conf()`, CTE DML 등을 통과, PG 여러 줄 문장 누락 | 해결: 주석·리터럴 제거 후 판정, 부작용 함수 denylist, csvlog 파싱 |
+| T-09 | 중 | 08 preflight 실패 시 판정된 항목, lowpriv 의 D-01/08/11 외 항목을 보지 않음 | 해결: 허용목록 외 판정 FAIL, 26항목 전부 비교 |
+| T-10 | 중 | 03_web fix_safety 가 주 설정 파일 하나 cksum, apache-debian·tomcat 미대상 | 해결: 설정 트리 전체(링크 대상 포함), 6개 케이스 |
+| T-11 | 중 | Windows fix_safety 가 적용 0건이면 PASS, 원복 확인이 판정 비교뿐 | 해결: 최소 적용 건수·auto 항목 APPLIED 강제, 실제 상태 스냅샷 비교 |
+| T-12 | 중·하 | Windows 스냅샷: 사라진 서비스 미탐지, secedit/sqlcmd 조회 실패 시 빈 값끼리 같음 | 해결: 양방향 비교, 조회 실패 FAIL, 레지스트리·방화벽·TEMP 범위 확대 |
+| T-13 | 하·중 | Unix S1 이 /tmp 하위·/dev/shm·sysctl·mounts 를 보지 않음 | 해결: 추가(비 root 실행 후도 비교) |
+| T-14 | 중 | S2 제한 900초, 응답 없는 외부 명령 재현 없음 | 해결: 무응답 가짜 명령(HANG_CMDS) 케이스 180초 상한 - **실제 무기한 대기 6곳 발견**(U-45 postconf/exim, U-48·U-62 postconf, U-49 named -v, U-66 systemctl, 공통 `sshd -T`) → `run_to` 로 감쌈 |
+| T-15 | 하 | 비밀값이 모두 영숫자라 이스케이프 형태 누락을 검증 못 함 | 해결: 특수문자 섞은 비밀값 추가 |
+| T-16 | 하 | MySQL 테스트 이미지에 `diff` 없음 - 전후 비교가 빈 결과로 PASS 가능 | 해결: Dockerfile 에 diffutils 등 추가 |
+
+보강된 테스트가 새로 잡아낸 실제 결함(위 표 외):
+- 03_web WEB-10(ProxyPass/proxy_pass)·WEB-21(Redirect) 증적에 URL 속 비밀번호·토큰 원문이 남음(S5) → `web_mask_url_secrets`.
+- IIS 조치 원복이 열거형 속성(`httpErrors@errorMode` 등)을 되돌리지 못하면서 "원복 완료"로 보고(WEB-22) → 값 정규화 + 원복 후 재조회 확인.
+- Windows secedit 조치·원복이 %TEMP% 에 `.jfm` 찌꺼기를 남김 → 전용 임시 폴더째 삭제.
 
 ## 2. 검증 환경의 한계 (실기로 확인하지 못한 범위)
 

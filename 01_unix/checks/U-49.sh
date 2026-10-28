@@ -5,7 +5,7 @@
 
 run_check() {
     if command -v named >/dev/null 2>&1; then
-        v=$(named -v 2>/dev/null)
+        v=$(run_to 10 named -v 2>/dev/null)
         CHECK_STATUS="MANUAL"
         CHECK_DETAIL="BIND(named)가 설치되어 있음 — 최신 버전/보안 패치 적용 여부 및 패치 관리 정책 존재 여부를 수동 확인 필요"
         CHECK_EVIDENCE="named -v: $v"

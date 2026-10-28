@@ -13,9 +13,9 @@ run_check() {
 
     service_active=0
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl is-active --quiet rsyslog 2>/dev/null && service_active=1
-        systemctl is-active --quiet syslog 2>/dev/null && service_active=1
-        systemctl is-active --quiet syslog-ng 2>/dev/null && service_active=1
+        run_to 10 systemctl is-active --quiet rsyslog 2>/dev/null && service_active=1
+        run_to 10 systemctl is-active --quiet syslog 2>/dev/null && service_active=1
+        run_to 10 systemctl is-active --quiet syslog-ng 2>/dev/null && service_active=1
     fi
     pgrep -f 'rsyslogd|syslogd|syslog-ng' >/dev/null 2>&1 && service_active=1
 

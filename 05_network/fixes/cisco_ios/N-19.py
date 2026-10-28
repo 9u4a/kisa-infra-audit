@@ -12,37 +12,31 @@
 # 처리하도록 책임을 분리해 해결했다. 문자열 자체가 약한(N-18 VULN) 라인은 N-18이 새 문자열과
 # 함께 ACL+RO까지 한 번에 반영하므로 여기서는 건너뛴다(그렇지 않으면 N-18이 재발급한 새
 # 문자열을 모른 채 옛 문자열로 다시 재발급해 약한 문자열이 되살아난다).
-import re
-
+# 조치 후속 F-R7: 옛 정규식(`<string> [RO|RW] [acl]$`)은 view·ipv6 토큰이 있는 줄을 놓쳐(진단은 VULN 인데) 명령을
+# 만들지 못하고 수동 안내로 빠졌다. 진단과 같은 parse_snmp_community 로 해석하고, 재발급할 때 view·ipv6 ACL 을 유지한다.
+# IPv4 ACL 이 없으면(ipv6 ACL 만 있어도) 진단과 같이 대상으로 본다.
 from parsers import cisco_ios as cio
 
 _ACL_NUM = "20"
 
 
 def generate(ctx):
-    lines = ctx.find(r"^snmp-server community (\S+)(?:[ \t]+(RO|RW))?(?:[ \t]+\S+)?[ \t]*$")
     cmds = []
     added_acl_decl = False
     subsumed_by_n18 = False
-    for string_, rw in lines:
+    for info in cio.snmp_communities(ctx):
+        string_ = info["string"]
         if cio.snmp_community_weak(string_):
             subsumed_by_n18 = True
             continue
-        # 이미 ACL이 있는 라인인지는 원본 전체 라인으로 재확인(끝에 RO/RW 가 아닌 토큰이 더 있으면 ACL 있음).
-        # split()[3:] 로 "snmp-server"/"community"/"<community 문자열>" 3개 토큰을 건너뛰어야 하는데
-        # [2:]로 한 칸 덜 건너뛰어 community 문자열 자신이 "ACL 토큰"으로 오인되는 버그가 있었다
-        # (문자열 뒤에 RO/RW도 ACL도 없는 가장 흔한 취약 사례에서 전혀 명령을 생성하지 못함 - 실기 테스트로 발견).
-        full = ctx.search(rf"^snmp-server community {re.escape(string_)}[ \t]+\S.*$")
-        tokens = full.group(0).split()[3:] if full else []
-        rest_after_rorw = [t for t in tokens if t not in ("RO", "RW")]
-        if rest_after_rorw:
+        if info["acl"]:
             continue
         if not added_acl_decl:
             cmds.append(f"! 주의: 아래 {_ACL_NUM}번 ACL의 permit 대상을 실제 관리 시스템 IP로 반드시 교체할 것")
             cmds.append(f"access-list {_ACL_NUM} permit <관리-시스템-IP> <wildcard mask>")
             added_acl_decl = True
         cmds.append(f"no snmp-server community {string_}")
-        cmds.append(f"snmp-server community {string_} RO {_ACL_NUM}")
+        cmds.append(cio.build_snmp_community(string_, "RO", info["view"], info["ipv6_acl"], _ACL_NUM))
     if not cmds and subsumed_by_n18:
         cmds.append("! 이 항목의 조치 대상 라인은 N-18(문자열 복잡성) 조치 명령에 ACL과 함께 이미 포함되어 있음 - 위 N-18 블록 참고")
     return cmds

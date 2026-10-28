@@ -1,7 +1,7 @@
 # WEB-10 (상) 불필요한 프록시 설정 제한
 # 판단 기준(가이드 원문): 양호 = 불필요한 Proxy 설정을 제한한 경우 / 취약 = 제한하지 않은 경우
 # "불필요 여부"는 업무 판단이 필요하므로, Proxy 관련 설정 존재 시 MANUAL 로 안내한다.
-# Tomcat Connector 증적의 keystorePass 등 비밀번호류 속성은 가린다(S5, 진단 검수 WEB-R9).
+# Tomcat Connector 증적의 keystorePass 등 비밀번호류 속성은 가린다(S5, 진단 검수 WEB-R9). Apache/Nginx 프록시·리다이렉트 줄의 URL 사용자 정보·토큰은 web_mask_url_secrets 로 가린다(1.3.3).
 
 run_check() {
     detect_web_engines
@@ -17,7 +17,7 @@ run_check() {
 $f: $l"
             done
             evidence="$evidence
-[Apache] Proxy 설정: ${hit:-없음}"
+[Apache] Proxy 설정: $(printf '%s' "${hit:-없음}" | web_mask_url_secrets)"
             [ -n "$hit" ] && manuals="$manuals apache"
         fi
     esac
@@ -32,7 +32,7 @@ $f: $l"
 $f: $l"
             done
             evidence="$evidence
-[Nginx] proxy_pass 설정: ${hit:-없음}"
+[Nginx] proxy_pass 설정: $(printf '%s' "${hit:-없음}" | web_mask_url_secrets)"
             [ -n "$hit" ] && manuals="$manuals nginx"
         fi
     esac
@@ -42,7 +42,7 @@ $f: $l"
         if web_load_tomcat_conf server.xml; then
             hit=$(strip_xml_comments "$TC_FILE" | grep -nE 'proxyName|proxyPort' | web_mask_xml_secrets)
             evidence="$evidence
-[Tomcat] Connector proxyName/proxyPort: ${hit:-없음}"
+[Tomcat] Connector proxyName/proxyPort: $(printf '%s' "${hit:-없음}" | web_mask_url_secrets)"
             [ -n "$hit" ] && manuals="$manuals tomcat"
         fi
     esac

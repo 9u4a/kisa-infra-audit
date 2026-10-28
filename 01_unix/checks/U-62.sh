@@ -45,7 +45,7 @@ $f banner: ${line:-미설정}"
     done
 
     if command -v postconf >/dev/null 2>&1; then
-        banner=$(postconf -h smtpd_banner 2>/dev/null)
+        banner=$(run_to 15 postconf -h smtpd_banner 2>/dev/null)
         evidence="$evidence
 postfix smtpd_banner: ${banner:-기본값}"
     fi

@@ -28,7 +28,7 @@ run_fix() {
             # 다른 블록의 server_tokens on/build 도 check 는 노출로 본다 - off 로 바꾼다
             if grep -qE '^[^#]*server_tokens[[:space:]]+(on|build)' "$f" 2>/dev/null; then
                 fix_backup "$f"
-                sed -i -E 's/^([^#]*server_tokens[[:space:]]+)(on|build)/\1off/' "$f"
+                web_sed_inplace "$f" -E 's/^([^#]*server_tokens[[:space:]]+)(on|build)/\1off/'
                 applied="$applied nginx($f: on->off)"
             fi
         done
@@ -44,8 +44,9 @@ run_fix() {
     esac
 
     case " $WEB_ENGINES " in *" tomcat "*)
-        home=$(tomcat_home)
-        f="$home/conf/server.xml"
+        # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
+        tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
+        f="$tcdir/server.xml"
         if [ -f "$f" ]; then
             hit=$(strip_xml_comments "$f" | grep -nE 'Connector[^>]*server="')
             if [ -z "$hit" ]; then

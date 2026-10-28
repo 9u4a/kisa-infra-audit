@@ -19,6 +19,11 @@ case "$ENGINE" in
         if [ "$MODE" = "hardened" ]; then
             sed -i 's/^\([[:space:]]*\)Options Indexes FollowSymLinks/\1Options -Indexes FollowSymLinks/' "$CONF"
         fi
+        # S5(run_safety): 진단 증적(WEB-10 ProxyPass 줄)에 URL 비밀번호 원문이 남지 않는지 - 특수문자(#,!) 포함.
+        # proxy 모듈이 로드되지 않은 기본 이미지에서도 문법 검사(fix_safety)가 통과하도록 IfModule 로 감싼다.
+        if [ "$MODE" = "vuln" ]; then
+            printf '<IfModule proxy_module>\n    ProxyPass "/kisaleak" "http://svc:Px9#Leak!Pw@127.0.0.1:9/"\n</IfModule>\n' >> "$CONF"
+        fi
         ;;
     apache-debian)
         # Debian 패키지 레이아웃(WEB-R1 회귀): 메인 설정(apache2.conf)의 /var/www Indexes 는 양쪽 모두 끄고,
@@ -32,12 +37,16 @@ case "$ENGINE" in
             for m in dav.load dav_fs.load dav_fs.conf; do
                 [ -e "/etc/apache2/mods-enabled/$m" ] || ln -s "../mods-available/$m" "/etc/apache2/mods-enabled/$m"
             done
+            # S5: 가상호스트의 ProxyPass URL 비밀번호(위 apache 와 같은 이유, 링크 대상인 sites-available 에 넣음)
+            sed -i 's|^</VirtualHost>|\t<IfModule proxy_module>\n\t\tProxyPass "/kisaleak" "http://svc:Px9#Leak!Pw@127.0.0.1:9/"\n\t</IfModule>\n</VirtualHost>|' "$VHOST"
         fi
         ;;
     nginx)
         CONF=/etc/nginx/nginx.conf
         if [ "$MODE" = "vuln" ]; then
             sed -i '/http[[:space:]]*{/a\    autoindex on;' "$CONF"
+            # S5: proxy_pass 쿼리의 토큰 원문이 진단 증적(WEB-10)에 남지 않는지 - 특수문자(!) 포함
+            sed -i '/http[[:space:]]*{/a\    server { listen 127.0.0.1:8099; location /kisaleak { proxy_pass http://127.0.0.1:9/api?access_token=Nx7-Leak!Tok; } }' "$CONF"
         fi
         ;;
     tomcat)

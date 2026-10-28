@@ -176,7 +176,7 @@ jobs:
         if: always()
         shell: powershell
         run: |
-          .\03_web\tests\fixtures\apply_iis.ps1 -Mode vuln
+          .\03_web\tests\fixtures\apply_iis.ps1 -Mode vuln -FixCases
           .\lib\tests\fix_safety_windows.ps1 -Category 03_web
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: MSSQL 진단 회귀 + 운영 안전(08_dbms, LocalDB)

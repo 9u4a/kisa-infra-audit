@@ -21,7 +21,7 @@ run_check() {
             /|/nonexistent|/nonexisting) continue ;;
         esac
         case "$shell" in
-            */nologin|/bin/false) [ "$home" = "" ] && continue ;;
+            */nologin|*/false) [ "$home" = "" ] && continue ;;
         esac
         # 원격/자동마운트 홈은 존재 확인([ -d ])만으로도 마운트를 깨우거나 멈출 수 있어 건너뛴다
         if is_remote_or_auto_fs "$home"; then skipped="$skipped $home"; continue; fi

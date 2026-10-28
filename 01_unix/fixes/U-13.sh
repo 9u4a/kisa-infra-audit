@@ -13,8 +13,9 @@ run_fix() {
     if [ -r /etc/shadow ]; then
         _weak=$(awk -F: '$2 !~ /^[!*]|^$/ && $2 !~ /^\$(5|6|y|gy)\$/ { printf "%s ", $1 }' /etc/shadow 2>/dev/null)
         if [ -n "$_weak" ]; then
-            FIX_STATUS="ERROR"
-            FIX_DETAIL="취약한 해시를 쓰는 기존 계정($_weak)은 비밀번호 재설정(passwd)이 필요해 자동 조치 불가 - $logindefs 의 ENCRYPT_METHOD SHA512 설정과 함께 수동 조치할 것"
+            # 아무것도 바꾸지 않았으므로 SKIPPED(fix.sh 가 재검증·원복 없이 사유만 기록)
+            FIX_STATUS="SKIPPED"
+            FIX_DETAIL="취약한 해시를 쓰는 기존 계정($_weak)은 비밀번호 재설정(passwd)이 필요해 자동 조치 불가 - 변경하지 않음. $logindefs 의 ENCRYPT_METHOD SHA512 설정과 함께 수동 조치할 것"
             FIX_EVIDENCE=""
             return
         fi

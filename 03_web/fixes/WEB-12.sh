@@ -4,7 +4,7 @@
 run_fix() {
     detect_web_engines
     applied=""
-    manual_nginx=""
+    manual_only=""
 
     case " $WEB_ENGINES " in *" apache "*)
         conf=$(apache_conf_path)
@@ -16,6 +16,14 @@ run_fix() {
             # +/- 혼용 문법 오류를 만들지 않도록 토큰 단위로 재구성(lib/common.sh apache_options_disable)
             apache_options_disable "$f" FollowSymLinks && applied="$applied apache($f)"
         done
+        # checks/WEB-12.sh: Options 지시자가 하나도 없으면 Apache 2.4 기본값(FollowSymLinks)이 적용돼 VULN 이다.
+        # 어느 <Directory> 에 무엇을 넣을지는 서비스 구성에 달려 있어 자동으로 넣지 않고 수동 조치로 안내한다.
+        any_opt=""
+        for f in $files; do
+            [ -f "$f" ] || continue
+            awk '{ t = $0; sub(/^[ \t]+/, "", t); split(t, a, /[ \t]+/); if (tolower(a[1]) == "options") { f = 1; exit } } END { exit !f }' "$f" 2>/dev/null && { any_opt=1; break; }
+        done
+        [ -z "$any_opt" ] && manual_only="$manual_only apache(Options 지시자가 없어 기본값 FollowSymLinks 가 적용됨 - 웹 루트 <Directory> 에 'Options -FollowSymLinks' 등 수동 추가)"
     esac
 
     case " $WEB_ENGINES " in *" nginx "*)
@@ -32,19 +40,20 @@ run_fix() {
             if nginx_http_insert "$conf" "disable_symlinks on;"; then
                 applied="$applied nginx($conf)"
             else
-                manual_nginx="nginx($conf 에서 http 블록을 찾지 못해 자동 조치 불가 - http/server 블록에 'disable_symlinks on;' 수동 추가)"
+                manual_only="$manual_only nginx($conf 에서 http 블록을 찾지 못해 자동 조치 불가 - http/server 블록에 'disable_symlinks on;' 수동 추가)"
             fi
         fi
     esac
 
     case " $WEB_ENGINES " in *" tomcat "*)
-        home=$(tomcat_home)
-        f="$home/conf/server.xml"
+        # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
+        tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
+        f="$tcdir/server.xml"
         if [ -f "$f" ]; then
             hit=$(strip_xml_comments "$f" | grep -inE 'allowLinking[[:space:]]*=[[:space:]]*"?true')
             if [ -n "$hit" ]; then
                 fix_backup "$f"
-                sed -i -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I' "$f"
+                web_sed_inplace "$f" -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I'
                 applied="$applied tomcat($f)"
             fi
         fi
@@ -52,11 +61,11 @@ run_fix() {
 
     if [ -n "$applied" ]; then
         FIX_STATUS="APPLIED"
-        FIX_DETAIL="심볼릭 링크 사용을 제한함:$applied${manual_nginx:+ / 수동 조치 필요: $manual_nginx}"
+        FIX_DETAIL="심볼릭 링크 사용을 제한함:$applied${manual_only:+ / 수동 조치 필요: $manual_only}"
         FIX_EVIDENCE="$applied"
-    elif [ -n "$manual_nginx" ]; then
+    elif [ -n "$manual_only" ]; then
         FIX_STATUS="ERROR"
-        FIX_DETAIL="자동 조치 불가 - 수동 조치 필요: $manual_nginx"
+        FIX_DETAIL="자동 조치 불가 - 수동 조치 필요: $manual_only"
         FIX_EVIDENCE=""
     else
         FIX_STATUS="NA"

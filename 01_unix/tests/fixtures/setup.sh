@@ -24,6 +24,11 @@ if [ "$MODE" = "vuln" ]; then
     sed -i 's/^UMASK.*/UMASK\t\t027/' /etc/login.defs
     echo "umask 002" > /etc/profile.d/kisa-umask.sh
 
+    # U-15: 소유자·그룹이 없는 파일(조치 → root:root, 원복 시 원래 uid:gid 로)
+    # 심볼릭 링크는 링크 자체만 바꿔야 한다(대상 /etc/issue 의 소유자가 바뀌면 안 됨)
+    mkdir -p /srv && : > /srv/kisa-orphan && chown 4242:4242 /srv/kisa-orphan
+    ln -s /etc/issue /srv/kisa-orphan-link && chown -h 4243:4243 /srv/kisa-orphan-link
+
     chmod 666 /etc/passwd                                               # U-16
     chmod 644 /etc/shadow                                                # U-18
     chmod 666 /etc/hosts                                                 # U-19
@@ -84,6 +89,10 @@ if [ "$MODE" = "vuln" ]; then
     mkdir -p /etc/snmp/snmpd.conf.d
     printf 'createUser kisav3 SHA "KisaAuthPass#2026" AES\nincludeDir /etc/snmp/snmpd.conf.d\n' > /etc/snmp/snmpd.conf
     echo "rocommunity6 public default" > /etc/snmp/snmpd.conf.d/v2.conf
+    # F-R8: includeFile 로 불러온 파일의 com2sec -Cn(필드 위치가 2칸 밀림)·소스 생략 rocommunity - 조치(U-59~61)가
+    # 주 파일만 고치던 시절에는 재검증 실패→원복이었다(fix_safety.sh SNMP_* 케이스).
+    printf 'includeFile /etc/snmp/kisa-extra.conf\n' >> /etc/snmp/snmpd.conf
+    printf 'com2sec -Cn kisactx kisasec default weak1\nrocommunity private\n' > /etc/snmp/kisa-extra.conf
 
 elif [ "$MODE" = "hardened" ]; then
     echo "PermitRootLogin no" >> /etc/ssh/sshd_config                   # U-01

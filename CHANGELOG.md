@@ -6,6 +6,69 @@
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-10-28
+### 조치 후속 과제(F-R1~F-R9) 해결 + 실검증 테스트 교차검증
+1.3.2 에서 진단이 엄격해지며 드러난 조치 쪽 과제를 모두 고쳤다. 아울러 독립 리뷰어가 run/fix 안전 테스트 자체를 검토해
+문제를 놓치고 통과하는 경로 16건(T-01~T-16)을 찾았고, 모두 고친 뒤 음성 대조로 테스트가 실제로 FAIL 하는지 확인했다.
+항목별 내용은 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 1-6·1-7.
+
+### Fixed — 조치(fix)
+- **원복이 실제로 되지 않던 것**
+  - U-62 `/etc/issue.net` 미백업, U-09 `/etc/gshadow` 미백업.
+  - PG D-08 원복이 항상 실패: ALTER SYSTEM 을 트랜잭션 블록으로 보냈다.
+  - Debian Apache 조치의 `sed -i` 가 mods-enabled 심볼릭 링크를 일반 파일로 바꿨다.
+  - IIS 열거형 속성 원복이 무시되면서도 "원복 완료"로 보고됐다.
+- **항상 실패·원복되던 조치**
+  - U-15: 재검증이 백업 사본을 다시 찾았다.
+  - U-32: Debian 의 nologin 계정 홈(F-R9).
+  - WEB-18 Debian(F-R4), WEB-04/12/19 의 `Options All`(F-R5).
+  - Tomcat `/etc/tomcat*` 배치(F-R5).
+  - W-23 이 진단과 다른 경로에 썼다(F-R1).
+  - IIS 하위 application·사이트 재정의(F-R3). W-33 도 같은 결함이었다.
+- **새 판정 범위 대응**
+  - U-59~61 의 snmpd include 파일·IPv6 지시어(F-R8).
+  - PG D-08·MySQL D-11·Oracle D-03/05/09(F-R6).
+  - N-18~20 의 view/ipv6 community(F-R7).
+- **정직한 상태 보고**
+  - 01_unix·08_dbms 에 `SKIPPED`·`PARTIAL`/`MANUAL` 상태를 추가했다. 바꾼 것이 없거나 수동 조치가 필요한 항목을
+    "실패 후 원복"으로 기록하지 않는다(U-01 telnet 원인 → U-52 안내, U-13, U-65 등).
+  - PC-06 은 fix 등급을 manual 로 바꿨다(guide.json deviation).
+- **기타**
+  - Windows secedit 조치가 %TEMP% 에 `.jfm` 을 남겼다.
+  - changes.log 에 SNMP community 원문을 남겼다.
+
+### Fixed — 진단(run)
+- **S2 무기한 대기 6곳**: 무응답 명령 재현 테스트로 찾았다. U-45, U-48, U-49, U-62, U-66, 공통 `sshd -T` 를 `run_to`
+  로 감쌌다. 같은 실행 안에서 한 번 시간 초과한 명령은 바로 124 를 돌려준다.
+- **S5**: WEB-10·WEB-21 증적에 URL 속 비밀번호·토큰 원문이 남았다.
+- **S6 조회 실패**: 다음 경우 GOOD/VULN 대신 ERROR 로 판정한다.
+  - systemctl 이 시간 초과할 때: U-01, `check_service_disabled`
+  - postconf 조회가 실패할 때: U-47, U-48
+- WEB-10 은 vuln 픽스처에 프록시 설정이 추가되어 apache·nginx·apache-debian 기대값이 GOOD 에서 MANUAL 로 바뀌었다.
+  U-15 는 소유자 없는 파일 재현이 추가되어 기대값이 GOOD 에서 VULN 으로 바뀌었다.
+
+### Tests
+- **fix_safety**
+  - Unix·웹 모두 원복 비교 범위를 넓혔다: Unix 는 파일시스템 전체, 웹은 설정 트리 전체.
+  - 기대 APPLIED 집합을 고정했다.
+  - Debian Apache·Tomcat·confirm(가상 터미널) 케이스를 추가했다.
+- **run_safety(Unix)**
+  - S1: 비 root 실행 후, /tmp 하위·sysctl·mounts 까지 비교한다. 프로세스는 PID+명령행으로 양방향 비교한다.
+  - S2: 무응답 명령 케이스(HANG_CMDS)를 추가했다.
+  - S5: JSON·HTML 이스케이프를 해제한 뒤에도 검색하고, stdout 도 검색한다.
+  - S6: 비 root GOOD/NA 0건, 항목 집합 동일. 원격 DB 는 `--nr-same`.
+- **08_dbms**
+  - 진단 실행 검수를 연결하고, DB 서버 상태를 진단 전후로 비교한다.
+  - SQL 읽기 전용 판정을 강화했다.
+  - preflight·lowpriv 를 26항목 전부 비교한다.
+  - fix 회귀(MySQL D-11, PG D-08)를 추가했다.
+- **Windows**
+  - 카테고리별로 진단이 실제 읽는 비밀값을 심고 양성 대조한다.
+  - 공용 상태 스냅샷(`lib/tests/win_state_snapshot.ps1`)을 추가했다. 조회 실패는 FAIL 로 처리한다.
+  - fix_safety 는 최소 적용 건수와 auto 항목 APPLIED 를 강제하고, 원복을 실제 상태로 비교한다.
+  - W-23(SMB·FTP)·PC-06·IIS 하위 경로 재현 케이스를 추가했다.
+- 05_network: 조치 명령을 적용한 뒤 GOOD 이 되는지 확인하는 케이스를 추가했다.
+
 ## [1.3.2] - 2026-10-28
 ### 진단(run) 전체 검수 — 조치처럼 실제로 돌려 보고, 전 파일을 운영 안전 기준으로 대조
 조치(fix)는 1.2.2~1.3.1 동안 "실제 적용 → 원복" 실기 검증을 갖췄지만, 진단은 기대값 회귀 테스트뿐이었다. 이번에는

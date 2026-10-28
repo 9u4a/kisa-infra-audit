@@ -134,6 +134,33 @@ def snmp_community_lines(ctx) -> list[str]:
     return [l.rstrip() for l in ctx.lines if re.match(r"^snmp-server community \S+", l)]
 
 
+def snmp_communities(ctx) -> list[dict]:
+    """parse_snmp_community 로 해석한 community 줄 목록. fixes/cisco_ios/N-18~20 이 진단(checks)과 같은 해석을
+    쓰도록 한다 - 조치가 옛 정규식(`<string> [RO|RW] [acl]$`)을 써서 view·ipv6 토큰이 있는 줄은 명령을 만들지
+    못하고 수동 안내로 빠졌다(조치 후속 F-R7)."""
+    out = []
+    for line in snmp_community_lines(ctx):
+        info = parse_snmp_community(line)
+        if info is not None:
+            out.append(info)
+    return out
+
+
+def build_snmp_community(string: str, mode: str, view: str | None = None, ipv6_acl: str | None = None,
+                         acl: str | None = None) -> str:
+    """IOS 문법 순서(`<string> [view <name>] [RO|RW] [ipv6 <acl>] [<acl>]`)로 community 줄을 다시 만든다.
+    재발급할 때 원래 줄의 view·ipv6 ACL 을 잃지 않기 위함이다."""
+    parts = ["snmp-server", "community", string]
+    if view:
+        parts += ["view", view]
+    parts.append(mode)
+    if ipv6_acl:
+        parts += ["ipv6", ipv6_acl]
+    if acl:
+        parts.append(acl)
+    return " ".join(parts)
+
+
 # ---- 비밀값 마스킹 (운영 안전 기준 S5, 진단 검수 D-R4) ---------------------------------
 # N-17 이 snmp-server 줄 원문(community 평문·SNMPv3 auth/priv 키)을, N-01/06/08/09 가 VTY/AUX 블록 전체
 # (평문 password, type 7 값)를 증적에 그대로 남겼다. 각 check 에서 빠뜨려도 새지 않도록 run.py 가 모든

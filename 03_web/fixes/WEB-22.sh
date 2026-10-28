@@ -42,8 +42,9 @@ run_fix() {
     esac
 
     case " $WEB_ENGINES " in *" tomcat "*)
-        home=$(tomcat_home)
-        f="$home/conf/web.xml"
+        # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
+        tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
+        f="$tcdir/web.xml"
         if [ -f "$f" ]; then
             cnt=$(strip_xml_comments "$f" | grep -c '<error-page>')
             if [ "$cnt" -eq 0 ]; then

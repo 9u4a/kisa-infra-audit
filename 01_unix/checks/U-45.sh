@@ -7,7 +7,7 @@ run_check() {
     evidence=""
 
     if command -v postconf >/dev/null 2>&1; then
-        v=$(postconf mail_version 2>/dev/null)
+        v=$(run_to 10 postconf mail_version 2>/dev/null)
         evidence="$evidence
 Postfix: $v"
     fi
@@ -19,7 +19,7 @@ Postfix: $v"
 Sendmail: ${v:-버전 확인 실패}"
     fi
     if command -v exim >/dev/null 2>&1 || command -v exim4 >/dev/null 2>&1; then
-        v=$( (exim -bV 2>/dev/null || exim4 -bV 2>/dev/null) | head -n1)
+        v=$( (run_to 10 exim -bV 2>/dev/null || run_to 10 exim4 -bV 2>/dev/null) | head -n1)
         evidence="$evidence
 Exim: $v"
     fi

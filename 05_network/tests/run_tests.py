@@ -14,6 +14,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -95,6 +96,79 @@ def run_one(fixture_file: str, expected_file: str) -> list[str]:
     return failures
 
 
+def _run_py(fixture_path: str, out_dir: str, items: str) -> dict:
+    proc = subprocess.run(
+        [sys.executable, os.path.join(NETWORK_DIR, "run.py"), "-f", fixture_path, "-v", "cisco_ios", "-o", out_dir, "-i", items],
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    paths = glob.glob(os.path.join(out_dir, "*", "result.json"))
+    if proc.returncode != 0 or not paths:
+        raise RuntimeError(f"run.py 실패 (exit {proc.returncode}) {proc.stderr}")
+    return {"path": paths[0], "status": {it["code"]: it["status"] for it in json.load(open(paths[0], encoding="utf-8"))["items"]}}
+
+
+def _apply_remediation(config: str, remediation: str) -> str:
+    """생성된 조치 스크립트를 설정 텍스트에 순서대로 적용해 본다(장비 대신). `no snmp-server community X` 는 그
+    community 줄을 지우고, 나머지 명령 줄은 placeholder 를 실제 값으로 바꿔 end 앞에 덧붙인다."""
+    lines = config.splitlines()
+    body = remediation.split("configure terminal", 1)[1].split("\nend\n", 1)[0]
+    for cmd in body.splitlines():
+        cmd = cmd.strip()
+        if not cmd or cmd.startswith("!"):
+            continue
+        m = re.match(r"^no snmp-server community (\S+)$", cmd)
+        if m:
+            lines = [l for l in lines if l.split()[:3] != ["snmp-server", "community", m.group(1)]]
+            continue
+        cmd = cmd.replace("<관리-시스템-IP> <wildcard mask>", "10.1.1.0 0.0.0.255")
+        idx = max(i for i, l in enumerate(lines) if l.strip() == "end")
+        lines.insert(idx, cmd)
+    return "\n".join(lines) + "\n"
+
+
+def run_snmp_fix_case() -> list[str]:
+    """조치 후속 F-R7: view·ipv6 토큰이 있는 community 줄도 N-18/19/20 조치 명령이 만들어지고(수동 안내로 빠지지
+    않고), 생성된 스크립트를 순서대로 적용하면 세 항목 모두 GOOD 이 되며 view·ipv6 ACL 이 유지되는지 확인한다."""
+    fixture = os.path.join(FIXTURES_DIR, "cisco_ios_snmp_fix.txt")
+    codes = ["N-18", "N-19", "N-20"]
+    label = "cisco_ios_snmp_fix.txt(조치)"
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        before = _run_py(fixture, os.path.join(tmp, "before"), ",".join(codes))
+        for c in codes:
+            if before["status"].get(c) != "VULN":
+                failures.append(f"{label}: 조치 전 {c} 기대=VULN 실제={before['status'].get(c)}")
+        proc = subprocess.run(
+            [sys.executable, os.path.join(NETWORK_DIR, "fix.py"), "-f", fixture, "-r", before["path"], "-o", os.path.join(tmp, "fix")],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        rem_paths = glob.glob(os.path.join(tmp, "fix", "*", "remediation_*.txt"))
+        if proc.returncode != 0 or not rem_paths:
+            return failures + [f"{label}: fix.py 실패 (exit {proc.returncode}) {proc.stderr}"]
+        remediation = open(rem_paths[0], encoding="utf-8").read()
+        body = remediation.split("configure terminal", 1)[-1]  # 머리말 안내문에도 "[수동 조치 필요]" 문구가 있다
+        if "[수동 조치 필요]" in body or "[오류]" in body:
+            failures.append(f"{label}: 조치 명령 대신 수동 안내/오류가 나옴")
+        with open(fixture, encoding="utf-8") as f:
+            fixed = _apply_remediation(f.read(), remediation)
+        fixed_path = os.path.join(tmp, "fixed.txt")
+        with open(fixed_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(fixed)
+        after = _run_py(fixed_path, os.path.join(tmp, "after"), ",".join(codes))
+        for c in codes:
+            if after["status"].get(c) != "GOOD":
+                failures.append(f"{label}: 조치 적용 후 {c} 기대=GOOD 실제={after['status'].get(c)}")
+        comm = [l for l in fixed.splitlines() if l.startswith("snmp-server community ")]
+        for want in ("Fx7#ViewComm01 view v1 RO 20", "Fx7#Ipv6Comm02 RO ipv6 V6ACL 10", "Fx7#Ipv6Comm03 RO ipv6 V6ACL 20"):
+            if f"snmp-server community {want}" not in comm:
+                failures.append(f"{label}: 재발급 줄에 '{want}' 가 없음(view/ipv6 유실?)")
+        if not any(" view v2 RO 20" in l and " weak " not in l for l in comm):
+            failures.append(f"{label}: 약한 문자열(view v2) 줄이 새 문자열·view·ACL 로 재발급되지 않음")
+        if len(comm) != 4:
+            failures.append(f"{label}: 조치 후 community 줄 수 기대=4 실제={len(comm)}")
+    return failures
+
+
 def main() -> None:
     all_failures = []
     for fixture_file, expected_file in CASES:
@@ -103,6 +177,11 @@ def main() -> None:
             all_failures.extend(failures)
         else:
             print(f"PASS: {fixture_file}")
+    failures = run_snmp_fix_case()
+    if failures:
+        all_failures.extend(failures)
+    else:
+        print("PASS: cisco_ios_snmp_fix.txt (N-18/19/20 조치 명령 적용 후 GOOD, view/ipv6 유지)")
 
     if all_failures:
         print(f"\nFAIL: {len(all_failures)}건 불일치")

@@ -13,6 +13,14 @@ run_fix() {
             [ -f "$f" ] || continue
             grep -qE '^[^#]*LimitRequestBody' "$f" 2>/dev/null && hit=1
         done
+        # checks/WEB-08.sh 와 같은 기준: LimitRequestBody 0 은 무제한(VULN) - 10MB 로 바꾼다(1.3.3)
+        for f in $files; do
+            [ -f "$f" ] || continue
+            grep -qiE '^[^#]*LimitRequestBody[[:space:]]+0+([^0-9]|$)' "$f" 2>/dev/null || continue
+            fix_backup "$f"
+            web_sed_inplace "$f" -E 's/^([^#]*[Ll][Ii][Mm][Ii][Tt][Rr][Ee][Qq][Uu][Ee][Ss][Tt][Bb][Oo][Dd][Yy][[:space:]]+)0+([^0-9]|$)/\110485760\2/'
+            applied="$applied apache($f: 0->10485760)"
+        done
         if [ -z "$hit" ] && [ -f "$conf" ]; then
             fix_backup "$conf"
             printf '\n# KISA WEB-08: 업로드 용량 제한(10MB)\nLimitRequestBody 10485760\n' >> "$conf"
@@ -21,11 +29,17 @@ run_fix() {
     esac
 
     case " $WEB_ENGINES " in *" tomcat "*)
-        home=$(tomcat_home)
-        f="$home/conf/server.xml"
+        # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
+        tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
+        f="$tcdir/server.xml"
         if [ -f "$f" ]; then
-            hit=$(grep -E 'maxPostSize|maxSwallowSize' "$f" 2>/dev/null)
-            if [ -z "$hit" ]; then
+            # checks/WEB-08.sh 와 같은 기준: XML 주석을 지운 뒤 찾고, 음수(-1 = 무제한)는 10MB 로 바꾼다(1.3.3)
+            hit=$(strip_xml_comments "$f" | grep -oE '(maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*"[^"]*"')
+            if printf '%s\n' "$hit" | grep -qE '"[[:space:]]*-[0-9]'; then
+                fix_backup "$f"
+                web_sed_inplace "$f" -E 's/((maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*")[[:space:]]*-[0-9]+"/\110485760"/g'
+                applied="$applied tomcat($f: 음수->10485760)"
+            elif [ -z "$hit" ]; then
                 fix_backup "$f"
                 # Connector 태그는 속성이 여러 줄에 걸쳐 있는 경우가 흔해(실제 tomcat:10 기본
                 # server.xml 로 실기 확인) 닫는 ">" 를 찾는 sed 대신, "<Connector" 문자열이
@@ -33,7 +47,7 @@ run_fix() {
                 awk '
                     !done && /<Connector[^>]*port="8080"/ { sub(/<Connector/, "<Connector maxPostSize=\"10485760\""); done=1 }
                     { print }
-                ' "$f" > "$f.kisa_tmp" && mv "$f.kisa_tmp" "$f"
+                ' "$f" > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
                 applied="$applied tomcat($f)"
             fi
         fi

@@ -10,26 +10,29 @@
 # 그래서 문자열이 약한 라인은 여기서 새 문자열 + RO + (없으면) ACL placeholder까지 한 번에
 # 반영해 전담하고, fixes/cisco_ios/N-19.py・N-20.py 는 parsers.cisco_ios.snmp_community_weak() 로
 # 이 라인을 건너뛴다.
+# 조치 후속 F-R7: 옛 정규식(`<string> [RO|RW] [acl]$`)은 view·ipv6 토큰이 있는 줄을 놓쳐, 그런 줄의 약한
+# 문자열은 N-18 도 N-19/N-20 도 명령을 만들지 않았다. 진단과 같은 parse_snmp_community 로 해석하고,
+# 재발급할 때 view·ipv6 ACL 을 그대로 유지한다.
 from parsers import cisco_ios as cio
 
 _ACL_NUM = "20"
 
 
 def generate(ctx):
-    lines = ctx.find(r"^snmp-server community (\S+)(?:[ \t]+(RO|RW))?((?:[ \t]+\S+)?)[ \t]*$")
     cmds = []
     added_acl_decl = False
-    for old, _rw, acl_part in lines:
+    for info in cio.snmp_communities(ctx):
+        old = info["string"]
         if not cio.snmp_community_weak(old):
             continue
         new = cio.gen_secret()
-        cmds.append(f"no snmp-server community {old}")
-        if acl_part.strip():
-            cmds.append(f"snmp-server community {new} RO{acl_part}".rstrip())
-        else:
+        acl = info["acl"]
+        if not acl:
             if not added_acl_decl:
                 cmds.append(f"! 주의: 아래 {_ACL_NUM}번 ACL의 permit 대상을 실제 관리 시스템 IP로 반드시 교체할 것(N-19 겸용)")
                 cmds.append(f"access-list {_ACL_NUM} permit <관리-시스템-IP> <wildcard mask>")
                 added_acl_decl = True
-            cmds.append(f"snmp-server community {new} RO {_ACL_NUM}")
+            acl = _ACL_NUM
+        cmds.append(f"no snmp-server community {old}")
+        cmds.append(cio.build_snmp_community(new, "RO", info["view"], info["ipv6_acl"], acl))
     return cmds

@@ -190,6 +190,17 @@ for code in $VULN_CODES; do
     # "미검증" 안내를 남긴다(lib/common.sh unverified_note 참고).
     FIX_DETAIL="${FIX_DETAIL}$(unverified_note)"
 
+    # FIX_STATUS=SKIPPED: 조치 스크립트가 아무것도 바꾸지 않고 "이 조치로는 해소할 수 없음"을 알린 경우
+    # (예: U-01 이 Telnet 때문에 VULN - U-52 로 조치 필요). 재검증·원복 없이 사유만 기록한다.
+    if [ "$FIX_STATUS" = "SKIPPED" ]; then
+        echo "[$code] $title"
+        echo "  건너뜀(변경 없음) — $FIX_DETAIL"
+        printf '%s\t%s\tSKIPPED\t%s\n' "$code" "$grade" "$FIX_DETAIL" | fix_log_stamp >> "$FIX_LOG"
+        N_SKIPPED=$((N_SKIPPED + 1))
+        unset FIX_CODE
+        continue
+    fi
+
     CHECK_STATUS="ERROR"; CHECK_DETAIL="check 스크립트 없음"; CHECK_EVIDENCE=""
     if [ -f "$check_file" ]; then
         run_check_isolated "$check_file"
@@ -221,7 +232,7 @@ done
 
 echo "------------------------------------------------------------------------"
 if [ "$APPLY" -eq 1 ]; then
-    echo "적용 완료: $N_APPLIED, 실패(원복됨): $N_FAILED, 확인거부: $N_DECLINED, 스크립트없음: $N_SKIPPED, 수동조치: $N_MANUAL"
+    echo "적용 완료: $N_APPLIED, 실패(원복됨): $N_FAILED, 확인거부: $N_DECLINED, 건너뜀(스크립트없음·조치로 해소 불가): $N_SKIPPED, 수동조치: $N_MANUAL"
     echo "백업 위치: $FIX_BACKUP_DIR"
     echo "원복하려면: $0 --rollback $FIX_OUT_DIR"
 else

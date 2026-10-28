@@ -1154,17 +1154,37 @@ function Backup-FixWebConfigProperty {
     # 읽기 실패를 $null 로 기록하면 원복 때 설정을 빈 값으로 덮어쓰므로 중단한다.
     try {
         $v = Get-WebConfigurationProperty -Filter $Filter -Name $Name -PSPath $PSPath @loc -ErrorAction Stop
-        $value = if ($v.PSObject.Properties.Name -contains "Value") { $v.Value } else { $v }
+        $value = ConvertTo-FixPlainValue $v
     } catch { throw "[백업 실패] IIS 설정 현재 값을 읽을 수 없음($PSPath $Location [$Filter] $Name): $($_.Exception.Message)" }
     return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Filter = $Filter; Name = $Name; PSPath = $PSPath; Location = $Location; Value = $value }))
+}
+
+function ConvertTo-FixPlainValue {
+    <# Get-WebConfigurationProperty 결과를 백업 JSON 에 넣을 단순 값으로 바꾼다. 열거형 속성(httpErrors@errorMode 등)은
+       NoteProperty 가 붙은 문자열로 돌아오는데, PS 5.1 ConvertTo-Json 은 이를 {"value":"Detailed",...} 객체로 저장해
+       원복 때 Set-WebConfigurationProperty 가 그 객체를 받아 값을 바꾸지 못했다(오류도 없이 - CI 에서 WEB-22 원복 후에도
+       GOOD 으로 실측). ConfigurationAttribute 면 .Value, 그 밖에는 ETS 래퍼를 벗긴 원래 값(BaseObject)을 쓴다.
+       예전 형식의 백업({value: ...} 객체)도 원복 시 이 함수로 풀린다 #>
+    param($Value)
+    if ($null -eq $Value) { return $null }
+    $names = @($Value.PSObject.Properties.Name)
+    if ($Value -isnot [string] -and $names -contains "Value") { $Value = $Value.Value }
+    elseif ($Value -is [System.Management.Automation.PSCustomObject] -and $names -contains "value") { $Value = $Value.value }
+    if ($null -eq $Value) { return $null }
+    return $Value.PSObject.BaseObject
 }
 
 function Restore-FixWebConfigPropertyBackup {
     param([Parameter(Mandatory)][string]$File)
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     $loc = @{}; if ($o.Location) { $loc.Location = $o.Location }
+    $want = ConvertTo-FixPlainValue $o.Value
     try {
-        Set-WebConfigurationProperty -Filter $o.Filter -Name $o.Name -Value $o.Value -PSPath $o.PSPath @loc -ErrorAction Stop
+        Set-WebConfigurationProperty -Filter $o.Filter -Name $o.Name -Value $want -PSPath $o.PSPath @loc -ErrorAction Stop
+        # 원복을 "성공"으로 보고하기 전에 실제로 그 값이 되었는지 다시 읽어 확인한다(운영 안전 기준 F4 - 오류 없이 값이
+        # 바뀌지 않는 경우가 있었음)
+        $now = ConvertTo-FixPlainValue (Get-WebConfigurationProperty -Filter $o.Filter -Name $o.Name -PSPath $o.PSPath @loc -ErrorAction Stop)
+        if ("$now" -ne "$want") { throw "다시 읽은 값이 '$now'(기대 '$want')" }
     } catch { Add-FixRollbackFailure "IIS 설정 원복 실패 $($o.PSPath) $($o.Location) [$($o.Filter)] $($o.Name): $($_.Exception.Message)" }
 }
 
@@ -1193,7 +1213,8 @@ function Set-FixWebConfigProperty {
         $Global:FixEvidence = ""
     }
     if ($PSPath -notmatch '^IIS:\\Sites\\(.+)$') { return }
-    $site = $Matches[1]
+    # 하위 application/virtual directory(IIS:\Sites\site\app\vdir, F-R3)는 location 경로 "site/app/vdir" 로 쓴다
+    $site = $Matches[1] -replace '\\', '/'
     # 사이트 경로 쓰기는 실패해 아무것도 바뀌지 않았다 - 그 백업을 남기면 원복 때 같은 쓰기가 다시 실패해 "원복 실패"로 잘못 보고된다
     if ($existed -notcontains $file) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue }
     $first = $Global:FixDetail
@@ -1205,6 +1226,105 @@ function Set-FixWebConfigProperty {
     } catch {
         $Global:FixStatus = "ERROR"
         $Global:FixDetail = "$first / applicationHost.config location 설정도 실패: $($_.Exception.Message)"
+    }
+}
+
+function Invoke-FixIisRemoveServerHeader {
+    <# IIS Server 응답 헤더 제거(requestFiltering@removeServerHeader = true) - 03_web WEB-16 과 02_windows W-33 이 함께 쓴다.
+       F-R3: 진단은 서버 전역 값뿐 아니라 사이트별 유효 값(사이트 web.config·location 재정의)도 본다(W-33 은 실제 응답 헤더).
+       서버 전역이 true 가 아니면 true 로 바꾼 뒤, 사이트마다 다시 읽어 여전히 true 가 아닌(재정의한) 사이트를 true 로 고친다.
+       예전에는 전역만 바꿔 사이트 재정의가 남으면 재검증 실패 → 원복으로 끝났다(CI: W-33 이 IIS 픽스처의 사이트 재정의로 실측).
+       결과는 $Global:FixStatus/Detail(APPLIED/NA/ERROR) #>
+    $Global:FixEvidence = ""
+    if (-not (Test-IisAvailable)) { $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; return }
+    $filter = "system.webServer/security/requestFiltering"
+    $Global:IisConfigQueryFailed = $false
+    $removeHeader = Get-IisConfigValue -Filter $filter -Name "removeServerHeader"
+    if ($null -eq $removeHeader) {
+        $Global:FixStatus = "ERROR"
+        $Global:FixDetail = "removeServerHeader 속성을 지원하지 않는 IIS 버전으로 추정됨(또는 조회 실패) - URL Rewrite 등 대체 수단을 수동으로 구성할 것"
+        return
+    }
+    $applied = @(); $failed = @()
+    if ($removeHeader -ne $true) {
+        Set-FixWebConfigProperty -Filter $filter -Name "removeServerHeader" -Value $true -PSPath "MACHINE/WEBROOT/APPHOST"
+        if ($Global:FixStatus -eq "APPLIED") { $applied += "서버 전역" } else { $failed += "서버 전역: $($Global:FixDetail)" }
+    }
+    if ($failed.Count -eq 0) {
+        $Global:IisSiteListFailed = $false
+        $sites = @(Get-IisSiteNames)
+        if ($Global:IisSiteListFailed) { $failed += "사이트 목록 조회 실패: $($Global:IisConfigQueryError)" }
+        foreach ($site in $sites) {
+            $Global:IisConfigQueryFailed = $false
+            $v = Get-IisConfigValue -Filter $filter -Name "removeServerHeader" -SiteName $site
+            if ($Global:IisConfigQueryFailed) { $failed += "${site}: 조회 실패 $($Global:IisConfigQueryError)"; continue }
+            # WEB-16 진단과 같은 기준: 사이트 유효 값이 있고 true 가 아니면 사이트가 재정의한 것
+            if ($null -eq $v -or $v -eq $true) { continue }
+            Set-FixWebConfigProperty -Filter $filter -Name "removeServerHeader" -Value $true -PSPath "IIS:\Sites\$site"
+            if ($Global:FixStatus -eq "APPLIED") { $applied += $site } else { $failed += "${site}: $($Global:FixDetail)" }
+        }
+    }
+    $Global:IisConfigQueryFailed = $false
+    $Global:FixEvidence = ""
+    if ($failed.Count -gt 0) {
+        $Global:FixStatus = "ERROR"
+        $Global:FixDetail = "조치 실패: $($failed -join ' / ')$(if ($applied) { " (적용됨: $($applied -join ', '))" })"
+    } elseif ($applied.Count -gt 0) {
+        $Global:FixStatus = "APPLIED"
+        $Global:FixDetail = "removeServerHeader = true 로 설정함: $($applied -join ', ')"
+    } else {
+        $Global:FixStatus = "NA"
+        $Global:FixDetail = "이미 Server 헤더가 제거되도록 설정되어 있음(사이트 재정의 없음)"
+    }
+}
+
+function Invoke-FixIisConfigPaths {
+    <# F-R3: 진단(03_web WEB-04/18/22)이 Get-IisSiteConfigPaths 로 보는 모든 위치(사이트 루트 + 하위 application·
+       virtual directory)를 같은 순서(루트 먼저)로 읽어, -IsVuln 이 참인 위치만 -Value 로 고친다. 예전 조치는 사이트 루트만
+       고쳐, 하위 경로가 자기 web.config/location 으로 재정의한 경우 재검증 VULN → 원복으로 끝났다.
+       상위를 고치면 상속받던 하위는 다시 읽을 때 정상이라 건너뛴다. 결과는 $Global:FixStatus/Detail 에 집계한다:
+       고친 곳이 있고 실패가 없으면 APPLIED, 쓰기·조회 실패가 하나라도 있으면 ERROR(조회 실패를 "대상 없음"으로 넘기지 않음), 대상이 없으면 NA #>
+    param(
+        [Parameter(Mandatory)][string]$Filter,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)]$Value,
+        [Parameter(Mandatory)][scriptblock]$IsVuln,
+        [Parameter(Mandatory)][string]$What
+    )
+    $Global:FixEvidence = ""
+    if (-not (Test-IisAvailable)) { $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; return }
+    $sites = @(Get-IisSiteNames)
+    if ($sites.Count -eq 0) {
+        if ($Global:IisSiteListFailed) { $Global:FixStatus = "ERROR"; $Global:FixDetail = "IIS 사이트 목록 조회 실패: $($Global:IisConfigQueryError)" }
+        else { $Global:FixStatus = "NA"; $Global:FixDetail = "구성된 IIS 웹사이트가 없음" }
+        return
+    }
+    $applied = @(); $failed = @()
+    foreach ($site in $sites) {
+        $Global:IisConfigQueryFailed = $false
+        $paths = @(Get-IisSiteConfigPaths -SiteName $site)
+        if ($Global:IisConfigQueryFailed) { $failed += "${site}: $($Global:IisConfigQueryError)" }
+        foreach ($cp in $paths) {
+            $Global:IisConfigQueryFailed = $false
+            $cur = Get-IisConfigValue -Filter $Filter -Name $Name -PSPath $cp.PSPath
+            if ($Global:IisConfigQueryFailed) { $failed += "$($cp.Label): 조회 실패 $($Global:IisConfigQueryError)"; continue }
+            if (-not (& $IsVuln $cur)) { continue }
+            Set-FixWebConfigProperty -Filter $Filter -Name $Name -Value $Value -PSPath $cp.PSPath
+            if ($Global:FixStatus -eq "APPLIED") { $applied += $cp.Label } else { $failed += "$($cp.Label): $($Global:FixDetail)" }
+        }
+    }
+    # 위 루프가 조회 실패 표시를 지웠으므로, 실패는 아래 ERROR 로만 전달한다
+    $Global:IisConfigQueryFailed = $false
+    $Global:FixEvidence = ""
+    if ($failed.Count -gt 0) {
+        $Global:FixStatus = "ERROR"
+        $Global:FixDetail = "조치 실패: $($failed -join ' / ')$(if ($applied) { " (적용됨: $($applied -join ', '))" })"
+    } elseif ($applied.Count -gt 0) {
+        $Global:FixStatus = "APPLIED"
+        $Global:FixDetail = "$What 사이트/경로: $($applied -join ', ')"
+    } else {
+        $Global:FixStatus = "NA"
+        $Global:FixDetail = "대상 사이트/경로가 없음(이미 정상)"
     }
 }
 
@@ -1412,16 +1532,23 @@ function Set-FixSecPolicyValue {
     Backup-FixSecPolicy | Out-Null
     # 이 항목이 보안 정책을 바꿨음을 기록 - 항목 단위 원복 불가를 Restore-FixItem 이 정직하게 보고하도록
     $Global:FixSecPolicyCodes = @($Global:FixSecPolicyCodes) + $Global:FixCode
-    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "kisa-secedit-apply-$PID.inf"
-    $lines = @("[Unicode]", "Unicode=yes", "[$Section]")
-    foreach ($k in $Values.Keys) { $lines += "$k = $($Values[$k])" }
-    $lines += @("[Version]", 'signature="$CHICAGO$"', "Revision=1")
-    Set-Content -Path $tmp -Value $lines -Encoding Unicode
-    $db = Join-Path ([System.IO.Path]::GetTempPath()) "kisa-secedit-apply-$PID.sdb"
-    $area = if ($Section -eq "Privilege Rights") { "USER_RIGHTS" } else { "SECURITYPOLICY" }
-    $out = & secedit /configure /db $db /cfg $tmp /areas $area /quiet 2>&1 | Out-String
-    $exitCode = $LASTEXITCODE
-    Remove-Item -Path $tmp, $db -Force -ErrorAction SilentlyContinue
+    # secedit /configure /db 는 .sdb 옆에 Jet 데이터베이스 부속 파일(.jfm, edb*.log 등)을 만든다 - 예전에는 %TEMP% 에 고정 이름으로
+    # 만들고 .inf/.sdb 만 지워 .jfm 이 운영 서버 TEMP 에 남았다(CI fix_safety 실측). 전용 임시 폴더(New-PrivateTempFile)를 써서
+    # 폴더째 지운다(예측 가능한 이름으로 정책 파일을 선점·위조당하는 것도 막는다 - 진단 쪽 W-R7 과 같은 이유).
+    $tmp = New-PrivateTempFile -FileName "apply.inf"
+    $tmpDir = Split-Path -Parent $tmp
+    try {
+        $lines = @("[Unicode]", "Unicode=yes", "[$Section]")
+        foreach ($k in $Values.Keys) { $lines += "$k = $($Values[$k])" }
+        $lines += @("[Version]", 'signature="$CHICAGO$"', "Revision=1")
+        Set-Content -Path $tmp -Value $lines -Encoding Unicode
+        $db = Join-Path $tmpDir "apply.sdb"
+        $area = if ($Section -eq "Privilege Rights") { "USER_RIGHTS" } else { "SECURITYPOLICY" }
+        $out = & secedit /configure /db $db /cfg $tmp /areas $area /quiet 2>&1 | Out-String
+        $exitCode = $LASTEXITCODE
+    } finally {
+        Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
     if ($exitCode -eq 0) {
         $Global:FixStatus = "APPLIED"
         $Global:FixDetail = "보안 정책[$Section] 적용: " + (($Values.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ", ")
@@ -1443,10 +1570,18 @@ function Set-FixSecPrivilege {
 function Restore-FixSecPolicyBackup {
     <# 전체 스냅샷을 통째로 재적용 - 개별 키 단위 원복이 불가능하므로 --rollback 전용 #>
     if (-not $Global:FixSecPolicyBackupFile -or -not (Test-Path $Global:FixSecPolicyBackupFile)) { return }
-    $db = Join-Path ([System.IO.Path]::GetTempPath()) "kisa-secedit-rollback-$PID.sdb"
-    & secedit /configure /db $db /cfg $Global:FixSecPolicyBackupFile /areas SECURITYPOLICY, USER_RIGHTS /quiet | Out-Null
-    if ($LASTEXITCODE -ne 0) { Add-FixRollbackFailure "보안 정책(secedit) 스냅샷 재적용 실패(exit=$LASTEXITCODE)" }
-    Remove-Item -Path $db -Force -ErrorAction SilentlyContinue
+    # .sdb 옆에 생기는 .jfm 등 부속 파일까지 지우도록 전용 임시 폴더째 정리한다(Set-FixSecPolicyValue 와 같은 이유)
+    $tmpDir = $null
+    try {
+        $db = New-PrivateTempFile -FileName "rollback.sdb"
+        $tmpDir = Split-Path -Parent $db
+        & secedit /configure /db $db /cfg $Global:FixSecPolicyBackupFile /areas SECURITYPOLICY, USER_RIGHTS /quiet | Out-Null
+        if ($LASTEXITCODE -ne 0) { Add-FixRollbackFailure "보안 정책(secedit) 스냅샷 재적용 실패(exit=$LASTEXITCODE)" }
+    } catch {
+        Add-FixRollbackFailure "보안 정책(secedit) 스냅샷 재적용 실패: $($_.Exception.Message)"
+    } finally {
+        if ($tmpDir) { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
 }
 
 # ---- DBMS(MSSQL) 전용: SQL 기반 원복 (08_dbms) -------------------------------------
@@ -1561,4 +1696,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

@@ -15,6 +15,8 @@ run_fix() {
     fi
 
     fix_backup "$group_file"
+    # groupadd 는 /etc/gshadow 도 고친다 - 함께 백업해야 원복 후 같은 상태가 된다(예전에는 /etc/group 만 백업)
+    [ -e /etc/gshadow ] && fix_backup /etc/gshadow
     applied=""
     for gid in $orphan_gids; do
         if groupadd -g "$gid" "gid${gid}" 2>/dev/null; then

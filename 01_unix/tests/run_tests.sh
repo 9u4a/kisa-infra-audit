@@ -70,11 +70,28 @@ done
 # ② 대체 관리자가 없으면 U-01 은 sshd_config 를 바꾸지 않음(지연 lockout 방지) - U-01 은 confirm 등급이라
 #    일괄 적용에서는 DECLINED, 안전장치는 조치 함수를 직접 호출해 확인(U01_GUARD)
 # ③ --rollback 후 핵심 설정 파일의 내용·권한·소유자가 조치 전과 같음
+# ④ F-R8/F-R9: U-32 가 Debian nologin 계정의 없는 홈 때문에 원복되지 않음, U-59~61 이 include 파일·IPv6·-Cn 까지
+#    고쳐 재검증 GOOD·원복 동일, U-01 은 Telnet 이 원인이면 변경 없이 SKIPPED(Telnet 을 끄면 sshd 조치 적용)
+# ⑤ 일괄 적용(auto)의 결과를 고정한다: APPLIED 항목 집합이 정확히 같고, 실패(FAILED_*·ABORTED)는 0건, 조치로 해소할 수
+#    없어 변경 없이 건너뛴 항목(SKIPPED)도 고정. 예전에는 APPLIED≠0 만 봐서 U-13/15/65 의 실패·원복을 놓쳤다.
+#    vuln 픽스처를 바꿔 항목이 늘거나 줄면 이 목록도 함께 고친다(fix_safety.sh 출력의 APPLIED_CODES 참고).
+FIX_EXPECT_APPLIED='U-09,U-11,U-14,U-15,U-16,U-17,U-18,U-20,U-27,U-30,U-32,U-34,U-35,U-36,U-40,U-52,U-53,U-62,'
+FIX_EXPECT_SKIPPED='U-13,U-65,'
 out=$(docker run --rm "$IMAGE" sh 01_unix/tests/fixtures/fix_safety.sh)
 if printf '%s\n' "$out" | grep -qx 'FIX_RC=0' && printf '%s\n' "$out" | grep -qx 'CRASH=no' \
-   && ! printf '%s\n' "$out" | grep -qx 'APPLIED=0' && printf '%s\n' "$out" | grep -qx 'U01=DECLINED' \
+   && printf '%s\n' "$out" | grep -qx "APPLIED_CODES=$FIX_EXPECT_APPLIED" \
+   && printf '%s\n' "$out" | grep -qx "SKIPPED_CODES=$FIX_EXPECT_SKIPPED" \
+   && printf '%s\n' "$out" | grep -qx 'FAILED_CODES=' && printf '%s\n' "$out" | grep -qx 'CHANGED=yes' \
+   && printf '%s\n' "$out" | grep -qx 'U01=DECLINED' \
    && printf '%s\n' "$out" | grep -qx 'U01_GUARD=ERROR/unchanged' \
-   && printf '%s\n' "$out" | grep -qx 'ROLLBACK=same'; then
+   && printf '%s\n' "$out" | grep -qx 'ROLLBACK=same' \
+   && printf '%s\n' "$out" | grep -qx 'U32=APPLIED' && printf '%s\n' "$out" | grep -qx 'U32_RB=absent' \
+   && printf '%s\n' "$out" | grep -qx 'SNMP_U-61=APPLIED/GOOD/rb-ok' \
+   && printf '%s\n' "$out" | grep -qx 'SNMP_U-60=APPLIED/GOOD/rb-ok' \
+   && printf '%s\n' "$out" | grep -qx 'SNMP_U-59=APPLIED/GOOD/rb-ok' \
+   && printf '%s\n' "$out" | grep -qx 'SNMP_ROLLBACK=same' \
+   && printf '%s\n' "$out" | grep -qx 'U01_TELNET=SKIPPED/VULN/unchanged' \
+   && printf '%s\n' "$out" | grep -qx 'U01_SSHD=APPLIED/GOOD/rb-ok/same'; then
     echo "PASS: fix-apply ($(printf '%s' "$out" | tr '\n' ' '))"
 else
     echo "FAIL: fix-apply - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
@@ -85,17 +102,27 @@ fi
 # 비밀값(/etc/passwd 비밀번호 필드·SNMP community)이 출력물 어디에도 없고 권한이 실행자 전용인지(S5),
 # 일반 사용자로 돌렸을 때 root 에서 VULN 인 항목이 GOOD/NA 로 바뀌지 않는지(S6).
 # snmpd.conf 의 "rocommunity <값>"(소스 생략) 줄은 1.3.1 까지 U-61 에서 진단 전체를 죽였다 - 재발 방지로 넣어 둔다.
-rs_dir="rs_unix_$$"
-docker rm -f kisa-rs-unix >/dev/null 2>&1 || true
-docker create --name kisa-rs-unix "$IMAGE" sh -c "
-    sh 01_unix/tests/fixtures/setup.sh vuln >/dev/null 2>&1
-    mkdir -p /etc/snmp && echo 'rocommunity KisaComm77Secret' >> /etc/snmp/snmpd.conf
-    RUN_CMD='sh 01_unix/run.sh -e debian' SECRETS='plainhash123|KisaComm77Secret' sh lib/tests/run_safety.sh
-" >/dev/null
-docker start -a kisa-rs-unix >/dev/null
-docker cp kisa-rs-unix:/rs "$rs_dir" >/dev/null 2>&1
-docker rm kisa-rs-unix >/dev/null
-python3 lib/tests/run_safety_check.py "$rs_dir" 01_unix --expect U-61=VULN || fail=1
-rm -rf "$rs_dir"
+# 1.3.3(F-R 후속): vuln·hardened 두 픽스처 모두, 비 root 결과는 GOOD/NA 0건·항목 집합 동일, 비밀값에 U-13 의 MD5 해시와
+# SNMPv3 비밀번호(특수문자 포함 - JSON/HTML 이스케이프를 풀어서도 검색), 외부 명령이 멈추는 경우(HANG_CMDS 가짜를 PATH
+# 앞에 둠)에도 HANG_LIMIT 안에 끝나는지(vuln 만 - 시간 절약).
+UNIX_SECRETS='plainhash123|KisaComm77Secret|\$1\$kisasalt\$Qp0wYQK0rM1y9vUe6m3Vx/|KisaAuthPass#2026'
+UNIX_HANG='systemctl postconf sendmail exim exim4 rpcinfo firewall-cmd hostnamectl nft iptables ypwhich named exportfs showmount'
+for mode in vuln hardened; do
+    rs_dir="rs_unix_${mode}_$$"
+    hang=""; [ "$mode" = "vuln" ] && hang="HANG_CMDS='$UNIX_HANG' HANG_LIMIT=180"
+    expect=""; [ "$mode" = "vuln" ] && expect="--expect U-61=VULN"
+    docker rm -f "kisa-rs-unix-$mode" >/dev/null 2>&1 || true
+    docker create --name "kisa-rs-unix-$mode" "$IMAGE" sh -c "
+        sh 01_unix/tests/fixtures/setup.sh $mode >/dev/null 2>&1
+        mkdir -p /etc/snmp && echo 'rocommunity KisaComm77Secret' >> /etc/snmp/snmpd.conf
+        RUN_CMD='sh 01_unix/run.sh -e debian' SECRETS='$UNIX_SECRETS' $hang sh lib/tests/run_safety.sh
+    " >/dev/null
+    docker start -a "kisa-rs-unix-$mode" >/dev/null
+    docker cp "kisa-rs-unix-$mode:/rs" "$rs_dir" >/dev/null 2>&1
+    docker rm "kisa-rs-unix-$mode" >/dev/null
+    # shellcheck disable=SC2086
+    python3 lib/tests/run_safety_check.py "$rs_dir" "01_unix/$mode" $expect || fail=1
+    rm -rf "$rs_dir"
+done
 
 exit $fail
