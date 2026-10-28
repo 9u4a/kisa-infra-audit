@@ -134,7 +134,11 @@ function Compare-WinStateSnapshot {
                 $f = $ma[$name]; $o = $mb[$name]
                 if (-not $o) { $hard += "새 서비스 $($f -join '|')"; continue }
                 if ($o[1] -ne $f[1]) { $hard += "$name 시작 유형 $($o[1])→$($f[1])" }
-                elseif ($o[2] -ne $f[2]) { if ($name -match $Script:WinStateWatchSvc) { $hard += "$name $($o[2])→$($f[2])" } else { $soft += "$name $($o[2])→$($f[2])" } }
+                elseif ($o[2] -ne $f[2]) {
+                    # RemoteRegistry 는 Server 에서 유휴 시 스스로 멈춘다(시작 유형 그대로 Running→Stopped, main CI 40682689320 실측)
+                    $idleStop = ($name -eq "RemoteRegistry" -and $o[2] -eq "Running" -and $f[2] -eq "Stopped")
+                    if ($name -match $Script:WinStateWatchSvc -and -not $idleStop) { $hard += "$name $($o[2])→$($f[2])" } else { $soft += "$name $($o[2])→$($f[2])" }
+                }
             }
             if ($hard.Count -gt 0) {
                 if ($SoftAreas -contains $k) { $notes += "서비스 변경(원복 불가 보고 영역): $($hard -join ', ')" } else { $fail += "${Label}: 서비스 변경: $($hard -join ', ')" }
