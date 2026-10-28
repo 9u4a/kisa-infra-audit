@@ -16,6 +16,8 @@ run_check() {
     CHECK_EVIDENCE="$out"
     if [ -z "$out" ]; then
         CHECK_STATUS="GOOD"; CHECK_DETAIL="postgres 계정 외 테이블 소유자가 없음"
+        # pg_tables 는 접속한 DB 의 테이블만 보인다(진단 검수 D-R7) - 다른 DB 가 있으면 MANUAL.
+        postgres_other_dbs_manual
     else
         CHECK_STATUS="MANUAL"; CHECK_DETAIL="postgres 외 계정이 소유한 테이블이 있음 - 인가된 애플리케이션/관리자 계정인지 수동 검토 필요"
     fi

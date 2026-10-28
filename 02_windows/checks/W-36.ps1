@@ -1,13 +1,18 @@
 ﻿# W-36 (중) 원격터미널 접속 타임아웃 설정
 # 판단 기준(가이드 원문): 양호 = RDP 미사용 또는 유휴 세션 제한 시간이 30분 이하로 설정된 경우
 #                        취약 = 미설정 또는 30분 초과
+# W-R10: RDP 사용 여부(fDenyTSConnections)도 그룹 정책 키가 로컬 설정보다 우선한다 - 예전에는 로컬 값만 봐
+# 정책으로 RDP 를 끈/켠 상태를 반영하지 못했다.
 
-$deny = Test-RegistryValue -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections"
+$gpoPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
+$deny = Test-RegistryValue -Path $gpoPath -Name "fDenyTSConnections"
+if ($null -eq $deny) {
+    $deny = Test-RegistryValue -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections"
+}
 if ($deny -eq 1) {
     return New-CheckResult -Code "W-36" -Status "GOOD" -Detail "원격 데스크톱 서비스가 비활성화되어 있음" -Evidence "fDenyTSConnections=$deny"
 }
 
-$gpoPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
 $idleMs = Test-RegistryValue -Path $gpoPath -Name "MaxIdleTime"
 if ($null -eq $idleMs) {
     $idleMs = Test-RegistryValue -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "MaxIdleTime"

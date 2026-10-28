@@ -7,7 +7,9 @@
 # (D-11/D-21과 동일한 이유 — Oracle 19c/23c 이후 추가된 내장 스키마가 정적 목록에 없어 증적에
 # 노이즈가 섞이는 문제를 Docker 실기 테스트로 확인, 버전 무관하게 동작하도록 수정).
 run_check() {
-    sql="SELECT DISTINCT o.owner FROM dba_objects o JOIN dba_users u ON u.username = o.owner WHERE u.oracle_maintained = 'N' AND o.owner NOT IN (SELECT grantee FROM dba_role_privs WHERE granted_role = 'DBA') ORDER BY o.owner;"
+    # dba_objects 전체를 DISTINCT 하던 것을 사용자별 EXISTS(첫 행에서 멈춤)로 바꿨다 - 객체가 수백만 개인
+    # 운영 DB 에서 전체 스캔·정렬 부하가 컸다(진단 검수 D-R12, S4). 결과(소유자 목록)는 같다.
+    sql="SELECT u.username FROM dba_users u WHERE u.oracle_maintained = 'N' AND u.username NOT IN (SELECT grantee FROM dba_role_privs WHERE granted_role = 'DBA') AND EXISTS (SELECT 1 FROM dba_objects o WHERE o.owner = u.username) ORDER BY u.username;"
     out=$(oracle_query "$sql")
     rc=$?
     if [ $rc -ne 0 ]; then

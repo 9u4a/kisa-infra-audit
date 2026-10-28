@@ -8,7 +8,7 @@ run_fix() {
     fi
 
     perm=$(stat -L -c '%a' "$f" 2>/dev/null)
-    if [ -z "$perm" ] || [ "$perm" -gt 644 ] 2>/dev/null; then
+    if [ -z "$perm" ] || perm_exceeds "$perm" 644; then
         owner=$(stat -L -c '%U' "$f" 2>/dev/null)
         case "$owner" in
             root|oracle) : ;;

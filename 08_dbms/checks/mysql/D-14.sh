@@ -4,6 +4,7 @@
 # 이는 가이드 자체의 대상 표기 누락으로 보고(deviation), 조치 방법이 실존하는 MySQL 설정 파일에도
 # 동일하게 적용한다. 판단 기준: 양호 = 일반 사용자의 수정 권한 제거(권한 <= 640) / 취약 = 아님.
 run_check() {
+    db_remote_skip "my.cnf 파일 권한" && return
     f=$(mysql_config_path)
     if [ -z "$f" ]; then
         CHECK_STATUS="ERROR"; CHECK_DETAIL="mysql 설정 파일(my.cnf)을 찾을 수 없음"; CHECK_EVIDENCE=""

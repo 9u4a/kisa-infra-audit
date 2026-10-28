@@ -7,16 +7,16 @@ run_check() {
     detect_web_engines
     case " $WEB_ENGINES " in
         *" tomcat "*)
-            home=$(tomcat_home)
-            f="$home/conf/web.xml"
-            if [ ! -f "$f" ]; then
-                CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 파일을 찾을 수 없음"; CHECK_EVIDENCE=""
+            errors=""
+            if ! web_load_tomcat_conf web.xml; then
+                CHECK_STATUS="ERROR"; CHECK_DETAIL="web.xml 을 확인하지 못함:$errors"; CHECK_EVIDENCE=""
                 return
             fi
-            mappings=$(strip_xml_comments "$f" | grep -A1 'servlet-name>' | grep -v '^--$')
+            mappings=$(strip_xml_comments "$TC_FILE" | grep -A1 'servlet-name>' | grep -v '^--$')
             CHECK_STATUS="MANUAL"
             CHECK_DETAIL="등록된 servlet-mapping 목록을 근거로 불필요한 매핑 여부 수동 확인 필요"
-            CHECK_EVIDENCE="$mappings"
+            CHECK_EVIDENCE="$TC_FILE
+$mappings"
             ;;
         *)
             CHECK_STATUS="NA"; CHECK_DETAIL="대상 엔진(Tomcat/IIS/JEUS)이 감지되지 않음 (감지된 엔진: ${WEB_ENGINES:-없음})"; CHECK_EVIDENCE=""

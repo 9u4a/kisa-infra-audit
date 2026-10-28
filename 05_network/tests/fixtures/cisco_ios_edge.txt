@@ -1,0 +1,49 @@
+Building configuration...
+
+Current configuration : 1500 bytes
+!
+version 15.2
+service password-encryption
+!
+hostname EdgeRouter
+!
+enable secret 5 $1$mERr$EdgeEnableHashLeak01
+!
+username netops privilege 15 password 7 0822455D0A16EdgeUserT7
+username audit privilege 1 secret 9 $9$EdgeAuditSecretLeak02
+!
+tftp-server flash:edge.cfg alias edgecfg
+!
+interface GigabitEthernet0/0
+ ip address 203.0.113.9 255.255.255.0
+ ip ospf message-digest-key 1 md5 7 EdgeOspfKeyLeak03
+!
+tacacs-server key 7 EdgeTacacsKeyLeak04
+crypto isakmp key EdgeIsakmpKeyLeak05 address 198.51.100.1
+crypto key generate rsa modulus 2048
+!
+snmp-server community EdgeV13w#Comm06 view v1 RO
+snmp-server community EdgeIpv6#Comm07 RO ipv6 V6ACL
+snmp-server user v3user v3group v3 auth sha EdgeAuthKeyLeak08 priv aes 128 EdgePrivKeyLeak09
+snmp-server host 10.1.1.9 version 2c EdgeTrapCommLeak10
+snmp-server host 10.1.1.10 EdgeTrapCommLeak11
+!
+ip access-list standard MGMT
+ permit 10.1.1.0 0.0.0.255
+!
+line con 0
+ exec-timeout 5 0
+line vty 0 4
+ access-class MGMT in
+ exec-timeout 5 0
+ password 7 EdgeVtyPassT7Leak12
+ login
+ transport input ssh
+line vty 5 15
+ access-class MGMT in
+ exec-timeout 5 0
+ password EdgeVtyPlainLeak13
+ no login
+ transport input ssh
+!
+end

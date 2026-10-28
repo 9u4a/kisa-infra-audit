@@ -2,12 +2,18 @@
 # 판단 기준(가이드 원문): 양호 = 설정 파일 권한이 관리자로 제한 & 파라미터 변경 방지 옵션 설정
 #                        취약 = 둘 중 하나라도 아님
 run_check() {
+    db_remote_skip "listener.ora" && return
     f=$(oracle_listener_ora)
     if [ -z "$f" ]; then
         CHECK_STATUS="ERROR"; CHECK_DETAIL="listener.ora 파일을 찾을 수 없음"; CHECK_EVIDENCE=""
         return
     fi
-    restrict=$(grep -i 'ADMIN_RESTRICTIONS_' "$f")
+    if ! conf=$(oracle_conf_active "$f"); then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="listener.ora 를 읽을 수 없음(권한 부족): $f"; CHECK_EVIDENCE=""
+        return
+    fi
+    # # 주석 줄을 설정으로 인정하던 거짓 GOOD 방지(진단 검수 D-R6) - 주석을 지운 내용에서 찾는다.
+    restrict=$(printf '%s\n' "$conf" | grep -i 'ADMIN_RESTRICTIONS_')
     check_owner_perm "$f" "oracle root" 644
     _perm_status=$CHECK_STATUS
     _perm_detail=$CHECK_DETAIL

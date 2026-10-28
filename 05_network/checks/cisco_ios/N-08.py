@@ -2,12 +2,14 @@
 # 판단 기준(가이드 원문): 양호 = SSH만 허용 / 취약 = telnet 허용
 import re
 
+from parsers import cisco_ios as cio
+
 
 def check(ctx):
     vty_blocks = ctx.line_block_text("vty")
     if not vty_blocks:
         return {"status": "ERROR", "detail": "line vty 설정을 찾지 못함", "evidence": ""}
-    evidence = "\n---\n".join(vty_blocks)
+    evidence = cio.mask_secrets("\n---\n".join(vty_blocks))  # password 값 미저장(진단 검수 D-R4)
     telnet_allowed = any(
         re.search(r"^\s*transport input (all|telnet)", b, re.M) or not re.search(r"^\s*transport input", b, re.M)
         for b in vty_blocks

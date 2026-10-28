@@ -106,6 +106,12 @@ if ($env:DB_PASSWORD) { $env:SQLCMDPASSWORD = $env:DB_PASSWORD }
 # [System.IO.Path]::GetTempPath() 는 두 플랫폼 모두에서 동작한다.
 $Global:DbErrFile = Join-Path ([System.IO.Path]::GetTempPath()) "kisa-dbms-err-$PID.txt"
 $Global:DbConnFailed = $false
+# 원격 모드(-SqlHost 가 이 PC 가 아님)면 D-10(Windows 방화벽)/D-13(ODBC 레지스트리)이 분석자 PC 를 보게 된다 -
+# 해당 check 가 MANUAL 로 돌린다(진단 검수 D-R1). 원격 인증서는 검증한다(D-R8, Invoke-MssqlQuery).
+$RemoteMode = Test-MssqlRemoteTarget -Target $env:DB_HOST
+if ($RemoteMode -and $env:DB_TRUST_SERVER_CERT -eq '1' -and $env:DB_USER) {
+    Write-Warning "원격 SQL 인증에서 서버 인증서 검증을 끕니다(DB_TRUST_SERVER_CERT=1) - 중간자에게 비밀번호가 노출될 수 있습니다."
+}
 
 try {
     if (-not $OutBase) { $OutBase = Join-Path (Split-Path -Parent $ScriptDir) "output" }
@@ -123,7 +129,8 @@ try {
         Write-Host "DB 접속    : 사전 점검 성공"
         Write-Log "DB 접속 사전 점검 성공"
         $sa = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT IS_SRVROLEMEMBER('sysadmin');"
-        if ($Global:DbQueryOk -and "$(@($sa)[0])".Trim() -ne "1") {
+        # 확인 쿼리 자체가 실패하면 예전에는 sysadmin 으로 간주했다 - 확인 못 한 것은 권한 부족으로 본다(진단 검수 D-R2, S6).
+        if (-not $Global:DbQueryOk -or "$(@($sa)[0])".Trim() -ne "1") {
             $NotSysadmin = $true
             Write-Warning "접속 계정이 sysadmin 이 아닙니다 - $($SysadminOnly -join ', ') 는 전체 정보를 볼 수 없어 ERROR 로 표시합니다."
         }

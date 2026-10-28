@@ -14,7 +14,7 @@ run_check() {
         perm=$(stat -L -c '%a' "$bin" 2>/dev/null)
         evidence="$evidence
 $(ls -l "$bin" 2>/dev/null)"
-        if [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null; then
+        if [ -n "$perm" ] && perm_exceeds "$perm" 750; then
             violations="$violations $bin(perm=$perm)"
         fi
         suid=$(find "$bin" -perm -4000 2>/dev/null)
@@ -42,7 +42,7 @@ $d: $(ls -l "$d" 2>/dev/null | tr '\n' ' ')"
             perm=$(stat -L -c '%a' "$f" 2>/dev/null)
             evidence="$evidence
 $(ls -l "$f" 2>/dev/null)"
-            [ -n "$perm" ] && [ "$perm" -gt 640 ] 2>/dev/null && violations="$violations $f(perm=$perm)"
+            [ -n "$perm" ] && perm_exceeds "$perm" 640 && violations="$violations $f(perm=$perm)"
         done
     fi
 

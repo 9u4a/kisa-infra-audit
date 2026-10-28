@@ -90,6 +90,7 @@ function New-PrivateDirectory {
     try {
         if ([System.Environment]::OSVersion.Platform -ne 'Win32NT') {
             & chmod 700 $Path
+            if ($LASTEXITCODE -ne 0) { throw "chmod 700 실패(exit=$LASTEXITCODE)" }
             return
         }
         $di = Get-Item -LiteralPath $Path
@@ -108,7 +109,146 @@ function New-PrivateDirectory {
         }
         $di.SetAccessControl($acl)
     } catch {
-        Write-Warning "결과 폴더 접근 권한을 제한하지 못함($Path): $($_.Exception.Message)"
+        # R-12: 예전에는 경고만 하고 진행해, 상속 권한(공유 폴더·C:\Temp 등)으로 남이 읽을 수 있는 폴더에 계정 목록·
+        # 정책·백업이 그대로 쌓였다. 권한을 제한하지 못하면 중단한다(호출자: 진단/조치 출력 폴더, 진단 임시 폴더).
+        throw "결과 폴더 접근 권한을 제한하지 못해 중단함($Path): $($_.Exception.Message)"
+    }
+}
+
+function New-PrivateTempFile {
+    <# 진단 중 외부 명령(secedit/auditpol)이 쓰는 임시 파일 경로를 돌려준다(W-R7). 예전의 %TEMP%\kisa-secedit-<PID>.inf
+       처럼 예측 가능한 이름은 SYSTEM 실행 시(C:\Windows\Temp) 일반 사용자가 미리 만들어 두거나 링크로 바꿔 정책 값을
+       위조(거짓 양호)할 수 있었다. 무작위 이름의 새 폴더를 만들어(이미 있으면 실패) 실행자·Administrators·SYSTEM 만
+       접근하게 한 뒤 그 안의 경로를 준다. 호출자는 사용 후 폴더째(Split-Path -Parent) 지운다 #>
+    param([Parameter(Mandatory)][string]$FileName)
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("kisa-" + [System.IO.Path]::GetRandomFileName())
+    if (Test-Path -LiteralPath $dir) { throw "임시 폴더가 이미 존재함(선점 의심): $dir" }
+    New-PrivateDirectory -Path $dir
+    return (Join-Path $dir $FileName)
+}
+
+function Invoke-NativeCommand {
+    <# 외부 실행 파일을 시간 제한 안에서 실행한다(운영 안전 기준 S2, W-R16 - secedit/auditpol/bcdedit 이 서비스 이상 시
+       무기한 대기할 수 있었다). 반환: ExitCode / Output(줄 배열) / ErrorText / TimedOut. 시간 초과 시 프로세스를 끝내고
+       TimedOut=$true(ExitCode=$null). 실행 파일을 찾지 못하는 등 시작 자체의 실패는 예외로 던진다 #>
+    param([Parameter(Mandatory)][string]$FilePath, [string[]]$ArgumentList = @(), [int]$TimeoutSec = 60)
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $FilePath
+    $psi.Arguments = (@($ArgumentList) | ForEach-Object {
+            if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ }
+        }) -join ' '
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.CreateNoWindow = $true
+    # 자식은 콘솔 없이(CreateNoWindow) 실행되므로 시스템 OEM 코드페이지(한글판 cp949)로 출력한다 - 그 코드페이지로 디코딩
+    try {
+        $enc = [System.Text.Encoding]::GetEncoding([System.Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage)
+        $psi.StandardOutputEncoding = $enc; $psi.StandardErrorEncoding = $enc
+    } catch { }
+    $p = [System.Diagnostics.Process]::Start($psi)
+    try {
+        $outTask = $p.StandardOutput.ReadToEndAsync()
+        $errTask = $p.StandardError.ReadToEndAsync()
+        if (-not $p.WaitForExit($TimeoutSec * 1000)) {
+            try { $p.Kill() } catch { }
+            return [PSCustomObject]@{ ExitCode = $null; Output = @(); ErrorText = ""; TimedOut = $true }
+        }
+        $p.WaitForExit()
+        return [PSCustomObject]@{
+            ExitCode = $p.ExitCode
+            Output = @($outTask.Result -split "\r?\n")
+            ErrorText = $errTask.Result
+            TimedOut = $false
+        }
+    } finally { $p.Dispose() }
+}
+
+function Invoke-CimCmdletWithTimeout {
+    <# Get-SmbShare·Get-SmbShareAccess·Get-NetFirewallProfile 같은 CDXML cmdlet 은 -OperationTimeoutSec 기본값이 적용되지
+       않아 WMI 가 멈추면 무기한 대기한다(W-R16). -AsJob(같은 프로세스 안의 CIM 작업)으로 실행해 시간을 제한한다.
+       시간 초과·조회 오류(권한 거부 등)는 예외로 던진다 - 호출부가 "결과 없음"과 구분할 수 있게(W-R2) #>
+    param([Parameter(Mandatory)][string]$Command, [hashtable]$Parameters = @{}, [int]$TimeoutSec = 60)
+    $job = & $Command @Parameters -AsJob
+    try {
+        if (-not (Wait-Job -Job $job -Timeout $TimeoutSec)) {
+            Stop-Job -Job $job -ErrorAction SilentlyContinue
+            throw "$Command 시간 초과(${TimeoutSec}초)"
+        }
+        # 작업 안의 오류(권한 거부 등)는 작업 상태가 Completed 여도 Receive-Job 에서 다시 던져진다
+        $out = Receive-Job -Job $job -ErrorAction Stop
+        if ($job.State -eq 'Failed') { throw "$Command 실패: $($job.ChildJobs[0].JobStateInfo.Reason.Message)" }
+        return $out
+    } finally {
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ---- SID 기반 비교 (W-R2/W-R3/W-R9/W-R15) ----------------------------------------
+# 비영문 OS 에서는 내장 계정·그룹 이름이 번역된다(예: 독일어 Everyone=Jeder, Administrators=Administratoren).
+# 이름 문자열 비교는 그런 OS 에서 아무것도 찾지 못해 거짓 양호가 되므로 잘 알려진 SID 로 비교한다.
+# (S-1-1-0 Everyone, S-1-5-32-544 Administrators, S-1-5-32-545 Users, S-1-5-11 Authenticated Users,
+#  S-1-5-32-555 Remote Desktop Users, S-1-5-18 SYSTEM)
+
+function Get-AclAllowRulesForSids {
+    <# 파일/폴더 ACL 에서 지정한 SID 들에 대한 허용(Allow) ACE 만 돌려준다. IdentityReference 를 SID 형식으로 받아
+       비교하므로 OS 언어와 무관하다 #>
+    param([Parameter(Mandatory)]$Acl, [Parameter(Mandatory)][string[]]$Sids)
+    return @($Acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) |
+            Where-Object { $_.AccessControlType -eq 'Allow' -and $Sids -contains $_.IdentityReference.Value })
+}
+
+function ConvertTo-SidString {
+    <# 계정 이름(NTAccount) → SID 문자열. 이미 SID 형식이면 그대로, 변환 실패 시 $null #>
+    param([Parameter(Mandatory)][string]$Name)
+    $n = $Name.TrimStart('*')
+    if ($n -match '^S-1-[\d-]+$') { return $n }
+    try { return (New-Object System.Security.Principal.NTAccount($n)).Translate([System.Security.Principal.SecurityIdentifier]).Value }
+    catch { return $null }
+}
+
+function Get-SecurityCenterProducts {
+    <# root\SecurityCenter2 의 타사 백신/방화벽 제품 목록(Microsoft Defender 자체는 제외). W-R4/W-R11.
+       반환: Ok(조회 성공 여부), Error, Products(Name, Enabled, State). 서버 OS 에는 SecurityCenter2 가 없어 Ok=$false.
+       Enabled 는 productState 의 두 번째 바이트 0x10 비트로 판단한다 - Microsoft 공식 문서는 없고 제조사·보안 업계에서
+       공통으로 쓰는 해석(0x10/0x11=켜짐, 0x00/0x01=꺼짐)이다. 예전에는 등록만 되어 있으면(꺼져 있어도) "활성"으로 봤다 #>
+    param([Parameter(Mandatory)][ValidateSet('AntiVirusProduct', 'FirewallProduct')][string]$Class)
+    try {
+        $items = @(Get-CimInstance -Namespace "root\SecurityCenter2" -ClassName $Class -OperationTimeoutSec 30 -ErrorAction Stop)
+    } catch {
+        return [PSCustomObject]@{ Ok = $false; Error = $_.Exception.Message; Products = @() }
+    }
+    $prods = @($items | Where-Object { "$($_.pathToSignedProductExe)" -notlike 'windowsdefender:*' -and "$($_.displayName)" -notmatch 'Defender' } |
+            ForEach-Object {
+                $st = [int64]$_.productState
+                [PSCustomObject]@{ Name = "$($_.displayName)"; Enabled = ((($st -shr 8) -band 0x10) -ne 0); State = ('0x{0:X6}' -f $st) }
+            })
+    return [PSCustomObject]@{ Ok = $true; Error = ""; Products = $prods }
+}
+
+function Get-LocalGroupMembersBySid {
+    <# 내장 로컬 그룹을 SID 로 조회한다(W-R9). 예전에는 Get-LocalGroupMember 를 영문 그룹 이름("Remote Desktop Users")
+       으로 불러 비영문 OS 에서 실패했고, 고아 SID(삭제된 도메인 계정)가 섞인 그룹에서도 Get-LocalGroupMember 가
+       실패한다 - 그 경우 ADSI(WinNT)로 한 번 더 조회한다. 둘 다 실패하면 예외. 반환: Name / ObjectClass / SID #>
+    param([Parameter(Mandatory)][string]$Sid)
+    $firstErr = ""
+    try {
+        return @(Get-LocalGroupMember -SID $Sid -ErrorAction Stop | ForEach-Object {
+                [PSCustomObject]@{ Name = "$($_.Name)"; ObjectClass = "$($_.ObjectClass)"; SID = "$($_.SID)" } })
+    } catch { $firstErr = $_.Exception.Message }
+    try {
+        $gname = (New-Object System.Security.Principal.SecurityIdentifier($Sid)).Translate([System.Security.Principal.NTAccount]).Value.Split('\')[-1]
+        $g = [ADSI]"WinNT://$env:COMPUTERNAME/$gname,group"
+        return @($g.psbase.Invoke('Members') | ForEach-Object {
+                $t = $_.GetType()
+                $path = "$($t.InvokeMember('ADsPath', 'GetProperty', $null, $_, $null))"
+                $cls = "$($t.InvokeMember('Class', 'GetProperty', $null, $_, $null))"
+                $msid = ""
+                try { $msid = (New-Object System.Security.Principal.SecurityIdentifier([byte[]]$t.InvokeMember('objectSid', 'GetProperty', $null, $_, $null), 0)).Value } catch { }
+                [PSCustomObject]@{ Name = (($path -replace '^WinNT://', '') -replace '/', '\'); ObjectClass = $cls; SID = $msid }
+            })
+    } catch {
+        throw "그룹($Sid) 구성원 조회 실패: $firstErr / ADSI: $($_.Exception.Message)"
     }
 }
 
@@ -124,13 +264,54 @@ function New-OutputDir {
     return $outDir
 }
 
+function Test-IsElevatedAdmin {
+    <# 현재 토큰이 Administrators(S-1-5-32-544) 권한으로 실행 중인지(UAC 로 권한이 낮춰진 토큰이면 $false).
+       02/03/07 run.ps1 이 비관리자 실행의 GOOD/NA 를 ERROR 로 바꾸는 데 쓴다(sh 의 nonroot_unverified 와 같은 원칙) -
+       CI 실측: 비관리자 실행에서 서비스·IIS 설정 조회가 조용히 실패해 W-18 VULN→NA, W-33 VULN→GOOD, IIS 전 항목 NA #>
+    try {
+        $p = New-Object System.Security.Principal.WindowsPrincipal([System.Security.Principal.WindowsIdentity]::GetCurrent())
+        return $p.IsInRole([System.Security.Principal.SecurityIdentifier]'S-1-5-32-544')
+    } catch { return $false }
+}
+
+function Get-ServiceChecked {
+    <# 서비스 조회. 있으면 서비스 객체, 실제로 없으면 $null, 조회 자체가 실패(권한 부족 등)하면 예외.
+       예전 checks 는 Get-Service -ErrorAction SilentlyContinue 로 "조회 실패"를 "서비스 없음/중지"로 읽어, 비관리자(배치
+       로그온) 실행에서 W-33 이 GOOD, W-41 이 VULN 이었다(CI 실측). 서비스 관리자가 "없음"이라고 해도 레지스트리
+       Services\<이름> 키가 있으면 조회 실패로 본다 #>
+    param([Parameter(Mandatory)][string]$Name)
+    try {
+        return (Get-Service -Name $Name -ErrorAction Stop)
+    } catch {
+        $msg = $_.Exception.Message
+        if ($_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound -and
+            -not (Test-Path -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Services\$Name")) {
+            return $null
+        }
+        throw "서비스 '$Name' 조회 실패: $msg"
+    }
+}
+
 function Test-IsDomainController {
     <# DomainRole 4/5 = 백업/주 도메인 컨트롤러. DC 에는 로컬 SAM 이 없어 Win32_UserAccount 조회가 도메인
        전체 계정 열거(LDAP 대량 조회)가 될 수 있으므로 계정 열거형 check 는 DC 에서 건너뛴다 #>
     if ($null -ne $Global:IsDcCache) { return $Global:IsDcCache }
-    try { $Global:IsDcCache = ((Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 30 -ErrorAction Stop).DomainRole -ge 4) }
-    catch { $Global:IsDcCache = $false }
-    return $Global:IsDcCache
+    $Global:IsDcUnknown = $false
+    try {
+        $Global:IsDcCache = ((Get-CimInstance Win32_ComputerSystem -OperationTimeoutSec 30 -ErrorAction Stop).DomainRole -ge 4)
+        return $Global:IsDcCache
+    } catch { }
+    # W-R14: 예전에는 CIM 실패를 "DC 아님($false)"으로 캐시해 DC 에서 W-16 이 SYSVOL/NETLOGON 을 VULN 으로 냈다.
+    # 레지스트리 ProductOptions\ProductType(LanmanNt = 도메인 컨트롤러 - Microsoft 문서의 WinNT/ServerNT/LanmanNt)로 대체 확인한다.
+    try {
+        $pt = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\ProductOptions' -Name ProductType -ErrorAction Stop).ProductType
+        $Global:IsDcCache = ($pt -eq 'LanmanNt')
+        return $Global:IsDcCache
+    } catch { }
+    # 둘 다 실패: 판별 불가. 캐시하지 않고 IsDcUnknown 를 세운 뒤 $true 를 돌려 계정 열거형 check(W-01~03)는
+    # MANUAL 로 빠지게 한다(DC 일 수 있으니 대량 조회를 피함). W-16 은 IsDcUnknown 을 보고 SYSVOL/NETLOGON 을 단정하지 않는다.
+    $Global:IsDcUnknown = $true
+    return $true
 }
 
 function Protect-SecretText {
@@ -139,10 +320,22 @@ function Protect-SecretText {
     param([string]$Text)
     if (-not $Text) { return $Text }
     $t = $Text
-    $t = $t -replace '(?i)((?:^|\s)[-/](?:p|pw|pwd|pass|passwd|password)(?:\s+|[:=]))(?![-/])("[^"]*"|''[^'']*''|\S+)', '$1***'
+    # W-R13: --password x / --password=x(이중 대시), schtasks /rp x 도 같은 규칙으로 가린다
+    $t = $t -replace '(?i)((?:^|\s)(?:--|[-/])(?:p|pw|pwd|pass|passwd|password|rp)(?:\s+|[:=]))(?![-/])("[^"]*"|''[^'']*''|\S+)', '$1***'
     $t = $t -replace '(?i)((?:password|passwd|pwd|secret|token|apikey|api_key)\s*[=:]\s*)("[^"]*"|''[^'']*''|[^\s;&]+)', '$1***'
     $t = $t -replace '(?i)(/user:\S+\s+)(?![-/])(\S+)', '$1***'
     $t = $t -replace '(?i)(ConvertTo-SecureString\s+(?:-String\s+)?)("[^"]*"|''[^'']*'')', '$1***'
+    # W-R13: mysql 계열의 붙여 쓴 비밀번호(-pSECRET). 다른 명령의 -path 등을 지우지 않도록 mysql 류 명령줄에서만,
+    # 대소문자 구분(-P 는 포트)으로 가린다
+    if ($t -match '(?i)\b(?:mysql|mysqldump|mysqladmin|mysqlimport|mariadb|mariadb-dump)(?:\.exe)?\b') {
+        $t = $t -creplace '(\s-p)(?=[^\s*])("[^"]*"|''[^'']*''|\S+)', '$1***'
+    }
+    # W-R13: curl -u user:pass / --user=user:pass, URL 에 박힌 자격증명(scheme://user:pass@host)
+    $t = $t -replace '(?i)((?:^|\s)(?:-u|--user)(?:\s+|=)["'']?[^\s:"'']+:)([^\s"'']+)', '$1***'
+    $t = $t -replace '(?i)(\b[a-z][a-z0-9+.-]*://[^/\s:@]+:)([^@\s/]+)(@)', '$1***$3'
+    # W-R13: net user <id> <pw> (계정 생성·비밀번호 변경), net use \\srv\share <pw> (/user: 앞에 오는 비밀번호)
+    $t = $t -replace '(?i)(\bnet1?(?:\.exe)?\s+user\s+(?:"[^"]+"|\S+)\s+)(?![/])("[^"]*"|\S+)', '$1***'
+    $t = $t -replace '(?i)(\bnet1?(?:\.exe)?\s+use\s+(?:[a-z]:\s+|\*\s+)?\\\\\S+\s+)(?![/])("[^"]*"|\S+)', '$1***'
     return $t
 }
 
@@ -159,7 +352,9 @@ function New-CheckResult {
 
 function Save-ResultJson {
     param([array]$Results, [string]$OutFile, [string]$Category, [string]$OsFamily)
-    $sorted = $Results | Sort-Object @{Expression={$StatusOrder[$_.status]}}, code
+    # R-10: 항목이 1개면 파이프라인이 결과를 풀어 items 가 배열이 아니라 객체로 저장됐다(보고서 빈 화면, merge.py
+    # TypeError) - @() 로 항상 배열을 유지한다.
+    $sorted = @($Results | Sort-Object @{Expression={$StatusOrder[$_.status]}}, code)
     $obj = [ordered]@{
         tool_version  = $Script:ToolVersion
         guide_version = $Script:GuideVersion
@@ -169,7 +364,12 @@ function Save-ResultJson {
         generated_at  = (Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz")
         items         = $sorted
     }
-    $obj | ConvertTo-Json -Depth 6 | Out-File -FilePath $OutFile -Encoding utf8
+    # R-11: pwsh 7 의 ConvertTo-Json 은 < > & 를 이스케이프하지 않아, 증적 속 "</script>" 가 report.html(결과 JSON 을
+    # <script> 블록에 그대로 이어붙임) 안에서 스크립트를 끝내고 뒤의 내용을 실행시킬 수 있었다. JSON 문법상 이 문자들은
+    # 문자열 안에만 나오므로 < 등으로 바꿔도 값은 같다(PS 5.1 은 원래 이렇게 출력).
+    $json = ($obj | ConvertTo-Json -Depth 6) -join "`n"
+    $json = $json.Replace('<', '<').Replace('>', '>').Replace('&', '&')
+    $json | Out-File -FilePath $OutFile -Encoding utf8
 }
 
 function New-ReportHtml {
@@ -193,6 +393,15 @@ function Test-RegistryValue {
         $item = Get-ItemProperty -Path $Path -Name $Name -ErrorAction Stop
         return $item.$Name
     } catch {
+        # W-R14: 키/값이 없는 것(ObjectNotFound / InvalidArgument)과 권한 거부 등 "조회 실패"를 구분한다. 실패는
+        # $Global:RegistryQueryFailed 로 남겨 02_windows/07_pc run.ps1 이 그 항목의 GOOD/VULN 을 ERROR 로 바꾼다
+        # (반환값은 호출부 호환을 위해 그대로 $null).
+        $cat = $_.CategoryInfo.Category
+        if ($cat -ne [System.Management.Automation.ErrorCategory]::ObjectNotFound -and
+            $cat -ne [System.Management.Automation.ErrorCategory]::InvalidArgument) {
+            $Global:RegistryQueryFailed = $true
+            $Global:RegistryQueryError = "$Path\$Name : $($_.Exception.Message)"
+        }
         return $null
     }
 }
@@ -204,13 +413,21 @@ function Test-RegistryValue {
 function Get-SecEditExport {
     if ($Script:SecEditCache) { return $Script:SecEditCache }
 
-    $tmp = Join-Path $env:TEMP "kisa-secedit-$PID.inf"
+    # W-R7: 임시 파일은 무작위 이름의 전용 폴더(New-PrivateTempFile)에 만들고, 종료 코드와 필수 섹션을 확인한다 -
+    # 예전에는 예측 가능한 %TEMP% 경로를 썼고, 부분 내보내기(종료 코드 비정상)도 그대로 파싱해 W-49 등이 거짓 VULN 이었다.
+    # W-R16: 시간 제한(120초). 실행 파일은 PATH 가 아니라 System32 경로로 지정한다.
     $sections = @{}
+    $tmp = $null; $why = ""
     try {
-        secedit /export /cfg $tmp /quiet | Out-Null
-        if (Test-Path $tmp) {
+        $tmp = New-PrivateTempFile -FileName "secedit.inf"
+        $exe = Join-Path $env:SystemRoot "System32\secedit.exe"
+        $r = Invoke-NativeCommand -FilePath $exe -ArgumentList @('/export', '/cfg', $tmp, '/quiet') -TimeoutSec 120
+        if ($r.TimedOut) { $why = "시간 초과(120초)" }
+        elseif ($r.ExitCode -ne 0) { $why = "종료 코드 $($r.ExitCode)" }
+        elseif (-not (Test-Path -LiteralPath $tmp)) { $why = "내보내기 파일이 생성되지 않음" }
+        else {
             $current = $null
-            foreach ($line in Get-Content -Path $tmp -Encoding Unicode) {
+            foreach ($line in Get-Content -LiteralPath $tmp -Encoding Unicode) {
                 $t = $line.Trim()
                 if ($t -match '^\[(.+)\]$') {
                     $current = $Matches[1]
@@ -219,11 +436,19 @@ function Get-SecEditExport {
                     $sections[$current][$Matches[1].Trim()] = $Matches[2].Trim()
                 }
             }
+            if (-not ($sections.ContainsKey('System Access') -and $sections.ContainsKey('Privilege Rights') -and
+                    $sections['System Access'].Count -gt 0 -and $sections['Privilege Rights'].Count -gt 0)) {
+                $why = "필수 섹션([System Access]/[Privilege Rights]) 누락 - 부분 내보내기"
+            }
         }
     } catch {
-        Write-Log "secedit /export 실행 실패: $_" "WARN"
+        $why = $_.Exception.Message
     } finally {
-        Remove-Item -Path $tmp -Force -ErrorAction SilentlyContinue
+        if ($tmp) { Remove-Item -LiteralPath (Split-Path -Parent $tmp) -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    if ($why) {
+        Write-Log "secedit /export 실패: $why" "WARN"
+        $sections = @{}
     }
     $Script:SecEditCache = $sections
     # 내보내기 실패(관리자 권한 없음 등)면 모든 정책 값이 $null 로 보여 "미설정 = 취약/양호"로 오판된다.
@@ -247,6 +472,20 @@ function ConvertFrom-Sid {
     <# "*S-1-5-32-544" 형태의 SID 문자열을 계정/그룹 이름으로 변환. 실패 시 원본 SID 반환 #>
     param([Parameter(Mandatory)][string]$SidToken)
     $sid = $SidToken.TrimStart('*')
+    if ($sid -notmatch '^S-1-[\d-]+$') { return $sid }   # secedit 이 이름으로 남긴 계정
+    # W-R16: 도메인 SID 를 이름으로 바꾸려면 DC 에 질의하는데, DC 에 닿지 않으면 SID 마다 오래 대기한다. 이 컴퓨터
+    # 안에서 풀리는 SID(BUILTIN S-1-5-32-*, 잘 알려진 S-1-1-0·S-1-5-<n>, 서비스/IIS 가상 계정, 이 컴퓨터의 로컬 계정)만
+    # 변환하고 나머지는 SID 그대로 둔다 - 판정은 SID 로 하므로(Get-SecPrivilegeSids) 증적 표시만 달라진다.
+    if ($null -eq $Script:LocalMachineSidPrefix) {
+        $Script:LocalMachineSidPrefix = ""
+        try {
+            $u = Get-LocalUser -ErrorAction Stop | Select-Object -First 1
+            if ($u -and $u.SID.AccountDomainSid) { $Script:LocalMachineSidPrefix = "$($u.SID.AccountDomainSid.Value)-" }
+        } catch { }
+    }
+    $local = ($sid -match '^S-1-[0-3]-\d+$' -or $sid -match '^S-1-5-\d+$' -or $sid -match '^S-1-5-(32|80|82|83|90|96)-' -or
+        ($Script:LocalMachineSidPrefix -and $sid.StartsWith($Script:LocalMachineSidPrefix)))
+    if (-not $local) { return $sid }
     try {
         $account = (New-Object System.Security.Principal.SecurityIdentifier($sid)).Translate([System.Security.Principal.NTAccount])
         return $account.Value
@@ -262,6 +501,19 @@ function Get-SecPrivilegeAccounts {
     $raw = Get-SecPolicyValue -Section "Privilege Rights" -Name $Right
     if (-not $raw) { return @() }
     return $raw -split ',' | Where-Object { $_ } | ForEach-Object { ConvertFrom-Sid $_.Trim() }
+}
+
+function Get-SecPrivilegeSids {
+    <# [Privilege Rights] 값을 SID 문자열 배열로 반환(W-R15: 이름 비교는 비영문 OS 에서 "Administrators" 가 번역돼 실패).
+       secedit 이 SID 대신 이름으로 남긴 계정은 SID 로 변환을 시도하고, 실패하면 이름 그대로 둔다 #>
+    param([Parameter(Mandatory)][string]$Right)
+    $Global:SecPolicyQueried = $true
+    $raw = Get-SecPolicyValue -Section "Privilege Rights" -Name $Right
+    if (-not $raw) { return @() }
+    return @($raw -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | ForEach-Object {
+            $s = ConvertTo-SidString -Name $_
+            if ($s) { $s } else { $_.TrimStart('*') }
+        })
 }
 
 # ---- MSSQL 연결/쿼리 (08_dbms) ---------------------------------------------------
@@ -280,10 +532,12 @@ function Invoke-MssqlQuery {
         "DB 접속 사전 점검 실패로 접속하지 않음(계정 잠금 방지): $Global:DbConnFailMsg" | Out-File -FilePath $Global:DbErrFile -Encoding utf8
         return $null
     }
-    # -C: 서버 인증서를 신뢰(자체 서명 인증서가 흔한 사내/컨테이너 환경 대응). mssql-tools18(sqlcmd
-    # Go 재작성판, 현재 표준 배포판)은 기본적으로 암호화 연결을 강제하며 인증서 검증에 실패하면
-    # 접속 자체가 안 되므로 필요하다 (구버전 mssql-tools 의 sqlcmd 는 이 옵션이 없을 수 있음).
-    $sqlArgs = @('-h', '-1', '-W', '-s', '|', '-b', '-C', '-l', '5', '-t', '60')
+    # -C: 서버 인증서를 검증 없이 신뢰. mssql-tools18 은 암호화 연결을 강제하고 인증서 검증에 실패하면 접속이 안 돼
+    # 자체 서명 인증서가 흔한 로컬 인스턴스에는 필요하다. 다만 원격 SQL 인증에서 무조건 신뢰하면 중간자가 인증서를
+    # 바꿔 끼워 비밀번호를 가로챌 수 있어(진단 검수 D-R8), 원격 대상은 인증서를 검증하고 운영자가
+    # $env:DB_TRUST_SERVER_CERT=1 로 명시했을 때만 -C 를 붙인다.
+    $sqlArgs = @('-h', '-1', '-W', '-s', '|', '-b', '-l', '5', '-t', '60')
+    if ($env:DB_TRUST_SERVER_CERT -eq '1' -or -not (Test-MssqlRemoteTarget)) { $sqlArgs += @('-C') }
     $target = if ($env:DB_HOST) { $env:DB_HOST } else { 'localhost' }
     if ($env:DB_PORT) { $target = "$target,$($env:DB_PORT)" }
     $sqlArgs += @('-S', $target)
@@ -308,6 +562,40 @@ function Invoke-MssqlQuery {
     }
 }
 
+function Test-MssqlRemoteTarget {
+    <# $env:DB_HOST(-SqlHost)가 이 PC 가 아니면 $true. 빈 값·"."·"(local)"·"(localdb)\..."·localhost·루프백·이 PC 의
+       이름/IP 는 로컬. 원격이면 방화벽·레지스트리 기반 항목(D-10/D-13)이 분석자 PC 를 보게 되고(진단 검수 D-R1),
+       인증서 무조건 신뢰(-C)도 하지 않는다(D-R8). 결과는 대상 문자열별로 캐시한다(DNS 조회 반복 방지). #>
+    param([string]$Target = $env:DB_HOST)
+    if ($null -ne $Global:MssqlRemoteCache -and $Global:MssqlRemoteCache.Target -eq "$Target") { return $Global:MssqlRemoteCache.Remote }
+    $h = "$Target".Trim() -replace '^(tcp|np|lpc|admin):', ''
+    $h = (($h -split ',')[0] -split '\\')[0].Trim().Trim('[', ']')
+    $remote = $true
+    if (-not $h -or $h -in @('.', '(local)', '(localdb)', 'localhost', '::1') -or $h -like '127.*') {
+        $remote = $false
+    } else {
+        $names = @($env:COMPUTERNAME, [System.Net.Dns]::GetHostName())
+        try { $names += [System.Net.Dns]::GetHostEntry([System.Net.Dns]::GetHostName()).HostName } catch { $null = $_ }
+        if (@($names | Where-Object { $_ -and ($_ -ieq $h -or ($_ -split '\.')[0] -ieq $h) }).Count -gt 0) {
+            $remote = $false
+        } else {
+            $local = @()
+            try {
+                $local = @([System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+                    ForEach-Object { $_.GetIPProperties().UnicastAddresses } | ForEach-Object { ($_.Address.ToString() -split '%')[0] })
+            } catch { $null = $_ }
+            $ip = $null
+            $cands = @($h)
+            if (-not [System.Net.IPAddress]::TryParse($h, [ref]$ip)) {
+                try { $cands = @([System.Net.Dns]::GetHostAddresses($h) | ForEach-Object { ($_.ToString() -split '%')[0] }) } catch { $cands = @() }
+            }
+            foreach ($c in $cands) { if ($c -like '127.*' -or $c -eq '::1' -or $local -contains $c) { $remote = $false } }
+        }
+    }
+    $Global:MssqlRemoteCache = @{ Target = "$Target"; Remote = $remote }
+    return $remote
+}
+
 function Test-MssqlPreflight {
     <# 접속을 1회 시험. 실패하면 $Global:DbConnFailed/$Global:DbConnFailMsg 를 세우고 $false 반환 #>
     $Global:DbConnFailed = $false
@@ -315,6 +603,9 @@ function Test-MssqlPreflight {
     $null = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT 1;"
     if ($Global:DbQueryOk) { return $true }
     $msg = if (Test-Path $Global:DbErrFile) { (Get-Content -Path $Global:DbErrFile -TotalCount 2) -join " " } else { "" }
+    if ($msg -match 'certificate|인증서|SSL Provider' -and $env:DB_TRUST_SERVER_CERT -ne '1') {
+        $msg += " (원격 서버 인증서를 검증하지 못함 - 신뢰할 수 있는 인증서를 쓰거나, 위험을 이해한 경우에만 `$env:DB_TRUST_SERVER_CERT=1)"
+    }
     $Global:DbConnFailMsg = $msg
     $Global:DbConnFailed = $true
     return $false
@@ -339,23 +630,84 @@ function Test-IisInstalledButUnreadable {
     <# IIS(W3SVC)는 설치돼 있는데 설정을 읽을 수 없는 경우(관리자 권한 없음 등). 예전에는 이를
        "IIS 미설치"로 오인해 전 항목이 NA(해당없음)로 나왔다 - 확인하지 못한 것을 해당없음으로 숨기지 않는다 #>
     if (Test-IisAvailable) { return $false }
-    return [bool](Get-Service -Name "W3SVC" -ErrorAction SilentlyContinue)
+    # 비관리자(배치 로그온) 실행에서는 Get-Service 자체가 실패해 "IIS 없음 → 전 항목 NA" 가 됐다(CI 실측).
+    # 서비스 등록 여부는 레지스트리 키로 확인한다(일반 사용자도 읽기 가능).
+    return (Test-IisInstalled)
+}
+
+function Test-IisInstalled {
+    <# IIS(W3SVC 서비스) 설치 여부 - 레지스트리 Services\W3SVC 키 존재로 판단(권한과 무관) #>
+    return (Test-Path -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Services\W3SVC")
 }
 
 function Get-IisSiteNames {
     <# 구성된 사이트 이름 목록 (IIS 미설치/사이트 없음이면 빈 배열) #>
     if (-not (Test-IisAvailable)) { return @() }
-    try { return @(Get-Website -ErrorAction Stop | ForEach-Object { $_.Name }) } catch { return @() }
+    try { return @(Get-Website -ErrorAction Stop | ForEach-Object { $_.Name }) }
+    catch {
+        # WEB-R7: 예전에는 조회 실패도 빈 배열 = "사이트 없음(NA)"이었다. 실패 표시를 남겨 03_web/run.ps1 이 그 항목의
+        # NA/GOOD 을 ERROR 로 바꾼다.
+        $Global:IisSiteListFailed = $true
+        $Global:IisConfigQueryFailed = $true
+        $Global:IisConfigQueryError = "사이트 목록(Get-Website): $($_.Exception.Message)"
+        return @()
+    }
 }
 
 function Get-IisSitePhysicalPath {
-    <# 사이트의 실제 경로(환경변수 展開 완료). 조회 실패 시 $null #>
+    <# 사이트의 실제 경로(환경변수 展開 완료). 조회 실패 시 $null(실패 표시 IisConfigQueryFailed, WEB-R7) #>
     param([Parameter(Mandatory)][string]$SiteName)
     try {
         $p = (Get-Website -Name $SiteName -ErrorAction Stop).physicalPath
-        if (-not $p) { return $null }
+        if (-not $p) {
+            $Global:IisConfigQueryFailed = $true
+            $Global:IisConfigQueryError = "physicalPath ($SiteName): 값 없음"
+            return $null
+        }
         return [System.Environment]::ExpandEnvironmentVariables($p)
-    } catch { return $null }
+    } catch {
+        $Global:IisConfigQueryFailed = $true
+        $Global:IisConfigQueryError = "physicalPath ($SiteName): $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Get-IisSiteConfigPaths {
+    <# WEB-R8: 사이트 루트뿐 아니라 하위 application·virtual directory 의 설정 경로를 돌려준다(각자 web.config 로
+       directoryBrowse·webdav·httpErrors 등을 재정의할 수 있는데 예전에는 사이트 루트만 봤다).
+       반환: Label("site/app/vdir"), PSPath("IIS:\Sites\site\app\vdir"), IsApp(application 여부), AppPath("/app")
+       하위 목록 조회에 실패하면 루트만 돌려주고 IisConfigQueryFailed 를 세운다(하위 경로 미검사를 GOOD 으로 넘기지 않음).
+       한계: application/vdir 이 아닌 일반 하위 폴더의 web.config 는 열거하지 않는다 #>
+    param([Parameter(Mandatory)][string]$SiteName)
+    $root = "IIS:\Sites\$SiteName"
+    $list = @([PSCustomObject]@{ Label = $SiteName; PSPath = $root; IsApp = $true; AppPath = "/" })
+    $seen = @{ "/" = $true }
+    try {
+        $xp = "system.applicationHost/sites/site[@name='$SiteName']/application"
+        foreach ($a in @(Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" -Filter $xp -ErrorAction Stop)) {
+            $ap = "$($a.path)"
+            if (-not $ap) { throw "application path 값 없음" }
+            if (-not $seen.ContainsKey($ap)) {
+                $seen[$ap] = $true
+                $list += [PSCustomObject]@{ Label = "$SiteName$ap"; PSPath = $root + ($ap -replace '/', '\'); IsApp = $true; AppPath = $ap }
+            }
+        }
+        foreach ($v in @(Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" -Filter "$xp/virtualDirectory" -ErrorAction Stop)) {
+            # 소속 application 경로는 요소의 ItemXPath(.../application[@path='/app']/virtualDirectory[@path='/v'])에서 얻는다
+            if ("$($v.ItemXPath)" -notmatch "application\[@path='([^']*)'\]") { throw "virtualDirectory 소속 application 을 해석하지 못함: $($v.ItemXPath)" }
+            $full = ($Matches[1].TrimEnd('/')) + "$($v.path)"
+            if ($full -ne "/" -and $full.EndsWith('/')) { $full = $full.TrimEnd('/') }
+            if (-not $full) { $full = "/" }
+            if (-not $seen.ContainsKey($full)) {
+                $seen[$full] = $true
+                $list += [PSCustomObject]@{ Label = "$SiteName$full"; PSPath = $root + ($full -replace '/', '\'); IsApp = $false; AppPath = $Matches[1] }
+            }
+        }
+    } catch {
+        $Global:IisConfigQueryFailed = $true
+        $Global:IisConfigQueryError = "하위 application/virtual directory 목록 ($SiteName): $($_.Exception.Message)"
+    }
+    return $list
 }
 
 function Get-IisConfigValue {
@@ -364,10 +716,13 @@ function Get-IisConfigValue {
     param(
         [Parameter(Mandatory)][string]$Filter,
         [Parameter(Mandatory)][string]$Name,
-        [string]$SiteName = ""
+        [string]$SiteName = "",
+        [string]$PSPath = ""   # WEB-R8: 하위 application/vdir 경로(Get-IisSiteConfigPaths 의 PSPath)를 직접 지정
     )
     try {
-        if ($SiteName) {
+        if ($PSPath) {
+            $v = Get-WebConfigurationProperty -PSPath $PSPath -Filter $Filter -Name $Name -ErrorAction Stop
+        } elseif ($SiteName) {
             $v = Get-WebConfigurationProperty -PSPath "IIS:\Sites\$SiteName" -Filter $Filter -Name $Name -ErrorAction Stop
         } else {
             $v = Get-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" -Filter $Filter -Name $Name -ErrorAction Stop
@@ -379,7 +734,7 @@ function Get-IisConfigValue {
         # 호출부 다수가 "$null = 설정 없음(기본값)"으로 해석하므로 반환값은 유지하되, 조회 "실패"였다는
         # 사실을 남긴다. 03_web/run.ps1 이 이 플래그가 선 항목의 GOOD 을 ERROR 로 바꾼다(거짓 양호 방지).
         $Global:IisConfigQueryFailed = $true
-        $Global:IisConfigQueryError = "$Filter/@$Name$(if ($SiteName) { " ($SiteName)" }): $($_.Exception.Message)"
+        $Global:IisConfigQueryError = "$Filter/@$Name$(if ($PSPath) { " ($PSPath)" } elseif ($SiteName) { " ($SiteName)" }): $($_.Exception.Message)"
         return $null
     }
 }
@@ -1206,4 +1561,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-OutputDir, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Invoke-MssqlQuery, Test-MssqlPreflight,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

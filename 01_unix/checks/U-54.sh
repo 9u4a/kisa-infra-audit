@@ -3,7 +3,8 @@
 # 전 Unix 계열 공통 로직. SFTP(SSH 기반)는 별도이므로 영향 없음.
 
 run_check() {
-    check_service_disabled "FTP(vsftpd/proftpd, 평문)" "vsftpd|proftpd|in\.ftpd" "vsftpd proftpd"
+    # inetd(/etc/inetd.conf)·소켓 유닛으로 기동되는 서비스는 연결 전에는 프로세스가 없어 예전에는 GOOD 이었다(진단 검수 U-R6).
+    check_service_disabled "FTP(vsftpd/proftpd, 평문)" "vsftpd|proftpd|in\.ftpd" "vsftpd proftpd" "ftp"
 
     if [ "$CHECK_STATUS" = "GOOD" ] && [ -f /etc/xinetd.d/ftp ]; then
         if grep -qE '^[[:space:]]*disable[[:space:]]*=[[:space:]]*no' /etc/xinetd.d/ftp 2>/dev/null; then

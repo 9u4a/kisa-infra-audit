@@ -204,6 +204,18 @@ jobs:
         run: |
           .\02_windows\tests\firewall_guard.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # 진단(run.ps1) 운영 안전 실기 검사(lib/tests/run_safety_windows.ps1): 진단 전후 상태 동일(S1)·제한 시간(S2)·
+      # 비밀값 미저장/결과 폴더 ACL(S5)·비관리자 실행 거짓 양호(S6). 조치 테스트들 뒤에 둔다(그 상태를 기준으로 비교).
+      - name: 진단 운영 안전(02_windows / 07_pc / 03_web IIS / 08_dbms MSSQL)
+        if: always()
+        shell: powershell
+        run: |
+          $rc = 0
+          foreach ($c in @("02_windows", "07_pc", "03_web", "08_dbms")) {
+              .\lib\tests\run_safety_windows.ps1 -Category $c
+              if ($LASTEXITCODE -ne 0) { $rc = 1 }
+          }
+          exit $rc
       - name: bootstrap 산출물 업로드
         if: ${{ always() && github.event.inputs.bootstrap_windows == 'true' }}
         uses: actions/upload-artifact@v4

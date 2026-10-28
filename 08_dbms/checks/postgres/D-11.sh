@@ -20,5 +20,7 @@ run_check() {
         CHECK_STATUS="VULN"; CHECK_DETAIL="postgres 외 계정에 pg_catalog(시스템 테이블) 명시적 권한이 부여되어 있음"
     else
         CHECK_STATUS="GOOD"; CHECK_DETAIL="pg_catalog 명시적 권한이 관리자 계정(postgres)으로 제한되어 있음"
+        # pg_catalog 권한은 DB 마다 따로 있다 - 접속한 DB 만 봤으므로 다른 DB 가 있으면 GOOD 으로 단정하지 않는다(진단 검수 D-R7).
+        postgres_other_dbs_manual
     fi
 }

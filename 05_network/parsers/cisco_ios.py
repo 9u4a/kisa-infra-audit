@@ -101,6 +101,71 @@ def snmp_community_weak(s: str) -> bool:
     return classes < 3
 
 
+def parse_snmp_community(line: str) -> dict | None:
+    """`snmp-server community <string> [view <name>] [RO|RW] [ipv6 <acl>] [<acl>]` 한 줄을 해석한다.
+    예전 정규식(`<string> [RO|RW] [acl]$`)은 view·ipv6 토큰이 있는 줄을 아예 놓쳐 N-19/N-20 이 그 줄을
+    빼고 판정했다(진단 검수 D-R10). mode 는 생략 시 None(IOS 기본값 RW 해석은 check 가 한다)."""
+    tokens = line.split()
+    if len(tokens) < 3 or tokens[0] != "snmp-server" or tokens[1] != "community":
+        return None
+    info = {"string": tokens[2], "view": None, "mode": None, "acl": None, "ipv6_acl": None, "rest": tokens[3:]}
+    rest = tokens[3:]
+    i = 0
+    while i < len(rest):
+        t = rest[i]
+        if t == "view" and i + 1 < len(rest):
+            info["view"] = rest[i + 1]
+            i += 2
+            continue
+        if t == "ipv6" and i + 1 < len(rest):
+            info["ipv6_acl"] = rest[i + 1]
+            i += 2
+            continue
+        if t in ("RO", "RW", "ro", "rw"):
+            info["mode"] = t.upper()
+        elif info["acl"] is None:
+            info["acl"] = t
+        i += 1
+    return info
+
+
+def snmp_community_lines(ctx) -> list[str]:
+    """snmp-server community 로 시작하는 최상위 줄 전체(줄 끝 공백 제거)."""
+    return [l.rstrip() for l in ctx.lines if re.match(r"^snmp-server community \S+", l)]
+
+
+# ---- 비밀값 마스킹 (운영 안전 기준 S5, 진단 검수 D-R4) ---------------------------------
+# N-17 이 snmp-server 줄 원문(community 평문·SNMPv3 auth/priv 키)을, N-01/06/08/09 가 VTY/AUX 블록 전체
+# (평문 password, type 7 값)를 증적에 그대로 남겼다. 각 check 에서 빠뜨려도 새지 않도록 run.py 가 모든
+# detail/evidence 에 이 함수를 한 번 더 적용한다(이중 방어). 값 자리만 <masked> 로 바꾸고 명령 형태는 남긴다.
+_MASK = "<masked>"
+_SECRET_PATTERNS = [
+    # snmp-server community <string> ...
+    (re.compile(r"(\bsnmp-server\s+community\s+)\S+", re.I), r"\1<community>"),
+    # snmp-server host <addr> [informs|traps] [version 1|2c|3 [auth|noauth|priv]] <community> ...
+    (re.compile(r"(\bsnmp-server\s+host\s+\S+(?:\s+(?:informs|traps))?(?:\s+version\s+(?:1|2c|3(?:\s+(?:auth|noauth|priv))?))?\s+)(?!version\b|informs\b|traps\b)\S+", re.I), r"\1<community>"),
+    # SNMPv3 user: ... auth md5|sha* <key> priv des|3des|aes [128|192|256] <key>
+    (re.compile(r"(\bauth\s+(?:md5|sha\S*)\s+)\S+", re.I), r"\1" + _MASK),
+    (re.compile(r"(\bpriv\s+(?:des\S*|3des|aes(?:\s+\d+)?)\s+)\S+", re.I), r"\1" + _MASK),
+    # password|secret [암호화 타입 숫자] <값>  (enable/username/line/ppp chap 등 공통)
+    (re.compile(r"(\b(?:password|secret)(?:\s+\d{1,2})?\s+)\S+", re.I), r"\1" + _MASK),
+    # key / key-string / authentication-key / message-digest-key [n] [md5] [타입] <값>, crypto isakmp key <값>
+    (re.compile(r"(\b(?:[\w-]*-)?key(?:-string)?(?:\s+\d{1,3})?(?:\s+md5)?(?:\s+\d)?\s+)(?!generate\b|zeroize\b|chain\b|config-key\b|pubkey|storage\b|export\b|import\b|decrypt\b|encrypt\b|rsa\b|ec\b)\S+", re.I), r"\1" + _MASK),
+]
+
+
+def mask_secrets(text: str) -> str:
+    """설정 발췌 텍스트에서 비밀번호·community·키 값을 <masked> 로 바꾼다(줄 단위)."""
+    if not text:
+        return text
+    out = []
+    for line in str(text).split("\n"):
+        for pat, repl in _SECRET_PATTERNS:
+            line = pat.sub(repl, line)
+        out.append(line)
+    return "\n".join(out)
+
+
 def gen_secret(length: int = 16) -> str:
     """fixes/cisco_ios/N-xx.py 가 조치 명령어 스크립트에 쓸 임의의 강력한 문자열을 생성한다
     (D-01/WEB-02 의 "모르는 값은 무작위로 새로 설정" 원칙과 동일 - 단, 이 카테고리는 실제 장비에

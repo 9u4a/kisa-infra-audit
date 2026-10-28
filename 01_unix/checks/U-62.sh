@@ -9,9 +9,12 @@ run_check() {
     evidence=""
 
     for f in /etc/motd /etc/issue; do
-        if [ -s "$f" ]; then
+        if [ -s "$f" ] && [ "$(banner_custom_lines "$f")" -gt 0 ]; then
             evidence="$evidence
-$f: 설정됨 (비어있지 않음)"
+$f: 설정됨 (배포판 기본 문구 외 내용 있음)"
+        elif [ -s "$f" ]; then
+            # 진단 검수 U-R17: 배포판 기본 문구만 있는 파일은 경고문으로 인정하지 않는다(lib/common.sh banner_custom_lines)
+            missing="$missing $f(배포판 기본 문구뿐)"
         else
             missing="$missing $f(없음/비어있음)"
         fi

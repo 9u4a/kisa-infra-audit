@@ -4,7 +4,8 @@
 # 전 Unix 계열 공통 로직.
 
 run_check() {
-    check_service_disabled "r 계열(rlogin/rsh/rexec)" "in\.rlogind|in\.rshd|in\.rexecd|rlogind|rshd|rexecd" "rlogin.socket rsh.socket rexec.socket"
+    # inetd(/etc/inetd.conf)·소켓 유닛으로 기동되는 서비스는 연결 전에는 프로세스가 없어 예전에는 GOOD 이었다(진단 검수 U-R6).
+    check_service_disabled "r 계열(rlogin/rsh/rexec)" "in\.rlogind|in\.rshd|in\.rexecd|rlogind|rshd|rexecd" "rlogin.socket rsh.socket rexec.socket" "login shell exec"
 
     if [ "$CHECK_STATUS" = "GOOD" ]; then
         for f in /etc/xinetd.d/rlogin /etc/xinetd.d/rsh /etc/xinetd.d/rexec /etc/xinetd.d/shell /etc/xinetd.d/login; do

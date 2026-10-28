@@ -8,9 +8,11 @@
 # 정리, 순서로 진행한다. Oracle은 이미지가 무거워 여기 포함하지 않았다(CI의 별도 주간
 # job 후보 - 08_dbms/CLAUDE.md "테스트 커버리지" 참고). D-11(시스템 테이블 접근 제한)만
 # 명시적으로 vuln/hardened를 가르고 나머지 25항목은 각 이미지의 기본값을 반영한다(run.sh는
-# 매번 26항목 전체를 돌려 다른 항목의 회귀도 함께 잡아낸다). D-10/D-14는 로컬 설정 파일
-# 경로를 읽는 방식이라 "원격 클라이언트 컨테이너에서 run.sh 실행" 토폴로지에서는 항상 ERROR
-# (파일을 찾을 수 없음)로 나온다 - 이는 버그가 아니라 이 테스트 구성 자체의 한계다.
+# 매번 26항목 전체를 돌려 다른 항목의 회귀도 함께 잡아낸다). "원격 클라이언트 컨테이너에서
+# run.sh 실행" 토폴로지라 로컬 파일·프로세스 기반 항목(MySQL D-07/D-14, PostgreSQL D-10/D-14)은
+# 원격 모드 MANUAL 로 나와야 한다(진단 검수 D-R1 - 예전에는 클라이언트 컨테이너의 /etc/my.cnf 로
+# D-14 를 판정했다). vuln 모드에서는 권한 없는 계정(lowpriv)으로 한 번 더 진단해 권한 부족 항목이
+# GOOD/VULN 대신 ERROR 인지 확인한다(D-R2).
 set -eu
 export MSYS_NO_PATHCONV=1
 
@@ -55,11 +57,40 @@ for engine in mysql postgres; do
                 sh 08_dbms/tests/fixtures/setup.sh $engine $mode >/dev/null 2>&1
                 sh 08_dbms/run.sh -e $engine --host dbhost --user $dbuser -o /tmp/out >/dev/null 2>&1
                 cp /tmp/out/*/result.json /result.json
+                if [ $mode = vuln ]; then
+                    DB_PASSWORD='LowPriv123!' sh 08_dbms/run.sh -e $engine --host dbhost --user lowpriv -o /tmp/out_low >/dev/null 2>&1
+                    cp /tmp/out_low/*/result.json /result_lowpriv.json
+                fi
             ")
             docker start -a "$cid" >/dev/null
             result_file="result_${engine}_${mode}.json"
             docker cp "$cid:/result.json" "$result_file" >/dev/null 2>&1
+            low_file="result_${engine}_lowpriv.json"
+            [ "$mode" = "vuln" ] && docker cp "$cid:/result_lowpriv.json" "$low_file" >/dev/null 2>&1
             docker rm "$cid" >/dev/null
+
+            # 권한 없는 계정 진단: 전체를 볼 수 없는 항목은 GOOD/VULN 이 아니라 ERROR 여야 한다(진단 검수 D-R2)
+            if [ "$mode" = "vuln" ]; then
+                if [ ! -f "$low_file" ]; then
+                    echo "FAIL: $engine/lowpriv - 권한 없는 계정 진단 결과를 꺼내지 못함"; fail=1
+                elif python3 - "$low_file" "$engine/lowpriv" <<'PYEOF'
+import json, sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+path, label = sys.argv[1], sys.argv[2]
+st = {it["code"]: (it["status"], it["detail"]) for it in json.load(open(path, encoding="utf-8"))["items"]}
+must_error = ["D-01", "D-08", "D-11"]
+bad = [c for c in must_error if st.get(c, ("?", ""))[0] != "ERROR"]
+if bad:
+    print(f"FAIL: {label} - 권한 부족 항목이 ERROR 가 아님")
+    for c in must_error:
+        print(f"  - {c}: {st.get(c)}")
+    sys.exit(1)
+print(f"PASS: {label} ({', '.join(must_error)} = ERROR)")
+PYEOF
+                then :; else fail=1; fi
+                rm -f "$low_file"
+            fi
 
             if [ ! -f "$result_file" ]; then
                 echo "FAIL: $engine/$mode - 컨테이너에서 result.json 을 꺼내지 못함"
@@ -161,6 +192,75 @@ PYEOF
         then :; else fail=1; fi
         rm -f "$safety_json" "$safety_json.rc"
     fi
+    docker rm -f "$db_cid" >/dev/null 2>&1 || true
+    docker network rm "$net" >/dev/null 2>&1 || true
+done
+
+# ---- 진단이 DB 에 읽기 전용 문장만 보내는지(운영 안전 기준 S1, 진단 실행 검수) ------------------------
+# DB 서버가 실제로 받은 문장을 서버 쪽 로그(MySQL general_log, PostgreSQL log_statement=all)로 모아, 첫 키워드가
+# SELECT/SHOW/세션 범위 SET 등인지 lib/tests/run_safety_check.py 의 SQL_OK 로 확인한다. 픽스처 적용 뒤부터만 센다.
+for engine in mysql postgres; do
+    image="kisa-dbms-${engine}-test"
+    net="kisa-dbms-net-$$-$engine-sql"
+    docker network create "$net" >/dev/null
+    if [ "$engine" = "mysql" ]; then
+        db_cid=$(docker run -d --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! mysql:8); dbuser="root"
+    else
+        db_cid=$(docker run -d --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! postgres:16); dbuser="postgres"
+    fi
+    ready=0; i=0
+    while [ "$i" -lt 30 ]; do
+        if [ "$engine" = "mysql" ]; then
+            docker run --rm --network "$net" "$image" sh -c "mysqladmin ping -h dbhost -uroot -pTestRoot123! --silent" >/dev/null 2>&1 && { ready=1; break; }
+        else
+            docker run --rm --network "$net" "$image" sh -c "pg_isready -h dbhost -U postgres" >/dev/null 2>&1 && { ready=1; break; }
+        fi
+        i=$((i + 1)); sleep 2
+    done
+    sqlf="sql_${engine}_$$.log"
+    if [ "$ready" -ne 1 ]; then
+        echo "FAIL: $engine/sql-readonly - DB 서버가 60초 내에 준비되지 않음"; fail=1
+    else
+        if [ "$engine" = "mysql" ]; then
+            on="mysql -h dbhost -uroot -pTestRoot123! -e \"SET GLOBAL log_output='TABLE'; TRUNCATE mysql.general_log; SET GLOBAL general_log='ON';\""
+            off="mysql -h dbhost -uroot -pTestRoot123! -N -B -e \"SET GLOBAL general_log='OFF'; SELECT argument FROM mysql.general_log WHERE command_type IN ('Query','Execute');\""
+        else
+            on="PGPASSWORD=TestRoot123! psql -h dbhost -U postgres -qAt -c \"ALTER SYSTEM SET log_statement='all'\" -c 'SELECT pg_reload_conf()' >/dev/null; sleep 1; PGPASSWORD=TestRoot123! psql -h dbhost -U postgres -qAt -c \"SELECT 'kisa_sql_begin'\" >/dev/null"
+            off="PGPASSWORD=TestRoot123! psql -h dbhost -U postgres -qAt -c \"SELECT 'kisa_sql_end'\" >/dev/null"
+        fi
+        docker run --rm --network "$net" -e DB_HOST=dbhost -e DB_PASSWORD=TestRoot123! "$image" sh -c "
+            sh 08_dbms/tests/fixtures/setup.sh $engine vuln >/dev/null 2>&1
+            $on 2>/dev/null
+            sh 08_dbms/run.sh -e $engine --host dbhost --user $dbuser -o /tmp/out >/dev/null 2>&1
+            $off 2>/dev/null" > "$sqlf"
+        if [ "$engine" = "postgres" ]; then
+            docker logs "$db_cid" 2>&1 | awk '/kisa_sql_begin/ { on = 1; next } /kisa_sql_end/ { on = 0 }
+                on && /LOG:  statement: / { sub(/.*LOG:  statement: /, ""); print }' > "$sqlf"
+        fi
+        python3 - "$sqlf" "$engine" <<'PYEOF' || fail=1
+import sys
+sys.path.insert(0, "lib/tests")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+from run_safety_check import SQL_OK
+path, engine = sys.argv[1], sys.argv[2]
+stmts = []
+for line in open(path, encoding="utf-8", errors="replace").read().splitlines():
+    # psql 은 -c 한 번에 여러 문장을 보낸다 - 세미콜론마다 나눠 각각 본다(문자열 속 ; 는 드물고, 있어도 SELECT 안이다)
+    stmts += [s.strip() for s in line.split(";") if s.strip()]
+stmts = [s for s in stmts if "general_log" not in s and "kisa_sql_" not in s]
+bad = [s for s in stmts if not SQL_OK.match(s)]
+if not stmts:
+    print(f"FAIL: {engine}/sql-readonly - 쿼리 로그가 비어 있음(수집 실패 - 검증 불가)"); sys.exit(1)
+if bad:
+    print(f"FAIL: {engine}/sql-readonly - 읽기 전용이 아닌 문장 {len(bad)}건")
+    for b in bad[:20]:
+        print("  - " + b[:200])
+    sys.exit(1)
+print(f"PASS: {engine}/sql-readonly (DB 로 보낸 문장 {len(stmts)}건 모두 읽기 전용)")
+PYEOF
+    fi
+    rm -f "$sqlf"
     docker rm -f "$db_cid" >/dev/null 2>&1 || true
     docker network rm "$net" >/dev/null 2>&1 || true
 done

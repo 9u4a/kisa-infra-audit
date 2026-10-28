@@ -49,6 +49,32 @@ $overrides}"
     return 0
 }
 
+# _u01_linux_telnet -- Telnet 이 쓰이면(프로세스·telnet.socket·xinetd·inetd) 가이드 LINUX 조치(/etc/securetty 에
+# pts/* 없음 + /etc/pam.d/login 의 pam_securetty.so 활성)로 root 직접 접속 차단 여부를 본다. 결과: U01_TEL=""(미사용)
+# / GOOD / VULN, U01_TEL_EVD. 진단 검수 U-R17: 예전에는 sshd 가 없으면 telnet 을 보지 않고 GOOD 이었다.
+_u01_linux_telnet() {
+    U01_TEL=""; U01_TEL_EVD=""
+    _use=""
+    command -v pgrep >/dev/null 2>&1 && [ -n "$(pgrep -f 'in\.telnetd|telnetd' 2>/dev/null)" ] && _use="프로세스"
+    if command -v systemctl >/dev/null 2>&1; then
+        run_to 10 systemctl is-active --quiet telnet.socket 2>/dev/null && _use="$_use telnet.socket(active)"
+        case "$(run_to 10 systemctl is-enabled telnet.socket 2>/dev/null | head -n1)" in enabled*) _use="$_use telnet.socket(enabled)" ;; esac
+    fi
+    grep -qE '^[[:space:]]*disable[[:space:]]*=[[:space:]]*no' /etc/xinetd.d/telnet 2>/dev/null && _use="$_use xinetd"
+    awk '$0 !~ /^[[:space:]]*#/ && $1 == "telnet" { f = 1 } END { exit !f }' /etc/inetd.conf 2>/dev/null && _use="$_use inetd"
+    [ -n "$_use" ] || return 0
+    _pts=$(grep -E '^[[:space:]]*pts/' /etc/securetty 2>/dev/null | tr '\n' ' ')
+    _pam=$(grep -vE '^[[:space:]]*#' /etc/pam.d/login 2>/dev/null | grep -E 'pam_securetty\.so')
+    U01_TEL_EVD="Telnet 사용 근거:$_use
+/etc/securetty: $( [ -f /etc/securetty ] && echo "있음(pts 항목: ${_pts:-없음})" || echo 없음)
+/etc/pam.d/login pam_securetty: ${_pam:-없음}"
+    if [ -f /etc/securetty ] && [ -z "$_pts" ] && [ -n "$_pam" ]; then
+        U01_TEL="GOOD"
+    else
+        U01_TEL="VULN"
+    fi
+}
+
 run_check() {
     case "$OS_FAMILY" in
         rhel|debian|suse)
@@ -57,6 +83,15 @@ run_check() {
                 CHECK_DETAIL="SSH 서비스(sshd)가 설치되어 있지 않아 원격 root 접속 위험이 없음"
                 CHECK_EVIDENCE="command -v sshd -> not found"
             fi
+            _u01_linux_telnet
+            if [ "$U01_TEL" = "VULN" ]; then
+                CHECK_STATUS="VULN"
+                CHECK_DETAIL="Telnet 서비스가 사용 중이며 root 직접 접속이 차단되지 않음(/etc/securetty 의 pts 항목 또는 pam_securetty 미적용) / SSH: $CHECK_DETAIL"
+            elif [ "$U01_TEL" = "GOOD" ] && [ "$CHECK_STATUS" = "GOOD" ]; then
+                CHECK_DETAIL="$CHECK_DETAIL / Telnet: securetty·pam_securetty 로 root 직접 접속 차단됨"
+            fi
+            [ -n "$U01_TEL" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+$U01_TEL_EVD"
             ;;
         solaris)
             if _u01_check_sshd; then

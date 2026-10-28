@@ -14,6 +14,11 @@ run_check() {
         return
     fi
     grants=$(oracle_query "SELECT grantee, privilege FROM dba_tab_privs WHERE table_name = 'AUD\$' AND grantee NOT IN ('SYS','SYSTEM') ORDER BY grantee;")
+    # 두 번째 쿼리 실패를 "권한 없음"=GOOD 으로 읽던 문제(진단 검수 D-R11)
+    if [ $? -ne 0 ]; then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="AUD\$ 권한 조회 실패: $(head -1 "$DB_ERR_FILE" 2>/dev/null) $grants"; CHECK_EVIDENCE="owner=$owner_t"
+        return
+    fi
     CHECK_EVIDENCE="owner=$owner_t
 $grants"
     if [ "$owner_t" = "SYS" ] && [ -z "$grants" ]; then

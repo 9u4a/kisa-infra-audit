@@ -36,10 +36,13 @@ $f: Anonymous 블록 $( [ -n "$anon_block" ] && echo '활성' || echo '없음/�
     for f in /etc/samba/smb.conf /usr/lib/smb.conf; do
         [ -f "$f" ] || continue
         checked=1
-        guest=$(grep -iE '^[[:space:]]*guest ok' "$f" 2>/dev/null | tail -n1)
+        # 진단 검수 U-R15: guest ok 는 공유([섹션])마다 따로 적용되므로 마지막 값 하나가 아니라 모든 섹션을 본다.
+        # "public" 은 "guest ok" 의 동의어. 주석은 # 와 ; 둘 다.
+        guest=$(awk '/^[[:space:]]*\[/ { sec = $0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", sec) }
+            tolower($0) ~ /^[[:space:]]*(guest[[:space:]]*ok|public)[[:space:]]*=[[:space:]]*(yes|true|1)[[:space:]]*$/ { print sec " " $0 }' "$f" 2>/dev/null)
         evidence="$evidence
-$f: ${guest:-guest ok 미설정(기본값 no)}"
-        printf '%s' "$guest" | grep -qiE '=\s*yes' && violations="$violations Samba(guest ok=yes)"
+$f: ${guest:-guest ok = yes 인 공유 없음(기본값 no)}"
+        [ -n "$guest" ] && violations="$violations Samba(guest ok=yes)"
     done
 
     if [ "$checked" -eq 0 ]; then

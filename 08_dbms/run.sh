@@ -87,6 +87,25 @@ else
     fi
 fi
 
+# 엔진 이름 오타(-e postgresql 등)면 preflight 를 건너뛰고 checks/<오타>/ 가 없어 전 항목 NA 가 났다(진단 검수 D-R9).
+case "$DBMS_ENGINE" in
+    mysql|postgres|oracle) ;;
+    mssql) log_error "MSSQL 은 run.ps1(PowerShell)로 진단합니다: .\\run.ps1 -SqlHost <호스트>"; exit 2 ;;
+    *) log_error "지원하지 않는 DBMS 엔진입니다: $DBMS_ENGINE (지원: mysql, postgres, oracle)"; exit 2 ;;
+esac
+
+# Oracle 은 DB_USER/DB_PASSWORD 가 모두 있어야 계정 접속을 하고, 아니면 "/ as sysdba"(로컬 OS 인증)로 접속한다.
+# 예전에는 --user/--host 를 주고 DB_PASSWORD 만 빠뜨리면 조용히 로컬 sysdba 로 붙어 엉뚱한(로컬) 인스턴스를
+# 진단했다(진단 검수 D-R5). 계정·원격 지정이 있는데 비밀번호가 없으면 시작 전에 멈춘다.
+if [ "$DBMS_ENGINE" = "oracle" ] && [ -z "${DB_PASSWORD:-}" ] && { [ -n "${DB_USER:-}" ] || [ -n "${DB_HOST:-}" ]; }; then
+    log_error "Oracle 계정 접속(--user/--host) 에는 DB_PASSWORD 환경변수가 필요합니다. 로컬 OS 인증(/ as sysdba)은 --user/--host 를 생략하세요."
+    exit 2
+fi
+
+# 원격 모드(--host 가 이 호스트가 아님)면 설정 파일·프로세스 기반 항목은 MANUAL 로 돌린다(진단 검수 D-R1, db_remote_skip).
+if db_is_remote; then DB_REMOTE=1; else DB_REMOTE=0; fi
+export DB_REMOTE
+
 # mktemp 가 없을 때도 예측 가능한 /tmp 고정 경로를 그대로 쓰지 않는다(root 권한으로 기존
 # 심볼릭 링크를 따라가 덮어쓰는 공격 방지) - noclobber 로 새 파일만 만들고, 이미 있으면 중단.
 DB_ERR_FILE=$(mktemp 2>/dev/null) || {
@@ -100,9 +119,9 @@ export DB_HOST DB_PORT DB_USER DB_NAME DB_SOCKET DB_ERR_FILE DBMS_ENGINE
 
 SELECTED=""
 if [ -n "$ITEM_FILTER" ]; then
-    _old_ifs=$IFS; IFS=,
-    for code in $ITEM_FILTER; do SELECTED="$SELECTED $code"; done
-    IFS=$_old_ifs
+    # IFS=, 를 건 채로 code_is_known 을 부르면 그 안의 $(echo $2) 가 줄바꿈으로 나뉘지 않아 모든 코드가 "알 수 없음"이
+    # 됐다(Oracle 실기 중 -i 로 발견) - 콤마를 공백으로 바꿔 기본 IFS 로 돈다.
+    for code in $(printf '%s' "$ITEM_FILTER" | tr ',' ' '); do if code_is_known "$code" "$ALL_CODES"; then SELECTED="$SELECTED $code"; else log_warn "알 수 없는 항목 코드라 건너뜀: $code"; fi; done
 elif [ -n "$GROUP_FILTER" ]; then
     for code in $ALL_CODES; do
         gno=$(guide_field "$GUIDE_JSON" "$code" "group_no")
@@ -118,6 +137,7 @@ if [ "$TOTAL" -eq 0 ]; then
     exit 2
 fi
 
+run_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
 prepare_output_dir "$OUT_BASE" "$CATEGORY_NUM"
 NDJSON="$OUT_DIR/.result.ndjson"
 : > "$NDJSON"
@@ -141,6 +161,12 @@ log_to_file "진단 시작: 엔진=$DBMS_ENGINE 대상=$TOTAL 항목"
 if db_preflight; then
     echo "DB 접속    : 사전 점검 성공"
     log_to_file "DB 접속 사전 점검 성공"
+    # 접속 계정 권한 확인(진단 검수 D-R2) - 부족하면 해당 항목 판정을 ERROR(CDB$ROOT 는 MANUAL)로 바꾼다.
+    db_privilege_check
+    if [ -n "$DB_PRIV_LIMITED" ]; then
+        log_warn "$DB_PRIV_MSG - 다음 항목은 $DB_PRIV_STATUS 로 표시합니다: $DB_PRIV_LIMITED"
+        log_to_file "권한 제한: $DB_PRIV_MSG ($DB_PRIV_LIMITED)"
+    fi
 else
     log_warn "DB 접속 사전 점검 실패 - 계정 잠금 방지를 위해 재시도하지 않고 DB 조회 항목은 ERROR 로 처리합니다: $DB_CONN_FAIL_MSG"
     log_to_file "DB 접속 사전 점검 실패(재시도 안 함): $DB_CONN_FAIL_MSG"
@@ -163,12 +189,8 @@ for code in $SELECTED; do
     if [ -f "$check_file" ]; then
         CHECK_STATUS="ERROR"
         CHECK_DETAIL="check 스크립트 오류"
-        # shellcheck disable=SC1090
-        . "$check_file"
-        if command -v run_check >/dev/null 2>&1; then
-            run_check
-        fi
-        unset -f run_check 2>/dev/null || true
+        run_check_isolated "$check_file"
+        db_privilege_apply "$code"
     fi
 
     progress_show "$_n" "$TOTAL" "$code" "$title" "$CHECK_STATUS"
@@ -191,6 +213,7 @@ done
 RESULT_JSON="$OUT_DIR/result.json"
 result_finalize "$NDJSON" "$RESULT_JSON" "$CATEGORY_NAME" "$HOST_NAME" "$DBMS_ENGINE"
 rm -f "$NDJSON"
+run_lock_release
 
 render_report_html "$LIB_DIR" "$GUIDE_JSON" "$RESULT_JSON" "$OUT_DIR/report.html"
 write_summary "$OUT_DIR/summary.txt" "$CATEGORY_NAME" "$HOST_NAME" "$DBMS_ENGINE" "$N_VULN" "$N_MANUAL" "$N_ERROR" "$N_NA" "$N_GOOD"

@@ -39,10 +39,18 @@ run_check() {
                 CHECK_EVIDENCE=""
                 return
             fi
-            line=$(grep -E '^[[:space:]]*auth[[:space:]]+(required|requisite|sufficient)[[:space:]]+pam_wheel\.so' "$pam_su" 2>/dev/null | head -n1)
+            # 진단 검수 U-R8: 그룹 밖 사용자를 실제로 막는 것은 required/requisite 이면서 deny 가 없는 줄뿐이다.
+            # sufficient(…trust)는 그룹 구성원을 무암호 통과시킬 뿐 나머지를 막지 않고, deny 는 반대로 그 그룹만 막는다 -
+            # 예전에는 sufficient trust 줄 하나만 있어도 GOOD 이었다. 주석(#) 줄은 ^[[:space:]]*auth 에 맞지 않아 제외.
+            all_l=$(grep -E '^[[:space:]]*auth[[:space:]]+[^[:space:]]+[[:space:]]+pam_wheel\.so' "$pam_su" 2>/dev/null)
+            line=$(printf '%s\n' "$all_l" | grep -E '^[[:space:]]*auth[[:space:]]+(required|requisite)[[:space:]]+pam_wheel\.so' | grep -vE '[[:space:]]deny([[:space:]]|$)' | head -n1)
             if [ -n "$line" ]; then
                 CHECK_STATUS="GOOD"
                 CHECK_DETAIL="pam_wheel.so 모듈이 활성화되어 su 사용이 특정 그룹으로 제한됨"
+            elif [ -n "$all_l" ]; then
+                CHECK_STATUS="VULN"
+                CHECK_DETAIL="$pam_su 의 pam_wheel.so 줄이 sufficient(trust)/deny 등이라 그룹 밖 사용자의 su 를 막지 않음"
+                line="$all_l"
             else
                 CHECK_STATUS="VULN"
                 CHECK_DETAIL="$pam_su 에 pam_wheel.so 활성화 설정이 없어 모든 사용자가 su 를 사용할 수 있음"

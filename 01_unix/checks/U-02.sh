@@ -23,14 +23,26 @@ $logindefs: PASS_MAX_DAYS=${max_days:-미설정} PASS_MIN_DAYS=${min_days:-미�
                 fi
             fi
 
-            if [ -f "$pwquality" ]; then
-                minlen=$(grep -E '^[[:space:]]*minlen' "$pwquality" 2>/dev/null | tail -n1 | sed -E 's/[^0-9]*([0-9]+).*/\1/')
-                evidence="$evidence
-$pwquality: minlen=${minlen:-미설정}"
-                checks_total=$((checks_total + 1))
-                if [ -n "$minlen" ] && [ "$minlen" -ge 8 ] 2>/dev/null; then
-                    ok_count=$((ok_count + 1))
-                fi
+            # 진단 검수 U-R12: 예전에는 pwquality.conf 가 없으면 복잡성 항목을 아예 빼고 PASS_MAX_DAYS 만으로 GOOD 이었다.
+            # 이제 복잡성(최소 길이)은 항상 판정 대상이며, 출처는 pwquality.conf(+ pwquality.conf.d, 나중 파일·나중 줄이
+            # 이김 - libpwquality 읽기 순서) 다음으로 PAM 줄의 minlen= 인자(모듈 인자가 conf 보다 우선)다. 주석 줄 제외.
+            # 한계: pam_pwquality 가 PAM 스택에 실제로 있는지는 보지 않는다(설정 값 존재 여부만 판정).
+            minlen=""; ml_src=""
+            for f in "$pwquality" /etc/security/pwquality.conf.d/*.conf; do
+                [ -f "$f" ] || continue
+                v=$(grep -E '^[[:space:]]*minlen[[:space:]]*=' "$f" 2>/dev/null | tail -n1 | sed -E 's/[^0-9]*([0-9]+).*/\1/')
+                [ -n "$v" ] && { minlen="$v"; ml_src="$f"; }
+            done
+            for f in /etc/pam.d/system-auth /etc/pam.d/password-auth /etc/pam.d/common-password; do
+                [ -f "$f" ] || continue
+                v=$(grep -vE '^[[:space:]]*#' "$f" 2>/dev/null | grep -E 'pam_(pwquality|cracklib)\.so.*[[:space:]]minlen=' | tail -n1 | sed -nE 's/.*[[:space:]]minlen=([0-9]+).*/\1/p')
+                [ -n "$v" ] && { minlen="$v"; ml_src="$f"; }
+            done
+            evidence="$evidence
+${ml_src:-$pwquality}: minlen=${minlen:-미설정}"
+            checks_total=$((checks_total + 1))
+            if [ -n "$minlen" ] && [ "$minlen" -ge 8 ] 2>/dev/null; then
+                ok_count=$((ok_count + 1))
             fi
 
             if [ "$checks_total" -eq 0 ]; then

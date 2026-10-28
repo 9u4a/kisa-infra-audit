@@ -12,7 +12,7 @@ run_fix() {
         [ -z "$entry" ] && continue
         shell=$(printf '%s' "$entry" | awk -F: '{print $NF}')
         case "$shell" in
-            */nologin|/bin/false) continue ;;
+            */nologin|*/false) continue ;;   # check(U-11)와 같이 /usr/bin/false 도 인정(진단 검수 U-R17)
         esac
         if usermod -s "$nologin" "$name" 2>/dev/null; then
             applied="$applied $name"

@@ -7,11 +7,10 @@ run_fix() {
     case " $WEB_ENGINES " in *" apache "*)
         conf=$(apache_conf_path)
         files="$conf $(apache_extra_confs)"
+        # checks/WEB-16.sh 와 같은 기준: 실제 로드 순서상 마지막 ServerTokens 가 Prod 여야 한다. 메인 설정 끝에
+        # 붙이면 모든 Include(Debian conf-enabled/security.conf 포함)보다 뒤라 마지막 값이 된다.
         hit=""
-        for f in $files; do
-            [ -f "$f" ] || continue
-            grep -qE '^[^#]*ServerTokens[[:space:]]+Prod' "$f" 2>/dev/null && hit=1
-        done
+        case "$(apache_last_directive ServerTokens | cut -f1 | tr 'A-Z' 'a-z')" in prod|productonly) hit=1 ;; esac
         if [ -z "$hit" ] && [ -f "$conf" ]; then
             fix_backup "$conf"
             printf '\n# KISA WEB-16: 서버 정보 노출 제한\nServerTokens Prod\nServerSignature Off\n' >> "$conf"
@@ -26,6 +25,12 @@ run_fix() {
         for f in $files; do
             [ -f "$f" ] || continue
             grep -qE '^[^#]*server_tokens[[:space:]]+off' "$f" 2>/dev/null && hit=1
+            # 다른 블록의 server_tokens on/build 도 check 는 노출로 본다 - off 로 바꾼다
+            if grep -qE '^[^#]*server_tokens[[:space:]]+(on|build)' "$f" 2>/dev/null; then
+                fix_backup "$f"
+                sed -i -E 's/^([^#]*server_tokens[[:space:]]+)(on|build)/\1off/' "$f"
+                applied="$applied nginx($f: on->off)"
+            fi
         done
         if [ -z "$hit" ] && [ -f "$conf" ]; then
             fix_backup "$conf"

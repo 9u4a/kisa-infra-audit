@@ -3,16 +3,16 @@
   "WEB-02": "MANUAL",
   "WEB-03": "VULN",
   "WEB-04": "VULN",
-  "WEB-05": "MANUAL",
+  "WEB-05": "GOOD",
   "WEB-06": "GOOD",
   "WEB-07": "GOOD",
   "WEB-08": "VULN",
   "WEB-09": "MANUAL",
-  "WEB-10": "GOOD",
+  "WEB-10": "MANUAL",
   "WEB-11": "MANUAL",
   "WEB-12": "GOOD",
   "WEB-13": "VULN",
-  "WEB-14": "GOOD",
+  "WEB-14": "VULN",
   "WEB-15": "MANUAL",
   "WEB-16": "VULN",
   "WEB-17": "GOOD",
@@ -24,5 +24,5 @@
   "WEB-23": "NA",
   "WEB-24": "MANUAL",
   "WEB-25": "MANUAL",
-  "WEB-26": "GOOD"
+  "WEB-26": "VULN"
 }

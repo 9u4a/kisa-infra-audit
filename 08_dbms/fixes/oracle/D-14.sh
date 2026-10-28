@@ -9,7 +9,7 @@ run_fix() {
     for f in "$home/network/admin/listener.ora" "$home/network/admin/sqlnet.ora"; do
         [ -f "$f" ] || continue
         perm=$(stat -L -c '%a' "$f" 2>/dev/null)
-        [ -n "$perm" ] && [ "$perm" -le 644 ] 2>/dev/null && continue
+        [ -n "$perm" ] && perm_within "$perm" 644 && continue
         owner=$(stat -L -c '%U' "$f" 2>/dev/null)
         case "$owner" in
             root|oracle) : ;;

@@ -196,12 +196,7 @@ for code in $VULN_CODES; do
 
     CHECK_STATUS="ERROR"; CHECK_DETAIL="check 스크립트 없음"; CHECK_EVIDENCE=""
     if [ -f "$check_file" ]; then
-        # shellcheck disable=SC1090
-        . "$check_file"
-        if command -v run_check >/dev/null 2>&1; then
-            run_check
-        fi
-        unset -f run_check 2>/dev/null || true
+        run_check_isolated "$check_file"
     fi
 
     if { [ "$FIX_STATUS" = "APPLIED" ] || [ "$FIX_STATUS" = "NA" ]; } && [ "$CHECK_STATUS" != "VULN" ] && [ "$CHECK_STATUS" != "ERROR" ]; then

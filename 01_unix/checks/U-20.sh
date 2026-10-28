@@ -7,7 +7,8 @@ run_check() {
     if [ -f /etc/xinetd.conf ]; then
         check_owner_perm "/etc/xinetd.conf" "root" 600
         base_status=$CHECK_STATUS; base_detail=$CHECK_DETAIL; base_evd=$CHECK_EVIDENCE
-        bad_d=$(find /etc/xinetd.d -maxdepth 1 -type f \( ! -user root -o -perm -0022 \) 2>/dev/null)
+        # -perm -0022 는 "그룹과 기타 모두 쓰기"일 때만 맞아 0664/0646 이 통과했다(진단 검수 U-R2) - 둘 중 하나라도 쓰기면 위반.
+        bad_d=$(find /etc/xinetd.d -maxdepth 1 -type f \( ! -user root -o -perm -0020 -o -perm -0002 \) 2>/dev/null)
         if [ -n "$bad_d" ]; then
             CHECK_STATUS="VULN"
             CHECK_DETAIL="$base_detail / /etc/xinetd.d 내 기준 미달 파일 존재"

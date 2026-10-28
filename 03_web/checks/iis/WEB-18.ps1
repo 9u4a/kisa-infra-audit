@@ -15,7 +15,10 @@ try {
     $mod = Get-WebConfiguration -Filter "system.webServer/globalModules/add[@name='WebDAVModule']" -PSPath "MACHINE/WEBROOT/APPHOST" -ErrorAction Stop
     $featureInstalled = [bool]$mod
 } catch {
+    # WEB-R7: 조회 실패 표시(사이트별 확인으로 진행하되 GOOD 은 run.ps1 이 ERROR 로 바꾼다)
     $featureInstalled = $null
+    $Global:IisConfigQueryFailed = $true
+    $Global:IisConfigQueryError = "globalModules/WebDAVModule: $($_.Exception.Message)"
 }
 
 if ($featureInstalled -eq $false) {
@@ -28,10 +31,13 @@ if (-not $sites -or $sites.Count -eq 0) {
 }
 
 $vuln = @(); $evid = @()
+# WEB-R8: 하위 application·virtual directory 의 web.config 재정의도 확인한다(예전에는 사이트 루트만 봄)
 foreach ($site in $sites) {
-    $enabled = Get-IisConfigValue -Filter "system.webServer/webdav/authoring" -Name "enabled" -SiteName $site
-    $evid += "[$site] webdav.authoring.enabled = $enabled"
-    if ($enabled -eq $true) { $vuln += $site }
+    foreach ($cp in (Get-IisSiteConfigPaths -SiteName $site)) {
+        $enabled = Get-IisConfigValue -Filter "system.webServer/webdav/authoring" -Name "enabled" -PSPath $cp.PSPath
+        $evid += "[$($cp.Label)] webdav.authoring.enabled = $enabled"
+        if ($enabled -eq $true) { $vuln += $cp.Label }
+    }
 }
 
 if ($vuln.Count -gt 0) {

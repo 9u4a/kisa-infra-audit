@@ -16,7 +16,10 @@ if (-not $sites -or $sites.Count -eq 0) {
 $vuln = @(); $evid = @(); $manual = @()
 foreach ($site in $sites) {
     $path = Get-IisSitePhysicalPath -SiteName $site
-    if (-not $path -or -not (Test-Path $path)) {
+    if (-not $path -or -not (Test-Path -LiteralPath $path)) {
+        # WEB-R7: 경로를 확인하지 못한 사이트를 건너뛴 채 GOOD 을 내지 않는다(실패 표시 → run.ps1 이 GOOD 을 ERROR 로)
+        $Global:IisConfigQueryFailed = $true
+        $Global:IisConfigQueryError = "physicalPath ($site): 경로를 찾을 수 없음($path)"
         $evid += "[$site] 물리 경로를 찾을 수 없음: $path"
         continue
     }
@@ -33,7 +36,14 @@ foreach ($site in $sites) {
     $queue.Enqueue(@($path, 0))
     while ($queue.Count -gt 0) {
         $cur = $queue.Dequeue()
-        foreach ($it in @(Get-ChildItem -LiteralPath $cur[0] -Force -ErrorAction SilentlyContinue)) {
+        $lsErr = $null
+        $children = @(Get-ChildItem -LiteralPath $cur[0] -Force -ErrorAction SilentlyContinue -ErrorVariable lsErr)
+        if ($lsErr) {
+            # WEB-R7: 읽지 못한 폴더(권한 부족 등)가 있으면 "링크 없음"을 확정할 수 없다
+            $Global:IisConfigQueryFailed = $true
+            $Global:IisConfigQueryError = "$($cur[0]) 하위 목록 조회 실패: $($lsErr[0].Exception.Message)"
+        }
+        foreach ($it in $children) {
             $visited++
             if ($visited -gt $limit) { $truncated = $true; break }
             $isLink = [bool]($it.Attributes -band [IO.FileAttributes]::ReparsePoint)

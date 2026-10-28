@@ -3,10 +3,11 @@ run_fix() {
     banner_text="Authorized access only. All activity may be monitored and reported."
     applied=""
 
+    # check(U-62)와 같은 기준(진단 검수 U-R17): 배포판 기본 문구만 있으면 경고문을 덧붙인다(기존 내용은 유지).
     for f in /etc/motd /etc/issue; do
-        [ -s "$f" ] && continue
+        [ -s "$f" ] && [ "$(banner_custom_lines "$f")" -gt 0 ] && continue
         fix_backup "$f"
-        printf '%s\n' "$banner_text" > "$f"
+        printf '%s\n' "$banner_text" >> "$f"
         applied="$applied $f"
     done
 

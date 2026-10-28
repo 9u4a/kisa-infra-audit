@@ -6,7 +6,8 @@
 run_check() {
     systemd_dir="/etc/systemd/system"
     if [ -d "$systemd_dir" ]; then
-        violations=$(find -L "$systemd_dir" -maxdepth 2 -type f \( ! -user root -o -perm -0022 \) 2>/dev/null | head -n 50)
+        # -perm -0022 는 "그룹과 기타 모두 쓰기"일 때만 맞아 0664/0646 이 통과했다(진단 검수 U-R2) - 둘 중 하나라도 쓰기면 위반.
+        violations=$(find -L "$systemd_dir" -maxdepth 2 -type f \( ! -user root -o -perm -0020 -o -perm -0002 \) 2>/dev/null | head -n 50)
         if [ -z "$violations" ]; then
             CHECK_STATUS="GOOD"
             CHECK_DETAIL="$systemd_dir 하위 시작 스크립트(유닛 파일)가 root 소유이며 그룹/기타 쓰기 권한이 없음"

@@ -7,8 +7,9 @@ run_fix() {
         return
     fi
     fix_backup "$f"
-    if grep -qE '^[[:space:]]*(export[[:space:]]+)?TMOUT=[0-9]+' "$f"; then
-        sed -i -E 's/^[[:space:]]*(export[[:space:]]+)?TMOUT=[0-9]+.*/TMOUT=600/' "$f"
+    # check(U-12)와 같이 따옴표·readonly 등이 붙은 형태도 대상으로 한다(진단 검수 U-R7). TMOUT=0 도 600 으로 바뀐다.
+    if grep -qE '^[[:space:]]*((export|readonly|typeset|declare)([[:space:]]+-[a-zA-Z]+)*[[:space:]]+)?TMOUT=["'"'"']?[0-9]+' "$f"; then
+        sed -i -E 's/^[[:space:]]*((export|readonly|typeset|declare)([[:space:]]+-[a-zA-Z]+)*[[:space:]]+)?TMOUT=["'"'"']?[0-9]+.*/TMOUT=600/' "$f"
     else
         printf 'TMOUT=600\n' >> "$f"
     fi

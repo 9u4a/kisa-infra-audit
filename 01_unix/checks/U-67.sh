@@ -3,9 +3,11 @@
 #                        취약 = 소유자가 root가 아니거나 권한이 644를 초과하는 경우
 # 자동화 범위: LINUX/SOLARIS 기준 /var/log, AIX 기준 /var/adm, HP-UX 기준 /var/adm/syslog
 # (경로는 문서 기준이며 AIX/HP-UX 는 미검증).
-# 디렉터리 최상위(하위 디렉터리 제외)만 본다 - find -maxdepth 는 GNU/BSD 확장이라 Solaris/AIX/
-# HP-UX 의 네이티브 find 에서 지원 여부를 신뢰할 수 없으므로(실기 검증 불가), 셸 글롭으로
-# 직접 순회한다(모든 Unix 셸에서 수십 년간 동일하게 동작하는 가장 안전한 공통 분모).
+# 진단 검수 U-R11: 예전에는 디렉터리 최상위 30개 파일만 보고, 소유자·권한을 못 읽은 파일은 건너뛰었다.
+# 이제 하위 디렉터리까지 모든 일반 파일을 POSIX find 조건(-maxdepth 없이 -user/-perm 만 - Solaris/AIX/HP-UX
+# 네이티브 find 에도 있는 표준 조건)으로 검사하고, 시간 초과·find 실패는 "위반 없음"으로 보지 않는다(ERROR).
+# 644 초과 = 0133 비트 또는 특수비트(4000/2000/1000) 중 하나라도 있음(-perm -0133 은 "전부"라 쓰지 않는다).
+U67_FIND_COND='( ! -user root -o -perm -0100 -o -perm -0020 -o -perm -0010 -o -perm -0002 -o -perm -0001 -o -perm -4000 -o -perm -2000 -o -perm -1000 )'
 
 _u67_check_logdir() {
     _dir=$1
@@ -15,31 +17,24 @@ _u67_check_logdir() {
         CHECK_EVIDENCE=""
         return
     fi
-    _bad=""
-    _n=0
-    for _f in "$_dir"/*; do
-        [ -f "$_f" ] || continue
-        _n=$((_n + 1))
-        [ "$_n" -gt 30 ] && break
-        _ls=$(ls -ldL "$_f" 2>/dev/null)
-        _owner=$(printf '%s' "$_ls" | awk '{print $3}')
-        _perm=$(_mode_str_to_octal "$(printf '%s' "$_ls" | awk '{print $1}')")
-        if [ -z "$_owner" ] || [ -z "$_perm" ]; then
-            continue
-        fi
-        if [ "$_owner" != "root" ] || ! [ "$_perm" -le 644 ] 2>/dev/null; then
-            _bad="$_bad
-$_ls"
-        fi
-    done
-    if [ -z "$_bad" ]; then
-        CHECK_STATUS="GOOD"
-        CHECK_DETAIL="$_dir 내 최상위 로그 파일이 모두 root 소유이며 권한이 644 이하임"
+    # shellcheck disable=SC2086
+    _out=$( { set -f; run_to 300 find "$_dir" -type f $U67_FIND_COND -print 2>/dev/null; echo "__RC=$?"; } \
+        | awk '/^__RC=/ { print "__N=" c + 0; print; exit } { c++; if (c <= 50) print }')
+    _rc=$(printf '%s\n' "$_out" | sed -n 's/^__RC=//p')
+    _cnt=$(printf '%s\n' "$_out" | sed -n 's/^__N=//p')
+    _list=$(printf '%s\n' "$_out" | grep -vE '^__(RC|N)=' | sed '/^$/d')
+    if [ -n "$_list" ]; then
+        CHECK_STATUS="VULN"
+        CHECK_DETAIL="$_dir 내(하위 포함) 소유자가 root가 아니거나 권한이 644를 초과하는 로그 파일이 ${_cnt:-?}건 존재함 (최대 50건 표시)"
+        CHECK_EVIDENCE=$(printf '%s\n' "$_list" | while IFS= read -r _f; do ls -ld "$_f" 2>/dev/null || printf '%s\n' "$_f"; done)
+    elif [ -z "$_rc" ] || [ "$_rc" -ne 0 ]; then
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="$_dir 검색(find)이 실패하거나 시간 제한(300초)을 넘김(종료코드 ${_rc:-?}) - 확인하지 못함"
         CHECK_EVIDENCE=""
     else
-        CHECK_STATUS="VULN"
-        CHECK_DETAIL="$_dir 내 소유자가 root가 아니거나 권한이 644를 초과하는 로그 파일이 존재함 (최대 30건 확인)"
-        CHECK_EVIDENCE=$(printf '%s' "$_bad" | sed '/^$/d')
+        CHECK_STATUS="GOOD"
+        CHECK_DETAIL="$_dir 내(하위 포함) 로그 파일이 모두 root 소유이며 권한이 644 이하임"
+        CHECK_EVIDENCE=""
     fi
 }
 

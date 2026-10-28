@@ -3,10 +3,11 @@
 #   RequireSignOrSeal(항상), SealSecureChannel(가능한 경우 암호화), SignSecureChannel(가능한 경우 서명)
 # 도메인 구성원에게만 해당하는 정책이므로, 워크그룹(비도메인) 환경은 NA 로 처리한다.
 
+# W-R14: 예전에는 CIM 조회 실패를 "워크그룹 = NA" 로 처리했다 - 도메인 가입 여부를 확인하지 못하면 ERROR.
 try {
     $partOfDomain = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).PartOfDomain
 } catch {
-    $partOfDomain = $false
+    return New-CheckResult -Code "W-60" -Status "ERROR" -Detail "도메인 가입 여부(Win32_ComputerSystem) 조회 실패: $($_.Exception.Message)"
 }
 
 if (-not $partOfDomain) {

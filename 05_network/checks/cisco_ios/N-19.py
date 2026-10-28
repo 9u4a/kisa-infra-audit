@@ -1,25 +1,25 @@
 # N-19 (상) SNMP ACL 설정 [Cisco IOS]
 # 판단 기준(가이드 원문): 양호 = SNMP 비활성화, 또는 SNMP 접근 제한 ACL 설정 / 취약 = ACL 미설정
-import re
+from parsers import cisco_ios as cio
 
 
 def check(ctx):
-    # 주의: \s 는 개행도 포함하므로 옵션 그룹에 쓰면 다음 줄(예: "!")까지 캡처해버리는 버그가 있었다
-    # (실기 테스트로 발견). 줄 내부 공백만 매치하도록 [ \t] 를 사용해 줄 경계를 넘지 않게 한다.
-    community_lines = ctx.find(r"^(snmp-server community \S+(?:[ \t]+(?:RO|RW))?(?:[ \t]+\S+)?)[ \t]*$")
+    # 예전 정규식(`<string> [RO|RW] [acl]$`)은 `view <이름>`·`ipv6 <acl>` 토큰이 있는 줄을 아예 놓쳐, 그런 줄만
+    # 있으면 NA/GOOD 이 났다(진단 검수 D-R10). parse_snmp_community 로 토큰을 해석한다.
+    community_lines = cio.snmp_community_lines(ctx)
     if not community_lines:
         return {"status": "NA", "detail": "SNMP community 설정이 없음(SNMP 미사용)", "evidence": ""}
     # Community String(비밀번호에 준함)은 증적에 원문으로 남기지 않고 <community> 로 마스킹한다.
     no_acl = []
     evidence_lines = []
     for line in community_lines:
-        tokens = line.split()
-        # tokens: ['snmp-server','community','<string>', optional 'RO'/'RW', optional acl]
-        rest = tokens[3:]
-        has_acl = any(t not in ("RO", "RW") for t in rest)
-        masked = " ".join(["snmp-server", "community", "<community>"] + rest)
+        info = cio.parse_snmp_community(line)
+        if info is None:
+            continue
+        masked = " ".join(["snmp-server", "community", "<community>"] + info["rest"])
         evidence_lines.append(masked)
-        if not has_acl:
+        # IPv4 ACL 이 없으면(ipv6 ACL 만 있어도) IPv4 접근은 제한되지 않는다.
+        if not info["acl"]:
             no_acl.append(masked)
     evidence = "\n".join(evidence_lines)
     if no_acl:

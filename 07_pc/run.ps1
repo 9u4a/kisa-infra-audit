@@ -75,7 +75,12 @@ if (-not $Selected -or $Selected.Count -eq 0) {
 }
 
 if (-not $OutBase) { $OutBase = Join-Path (Split-Path -Parent $ScriptDir) "output" }
-$OutDir = New-OutputDir -BaseDir $OutBase -CategoryNum $CategoryNum
+# R-12: 결과 폴더 접근 권한을 제한하지 못하면 New-PrivateDirectory 가 중단시킨다(예전에는 경고만 하고 진행)
+try { $OutDir = New-OutputDir -BaseDir $OutBase -CategoryNum $CategoryNum }
+catch { Write-Error "결과 폴더 준비 실패: $($_.Exception.Message)"; exit 2 }
+# 비관리자 실행 여부(아래 공통 변환 규칙). 비관리자는 서비스·보안 정책·레지스트리 조회가 조용히 실패해
+# "없음/중지/미설정"으로 읽히기 쉽다(CI 실측: W-18 VULN→NA, W-33 VULN→GOOD).
+$IsElevatedAdmin = Test-IsElevatedAdmin
 
 Show-Banner -Category $CategoryName -Total $Selected.Count -OsFamily $OsFamily
 Write-Log "진단 시작: 환경=$OsFamily 대상=$($Selected.Count)항목"
@@ -95,6 +100,7 @@ foreach ($code in $Selected) {
 
     if (Test-Path $checkFile) {
         $Global:SecPolicyQueried = $false
+        $Global:RegistryQueryFailed = $false; $Global:RegistryQueryError = ""
         try {
             $r = & $checkFile
             if (-not $r) {
@@ -106,6 +112,15 @@ foreach ($code in $Selected) {
         # secedit 내보내기가 실패하면 정책 값이 전부 $null 로 보여 "미설정"으로 오판된다 - 확인하지 못한 판정은 ERROR
         if ($Global:SecPolicyQueried -and $Global:SecEditFailed -and $r.status -in @("GOOD", "VULN")) {
             $r = New-CheckResult -Code $code -Status "ERROR" -Detail "보안 정책(secedit) 조회에 실패해 판정할 수 없음 - 관리자 권한으로 다시 실행 필요"
+        }
+        # W-R14: 레지스트리 조회가 권한 거부 등으로 실패했으면(값 없음과 구분) 그 값으로 내린 판정은 ERROR
+        if ($Global:RegistryQueryFailed -and $r.status -in @("GOOD", "VULN")) {
+            $r = New-CheckResult -Code $code -Status "ERROR" -Detail "레지스트리 조회에 실패해 판정할 수 없음: $($Global:RegistryQueryError) / 원래 판정: $($r.status) $($r.detail)" -Evidence $r.evidence
+        }
+        # 비관리자 실행의 GOOD/NA 는 확인하지 못한 결과일 수 있다 - ERROR 로 바꾸고 원래 판정은 detail 에 남긴다
+        # (운영 안전 기준 S6, sh 의 nonroot_unverified 와 같은 원칙). VULN/MANUAL 은 그대로 둔다.
+        if (-not $IsElevatedAdmin -and $r.status -in @("GOOD", "NA")) {
+            $r = New-CheckResult -Code $code -Status "ERROR" -Detail "관리자 권한이 아니어서 확인하지 못함 - 관리자 권한으로 다시 실행 필요 / 비관리자 판정: $($r.status) $($r.detail)" -Evidence $r.evidence
         }
     } else {
         $r = New-CheckResult -Code $code -Status "ERROR" -Detail "check 스크립트 없음 (미구현 항목)"

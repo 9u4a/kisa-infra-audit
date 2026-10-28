@@ -7,7 +7,8 @@
 $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
 $evidence = "Caption=$($os.Caption) Version=$($os.Version) BuildNumber=$($os.BuildNumber) InstallDate=$($os.InstallDate)"
 
-$hotfixCount = (Get-HotFix -ErrorAction SilentlyContinue | Measure-Object).Count
+# W-R16: Get-HotFix 는 시간 제한이 없어 WMI 이상 시 무기한 대기할 수 있다 - 같은 클래스를 Get-CimInstance(30초 제한)로 조회
+$hotfixCount = try { @(Get-CimInstance -ClassName Win32_QuickFixEngineering -OperationTimeoutSec 30 -ErrorAction Stop).Count } catch { "조회 실패($($_.Exception.Message))" }
 $evidence += "`n설치된 HotFix 수: $hotfixCount"
 
 return New-CheckResult -Code "W-27" -Status "MANUAL" `

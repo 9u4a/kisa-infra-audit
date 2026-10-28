@@ -114,8 +114,17 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
 
     out_base = args.out or os.path.join(REPO_ROOT, "output")
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_dir = os.path.join(out_base, f"{host}_{CATEGORY_NUM}_{ts}")
-    os.makedirs(os.path.join(out_dir, "raw"), exist_ok=True)
+    # 진단 검수 D-R10: 다른 카테고리(prepare_output_dir)와 같이 PID 를 붙여 같은 초의 두 실행이 섞이지 않게 하고,
+    # 결과 폴더를 실행자 전용(700)으로 만든다 - 증적에 장비 설정 발췌가 들어간다(Windows 에서는 chmod 가 사실상 무시됨).
+    out_dir = os.path.join(out_base, f"{host}_{CATEGORY_NUM}_{ts}-{os.getpid()}")
+    os.makedirs(out_base, exist_ok=True)
+    os.makedirs(out_dir, mode=0o700, exist_ok=False)
+    os.makedirs(os.path.join(out_dir, "raw"), mode=0o700)
+    for d in (out_dir, os.path.join(out_dir, "raw")):
+        try:
+            os.chmod(d, 0o700)
+        except OSError:
+            pass
 
     print(f"=== 주요정보통신기반시설 자동 진단 (도구 v{tool_version} / 가이드 {rc.GUIDE_VERSION}) ===")
     print(f"카테고리   : {CATEGORY_NAME}")
@@ -143,8 +152,11 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
             result = {"status": "NA", "detail": f"이 항목은 {vendor_name} 대상이 아니거나 아직 구현되지 않음", "evidence": ""}
 
         status = result.get("status", "ERROR")
-        detail = result.get("detail", "")
-        evidence = result.get("evidence", "")
+        # 진단 검수 D-R4(S5): check 가 설정 원문(VTY 블록·snmp-server 줄)을 넘겨도 비밀번호·community·키 값이
+        # 결과물(result.json·raw·report·csv)에 남지 않도록 여기서 한 번 더 마스킹한다.
+        mask = getattr(vendor_mod, "mask_secrets", None) or (lambda t: t)
+        detail = mask(result.get("detail", ""))
+        evidence = mask(result.get("evidence", ""))
 
         rc.progress_show(i, len(selected), code, title, status)
         items.append({"code": code, "status": status, "detail": detail, "evidence": evidence, "severity": meta.get("severity", "")})
@@ -176,6 +188,11 @@ def main() -> None:
     parser.add_argument("-l", "--list", action="store_true", help="항목 목록만 출력")
     parser.add_argument("-o", "--out", help="결과 출력 경로 (기본: ../output)")
     args = parser.parse_args()
+    # 결과 파일(result.json·raw·report)이 실행자 외에는 읽히지 않게 한다(진단 검수 D-R10, 다른 카테고리의 umask 077 과 동일).
+    try:
+        os.umask(0o077)
+    except (AttributeError, OSError):
+        pass
 
     _, by_code = load_guide()
 

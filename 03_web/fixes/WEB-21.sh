@@ -18,7 +18,8 @@ run_fix() {
         for f in $files; do
             [ -f "$f" ] || continue
             grep -qE '^[^#]*SSLEngine[[:space:]]+on' "$f" 2>/dev/null && ssl_on=1
-            grep -qE '^[^#]*(Redirect[[:space:]]+(permanent|301)|RewriteRule[^#]*https)' "$f" 2>/dev/null && redirect_on=1
+            # checks/WEB-21.sh 와 같은 기준(리다이렉트 대상이 https:// 인 것만 인정)
+            grep -qiE '^[^#]*(Redirect(Match|Permanent)?[[:space:]][^#]*[[:space:]]"?https://|RewriteRule[[:space:]][^#]*[[:space:]]"?https://)' "$f" 2>/dev/null && redirect_on=1
             [ -z "$server_name" ] && server_name=$(grep -E '^[^#]*ServerName[[:space:]]' "$f" 2>/dev/null | tail -n1 | sed -E 's/^[[:space:]]*ServerName[[:space:]]+//')
         done
         if [ -z "$redirect_on" ]; then
@@ -41,7 +42,7 @@ run_fix() {
         hit=""
         for f in $files; do
             [ -f "$f" ] || continue
-            grep -qE '^[^#]*return[[:space:]]+30[12][[:space:]]+https' "$f" 2>/dev/null && hit=1
+            grep -qE '^[^#]*(return[[:space:]]+30[1278][[:space:]]+"?https://|rewrite[[:space:]][^#;]*[[:space:]]"?https://)' "$f" 2>/dev/null && hit=1
         done
         [ -z "$hit" ] && manual_only="$manual_only nginx(정확한 server{} 블록을 텍스트 치환만으로 안전하게 특정할 수 없어 자동 조치 미지원 - listen 80 서버 블록에 'return 301 https://\$host\$request_uri;' 를 수동 추가할 것)"
     esac

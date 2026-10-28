@@ -23,8 +23,9 @@ run_check() {
         shell=$(printf '%s' "$entry" | awk -F: '{print $NF}')
         evidence="$evidence
 $entry"
+        # 진단 검수 U-R17: /usr/bin/false(usrmerge 이후 RHEL/Debian 경로)도 로그인 불가 쉘이다 - 예전에는 VULN.
         case "$shell" in
-            */nologin|/bin/false) ;;
+            */nologin|*/false) ;;
             *) violations="$violations $name(shell=$shell)" ;;
         esac
     done

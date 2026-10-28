@@ -10,13 +10,16 @@ run_check() {
 
     if command -v postconf >/dev/null 2>&1; then
         checked=1
-        relay=$(postconf -h smtpd_relay_restrictions 2>/dev/null)
-        recipient=$(postconf -h smtpd_recipient_restrictions 2>/dev/null)
+        relay=$(run_to 15 postconf -h smtpd_relay_restrictions 2>/dev/null)
+        recipient=$(run_to 15 postconf -h smtpd_recipient_restrictions 2>/dev/null)
         evidence="$evidence
 postfix smtpd_relay_restrictions: ${relay:-미설정}
 postfix smtpd_recipient_restrictions: ${recipient:-미설정}"
-        if ! printf '%s %s' "$relay" "$recipient" | grep -q 'reject_unauth_destination'; then
-            violations="$violations postfix(reject_unauth_destination 없음)"
+        # 진단 검수 U-R17: Postfix 2.10+ 기본값 smtpd_relay_restrictions 는 "permit_mynetworks, permit_sasl_authenticated,
+        # defer_unauth_destination" 이라 미설정이어도 릴레이가 제한된다(postconf -h 는 기본값 포함 실효값을 출력) -
+        # 예전에는 reject_unauth_destination 만 인정해 기본 설치가 거짓 VULN 이었다.
+        if ! printf '%s %s' "$relay" "$recipient" | grep -qE '(reject|defer)_unauth_destination'; then
+            violations="$violations postfix(reject/defer_unauth_destination 없음)"
         fi
     fi
 

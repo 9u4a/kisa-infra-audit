@@ -23,11 +23,18 @@ run_check() {
         return
     fi
 
-    strings=$(grep -E '^[[:space:]]*(com2sec|rocommunity|rwcommunity)[[:space:]]' "$conf" 2>/dev/null | \
-        awk '{ if ($1=="com2sec") print $4; else print $2 }')
+    # 진단 검수 U-R15: includeFile/includeDir 로 불러오는 파일과 IPv6 지시어(com2sec6/rocommunity6/rwcommunity6)까지 본다.
+    all_lines=$(snmpd_conf_lines "$conf")
+    unread=$(printf '%s\n' "$all_lines" | awk -F'\t' '$1 == "!unread" { printf "%s ", $2 }')
+    all_lines=$(printf '%s\n' "$all_lines" | grep -v '^!unread')
+    strings=$(printf '%s\n' "$all_lines" | grep -E '^[[:space:]]*(com2sec6?|rocommunity6?|rwcommunity6?)[[:space:]]' | \
+        awk '{ if ($1 ~ /^com2sec6?$/) print $4; else print $2 }')
 
     if [ -z "$strings" ]; then
-        if grep -qE '^[[:space:]]*createUser' "$conf" 2>/dev/null; then
+        if [ -n "$unread" ]; then
+            CHECK_STATUS="ERROR"
+            CHECK_DETAIL="include 된 SNMP 설정 파일을 읽지 못해 확인하지 못함: $unread"
+        elif printf '%s\n' "$all_lines" | grep -qE '^[[:space:]]*createUser'; then
             CHECK_STATUS="MANUAL"
             CHECK_DETAIL="SNMP v3(createUser)만 사용 중 — 인증 비밀번호 복잡도는 설정 파일에서 확인할 수 없어 수동 확인 필요"
         else
@@ -58,7 +65,10 @@ run_check() {
     CHECK_EVIDENCE="$conf
 검사한 Community String 개수: $(printf '%s\n' "$strings" | grep -c .)"
 
-    if [ -z "$weak" ]; then
+    if [ -z "$weak" ] && [ -n "$unread" ]; then
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="include 된 SNMP 설정 파일을 읽지 못해 일부 Community String 을 확인하지 못함: $unread"
+    elif [ -z "$weak" ]; then
         CHECK_STATUS="GOOD"
         CHECK_DETAIL="모든 Community String 이 기본값이 아니며 길이/복잡도 기준을 충족함"
     else

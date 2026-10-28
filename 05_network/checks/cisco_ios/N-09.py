@@ -5,12 +5,14 @@
 # 수 있어 MANUAL 로 남긴다.
 import re
 
+from parsers import cisco_ios as cio
+
 
 def check(ctx):
     aux_blocks = ctx.line_block_text("aux")
     if not aux_blocks:
         return {"status": "MANUAL", "detail": "line aux 설정을 찾지 못함 - AUX 포트 존재 여부와 차단 상태를 수동 확인 필요", "evidence": ""}
-    evidence = "\n---\n".join(aux_blocks)
+    evidence = cio.mask_secrets("\n---\n".join(aux_blocks))  # password 값 미저장(진단 검수 D-R4)
     blocked = all(
         re.search(r"^\s*transport input none", b, re.M) or re.search(r"^\s*no exec\s*$", b, re.M)
         for b in aux_blocks

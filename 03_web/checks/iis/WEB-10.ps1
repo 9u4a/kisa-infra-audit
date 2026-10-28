@@ -8,13 +8,23 @@ if (-not (Test-IisAvailable)) {
     return New-CheckResult -Code "WEB-10" -Status "NA" -Detail "IIS(WebAdministration 모듈)가 설치되어 있지 않음"
 }
 
+# WEB-R7: 예전에는 proxy 섹션 조회 "실패"까지 "ARR 미설치 = GOOD" 으로 처리했다. ARR 설치 여부는 전역 모듈 목록
+# (ApplicationRequestRouting 모듈)으로 먼저 확인하고, 설치되어 있는데 섹션을 읽지 못하면 ERROR.
 try {
-    $section = Get-WebConfiguration -Filter "system.webServer/proxy" -PSPath "MACHINE/WEBROOT/APPHOST" -ErrorAction Stop
+    $arr = Get-WebConfiguration -Filter "system.webServer/globalModules/add[@name='ApplicationRequestRouting']" -PSPath "MACHINE/WEBROOT/APPHOST" -ErrorAction Stop
 } catch {
-    $section = $null
+    return New-CheckResult -Code "WEB-10" -Status "ERROR" -Detail "IIS 전역 모듈 목록 조회 실패: $($_.Exception.Message)"
+}
+$section = $null
+if ($arr) {
+    try {
+        $section = Get-WebConfiguration -Filter "system.webServer/proxy" -PSPath "MACHINE/WEBROOT/APPHOST" -ErrorAction Stop
+    } catch {
+        return New-CheckResult -Code "WEB-10" -Status "ERROR" -Detail "ARR 모듈은 설치되어 있으나 프록시 설정(system.webServer/proxy)을 읽지 못함: $($_.Exception.Message)"
+    }
 }
 
-if (-not $section) {
+if (-not $arr) {
     return New-CheckResult -Code "WEB-10" -Status "GOOD" -Detail "ARR(Application Request Routing) 프록시 모듈이 설치되어 있지 않음(프록시 기능 없음)"
 }
 

@@ -1,22 +1,8 @@
 # U-56 (하) FTP 서비스 접근 제어 설정 — 조치
-# 자동화 범위: 가장 보편적인 메커니즘인 ftpusers 에 최소 root 를 등록해 "접근 제어가 설정된
-# 상태"로 만든다(U-57 root 차단과 동일 효과, 이 카테고리 항목들의 기본 안전선).
+# check(U-56)가 ftpusers(계정 제한)를 IP 접근 제어로 인정하지 않게 되면서(진단 검수 U-R15) 예전 조치(ftpusers 에 root
+# 추가)로는 판정이 바뀌지 않는다. 허용할 IP/호스트는 조직 정책이라 자동으로 정할 수 없으므로 바꾸지 않고 안내만 한다.
 run_fix() {
-    applied=""
-    for f in /etc/ftpusers /etc/ftpd/ftpusers; do
-        [ -f "$f" ] || continue
-        grep -qE '^[[:space:]]*root[[:space:]]*$' "$f" || { fix_backup "$f"; printf 'root\n' >> "$f"; applied="$applied $f"; }
-    done
-    if [ -z "$applied" ] && [ ! -f /etc/ftpusers ] && [ ! -f /etc/ftpd/ftpusers ]; then
-        if [ -f /etc/vsftpd.conf ] || [ -f /etc/vsftpd/vsftpd.conf ] || [ -f /etc/proftpd.conf ] || [ -f /etc/proftpd/proftpd.conf ]; then
-            fix_backup /etc/ftpusers
-            printf 'root\n' > /etc/ftpusers
-            applied="/etc/ftpusers(신규 생성)"
-        fi
-    fi
-    if [ -z "$applied" ]; then
-        FIX_STATUS="APPLIED"; FIX_DETAIL="FTP 미사용 또는 이미 접근 제어가 설정되어 있어 조치 불필요"; FIX_EVIDENCE=""
-    else
-        FIX_STATUS="APPLIED"; FIX_DETAIL="ftpusers 에 root 를 등록해 접근 제어를 설정함:$applied"; FIX_EVIDENCE="$applied"
-    fi
+    FIX_STATUS="ERROR"
+    FIX_DETAIL="허용할 IP/호스트를 알 수 없어 자동 조치 불가 - proftpd 는 <Limit LOGIN> 에 Allow from <IP>/DenyAll, vsftpd 는 tcp_wrappers=YES + hosts.allow/hosts.deny 의 vsftpd 규칙, 또는 방화벽으로 접속 IP 를 제한할 것"
+    FIX_EVIDENCE=""
 }

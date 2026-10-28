@@ -36,23 +36,41 @@ $ufw_status"
         printf '%s' "$ufw_status" | grep -qE '^\S+.*(ALLOW|DENY|LIMIT)' && found=1
     fi
 
+    # 예전에는 규칙셋이 비어 있지만 않으면(정책 accept 체인만 있어도) GOOD 이었다(진단 검수 U-R3).
+    # 이제 input 훅 체인이 "policy drop" 이거나 그 안에 drop/reject 규칙이 있어야 "제한"으로 본다.
     if command -v nft >/dev/null 2>&1; then
-        nft_rules=$(nft list ruleset 2>/dev/null)
-        if [ -n "$nft_rules" ]; then
+        nft_rules=$(run_to 15 nft list ruleset 2>/dev/null)
+        nft_input=$(printf '%s\n' "$nft_rules" | awk '
+            /^[[:space:]]*chain[[:space:]]/ { inhook = 0; next }
+            /hook[[:space:]]+input/ { inhook = 1; if ($0 ~ /policy[[:space:]]+drop/) { print "policy drop"; exit } ; next }
+            inhook && /(^|[[:space:]])(drop|reject)([[:space:]]|;|$)/ { print "rule: " $0; exit }')
+        if [ -n "$nft_input" ]; then
             evidence="$evidence
-[nftables 규칙 존재]"
+[nftables input 훅 제한: $(printf '%s' "$nft_input" | sed 's/^[[:space:]]*//')]"
             found=1
+        elif [ -n "$nft_rules" ]; then
+            evidence="$evidence
+[nftables 규칙셋은 있으나 input 훅 체인에 drop 정책/drop·reject 규칙 없음]"
         fi
     fi
 
     if command -v iptables >/dev/null 2>&1; then
-        # -w: xtables 잠금을 기다린다(없으면 동시에 규칙을 바꾸는 다른 도구와 경합). 대기는 run_to 로 제한.
-        ipt=$(run_to 15 iptables -w -L INPUT -n 2>/dev/null)
-        if [ -n "$ipt" ]; then
-            rule_lines=$(printf '%s\n' "$ipt" | tail -n +3 | grep -c .)
+        # legacy iptables 는 ip_tables 모듈이 없으면 조회만으로 커널 모듈을 자동 적재한다(S1, 진단 검수 U-R18).
+        # 모듈이 아직 없으면(/proc/net/ip_tables_names 부재) legacy 규칙도 있을 수 없으므로 호출하지 않는다.
+        ipt_ver=$(run_to 5 iptables -V 2>/dev/null)
+        if printf '%s' "$ipt_ver" | grep -q 'nf_tables' || [ -e /proc/net/ip_tables_names ]; then
+            # -w: xtables 잠금을 기다린다(없으면 동시에 규칙을 바꾸는 다른 도구와 경합). 대기는 run_to 로 제한.
+            # 예전에는 INPUT 규칙이 1개라도(ACCEPT all 포함) 있으면 GOOD 이었다(진단 검수 U-R3) - 이제 기본 정책이
+            # DROP 이거나 DROP/REJECT 규칙이 있어야 "제한"으로 본다.
+            ipt=$(run_to 15 iptables -w -S INPUT 2>/dev/null)
+            ipt_restrict=$(printf '%s\n' "$ipt" | grep -E '^-P INPUT DROP|^-A INPUT .*-j (DROP|REJECT)' | head -n 3)
             evidence="$evidence
-[iptables INPUT 규칙 수: $rule_lines]"
-            [ "$rule_lines" -gt 0 ] 2>/dev/null && found=1
+[iptables -S INPUT]
+$ipt"
+            [ -n "$ipt_restrict" ] && found=1
+        else
+            evidence="$evidence
+[iptables(legacy): ip_tables 모듈 미적재 - 규칙 없음(조회 시 모듈 자동 적재를 피하려고 호출하지 않음)]"
         fi
     fi
 

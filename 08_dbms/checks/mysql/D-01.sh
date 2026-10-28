@@ -8,7 +8,9 @@ run_check() {
         CHECK_STATUS="ERROR"; CHECK_DETAIL="mysql 클라이언트가 없음"; CHECK_EVIDENCE=""
         return
     fi
-    out=$(mysql_query "SELECT user, host, CASE WHEN authentication_string='' OR authentication_string IS NULL THEN 'EMPTY' ELSE 'SET' END FROM mysql.user WHERE user='root';")
+    # auth_socket/unix_socket 플러그인 root 는 OS 계정으로만 로그인하므로 authentication_string 이 비어 있어도
+    # "비밀번호 없음"이 아니다(Debian/Ubuntu 기본) - 예전에는 거짓 VULN(진단 검수 D-R7).
+    out=$(mysql_query "SELECT user, host, plugin, CASE WHEN plugin IN ('auth_socket','unix_socket') THEN 'SOCKET' WHEN authentication_string='' OR authentication_string IS NULL THEN 'EMPTY' ELSE 'SET' END FROM mysql.user WHERE user='root';")
     rc=$?
     if [ $rc -ne 0 ]; then
         CHECK_STATUS="ERROR"; CHECK_DETAIL="MySQL 연결/쿼리 실패: $(head -1 "$DB_ERR_FILE" 2>/dev/null)"; CHECK_EVIDENCE="$out"
@@ -22,6 +24,6 @@ run_check() {
     if printf '%s\n' "$out" | grep -qw "EMPTY"; then
         CHECK_STATUS="VULN"; CHECK_DETAIL="root 계정에 비밀번호가 설정되어 있지 않음"
     else
-        CHECK_STATUS="GOOD"; CHECK_DETAIL="root 계정에 비밀번호가 설정되어 있음"
+        CHECK_STATUS="GOOD"; CHECK_DETAIL="root 계정에 비밀번호가 설정되어 있거나 OS 소켓 인증(auth_socket/unix_socket)만 허용함"
     fi
 }

@@ -22,6 +22,12 @@ GUIDE_VERSION="2026"
 LC_ALL=C
 export LC_ALL
 
+# 시스템 명령 경로를 앞에 둔다: cron 기본 PATH(/usr/bin:/bin)나 Debian 비 root 셸에서는 /usr/sbin 의
+# postconf·sendmail·named·rpcinfo·sshd 를 못 찾아 "미설치 = GOOD" 이 됐다(진단 검수 R-05). 실행자의 PATH 앞쪽에
+# 끼워 둔 같은 이름의 다른 프로그램이 root 로 실행되는 것도 막는다.
+PATH="/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
+export PATH
+
 # ---- 색상 (비TTY 이면 자동 해제) ----------------------------------------
 if [ -t 1 ]; then
     C_RED='\033[31m'; C_YEL='\033[33m'; C_GRN='\033[32m'
@@ -159,7 +165,7 @@ banner_start() {
     echo "환경       : ${OS_FAMILY:-unknown}"
     echo "실행 계정  : $(id -un 2>/dev/null) (uid=$(id -u 2>/dev/null))"
     if [ "$(id -u 2>/dev/null)" != "0" ]; then
-        log_warn "root 권한이 아닙니다. 일부 항목이 ERROR/MANUAL 로 표시될 수 있습니다."
+        log_warn "root 권한이 아닙니다. 확인하지 못한 항목은 양호/해당없음 대신 ERROR 로 표시됩니다(root 실행 권장)."
     fi
     echo "대상 항목  : ${_total}개"
     echo "시작 시각  : $(date '+%Y-%m-%d %H:%M:%S')"
@@ -176,8 +182,33 @@ banner_start() {
 # "</" 는 "<\/" 로 바꾼다(JSON 상 같은 값) - result.json 은 report.html 의 <script> 안에 그대로
 # 붙으므로, 일반 사용자가 만든 파일명 등 증적에 "</script>" 가 섞이면 보고서를 연 감사자 브라우저
 # 에서 HTML/JS 가 실행될 수 있다.
+# TAB/CR 외의 제어문자(ESC 등 - 일반 사용자가 /tmp 에 만든 파일 이름에 넣을 수 있음)는 지운다: 남아 있으면
+# result.json 이 JSON 으로 읽히지 않아 보고서가 빈 화면이 되고 merge.py 에서 그 호스트가 빠졌다(진단 검수 R-04).
 json_escape() {
-    printf '%s' "$1" | tr '\t\r' '  ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's#</#<\\/#g' | awk '{printf "%s\\n", $0}' | sed '$ s/\\n$//'
+    printf '%s' "$1" | tr '\t\r' '  ' | tr -d '\001-\010\013\014\016-\037\177' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's#</#<\\/#g' | awk '{printf "%s\\n", $0}' | sed '$ s/\\n$//'
+}
+
+# perm_within <권한> <기준>  -- 8진수 권한이 기준보다 넓은 비트를 하나도 갖지 않으면 참("기준 이하").
+# perm_exceeds <권한> <기준> -- 기준에 없는 비트(특수비트 포함)가 하나라도 있으면 참.
+# 예전에는 [ 622 -le 640 ] 처럼 10진수로 비교해 그룹/기타 쓰기가 있는 622·0626·0444 가 "640/644/600 이하"로
+# 통과했다(거짓 GOOD - 진단 전체 검수 R-03). 권한 값이 8진 숫자가 아니면 둘 다 거짓(호출부가 ERROR 처리).
+perm_within() {
+    case "$1" in ''|*[!0-7]*) return 1 ;; esac
+    case "$2" in ''|*[!0-7]*) return 1 ;; esac
+    [ $(( 0$1 & ~0$2 )) -eq 0 ]
+}
+perm_exceeds() {
+    case "$1" in ''|*[!0-7]*) return 1 ;; esac
+    case "$2" in ''|*[!0-7]*) return 1 ;; esac
+    [ $(( 0$1 & ~0$2 )) -ne 0 ]
+}
+
+# code_is_known <코드> <전체 코드 목록> -- -i 로 받은 코드가 guide.json 의 항목인지. 검증 없이 "checks/<코드>.sh"
+# 를 source 하면 "-i ../../x" 같은 값으로 임의 경로의 스크립트가 root 로 실행될 수 있었다(진단 검수 R-09).
+code_is_known() {
+    case "$1" in *[!A-Z0-9-]*|'') return 1 ;; esac
+    # 호출부가 IFS=, 로 -i 값을 나누는 중에 불리므로 단어 분리(IFS)에 기대지 않는다
+    printf '%s\n' "$2" | tr ' \t,' '\n\n\n' | grep -qx -- "$1"
 }
 
 # mask_secret <값>  -- 비밀번호·community 같은 값을 결과물(result.json/raw/run.log/report.html)에
@@ -203,9 +234,11 @@ result_add() {
 # env 는 루프 도중에 정해질 수 있어(웹 엔진 감지 등) 변수 이름을 받아 중단 시점의 값을 쓴다.
 result_trap_partial() {
     _RP_ND=$1; _RP_CAT=$2; _RP_ENVVAR=$3
-    trap '_result_partial_flush; exit 130' INT TERM
+    # HUP: SSH 세션이 끊겨도 그때까지의 결과를 남긴다(진단 검수 R-08)
+    trap '_result_partial_flush; exit 130' INT TERM HUP
 }
 _result_partial_flush() {
+    run_lock_release
     [ -s "${_RP_ND:-}" ] || return 0
     eval "_rp_env=\${$_RP_ENVVAR:-}"
     result_finalize "$_RP_ND" "$OUT_DIR/result.partial.json" "$_RP_CAT" "$(hostname 2>/dev/null || echo unknown)" "$_rp_env"
@@ -403,7 +436,7 @@ check_owner_perm() {
         [ "$_owner" = "$_o" ] && _owner_ok=1
     done
     _perm_ok=0
-    if [ "$_perm" -le "$_max_perm" ] 2>/dev/null; then
+    if perm_within "$_perm" "$_max_perm"; then
         _perm_ok=1
     fi
 
@@ -444,38 +477,236 @@ check_service_disabled() {
 
     if command -v systemctl >/dev/null 2>&1; then
         for _u in $_units; do
-            systemctl is-active --quiet "$_u" 2>/dev/null && _found="$_found
+            if run_to 10 systemctl is-active --quiet "$_u" 2>/dev/null; then
+                _found="$_found
 systemd 유닛 활성(active): $_u"
+                continue
+            fi
+            # 지금 꺼져 있어도 enabled 면 재부팅 시(소켓 유닛은 첫 연결 시) 기동된다 - 예전에는 is-active 만 봐서
+            # GOOD 이었다(진단 검수 U-R16).
+            _en=$(run_to 10 systemctl is-enabled "$_u" 2>/dev/null | head -n1)
+            case "$_en" in
+                enabled|enabled-runtime|indirect) _found="$_found
+systemd 유닛 활성화(is-enabled=$_en, 재부팅/연결 시 기동): $_u" ;;
+            esac
         done
+    fi
+
+    # inetd 로 기동되는 서비스는 연결 전에는 프로세스가 없다 - /etc/inetd.conf 의 주석이 아닌 줄(첫 필드=서비스명)을
+    # 본다(진단 검수 U-R6). inetd 는 같은 서비스가 여러 줄이면 각각 등록하므로 하나라도 있으면 활성으로 본다.
+    _inetd_svcs=${4:-}
+    if [ -n "$_inetd_svcs" ] && [ -f /etc/inetd.conf ]; then
+        if [ -r /etc/inetd.conf ]; then
+            _il=$(awk -v s=" $_inetd_svcs " '$0 !~ /^[[:space:]]*#/ && NF >= 6 && index(s, " " $1 " ") { print }' /etc/inetd.conf 2>/dev/null)
+            [ -n "$_il" ] && _found="$_found
+/etc/inetd.conf 활성 항목:
+$_il"
+        else
+            _inetd_unread=1
+        fi
     fi
 
     # pgrep/ps 둘 다 없으면 프로세스 상태를 전혀 확인할 수 없다 - "비활성화됨(양호)"으로
     # 단정하면 거짓 양호가 된다(check_owner_perm의 stat 실패 사례와 같은 종류의 문제).
-    if [ "$_detect_ok" -eq 0 ]; then
-        CHECK_STATUS="ERROR"
-        CHECK_DETAIL="${_label} 서비스 실행 여부를 확인할 ps/pgrep 명령을 찾지 못함"
-        CHECK_EVIDENCE=""
-    elif [ -n "$_found" ]; then
+    # 활성 근거를 하나라도 찾았으면 나머지를 확인하지 못했어도 VULN 이다.
+    if [ -n "$_found" ]; then
         CHECK_STATUS="VULN"
         CHECK_DETAIL="${_label} 서비스가 활성화되어 있음"
         CHECK_EVIDENCE="$_found"
+    elif [ "$_detect_ok" -eq 0 ]; then
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="${_label} 서비스 실행 여부를 확인할 ps/pgrep 명령을 찾지 못함"
+        CHECK_EVIDENCE=""
+    elif [ "${_inetd_unread:-0}" -eq 1 ]; then
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="${_label}: /etc/inetd.conf 를 읽을 수 없어 inetd 기동 여부를 확인하지 못함"
+        CHECK_EVIDENCE=""
     else
         CHECK_STATUS="GOOD"
-        CHECK_DETAIL="${_label} 서비스가 비활성화되어 있음 (프로세스/systemd 유닛 미탐지)"
+        CHECK_DETAIL="${_label} 서비스가 비활성화되어 있음 (프로세스/systemd 유닛(active·enabled)/inetd.conf 미탐지)"
         CHECK_EVIDENCE=""
     fi
 }
 
+# ---- 01_unix 전용 헬퍼 (check_service_disabled 와 같은 영역) ----------------------------
+# scan_find <최대 건수> <find 조건...> -- 파일시스템 전수 검색(U-15/23/25). 예전에는 find / -xdev 로 루트
+# 파일시스템만 보고 별도 파일시스템(/home, /var 등)은 detail 에만 적은 채 GOOD 이었고, 시간 제한·실패 확인도
+# 없었다(진단 검수 U-R10). 이제 / 와 별도 "로컬" 파일시스템을 각각 -xdev 로 검색하고(원격·자동마운트는 마운트
+# 연쇄·멈춤 위험으로 제외 - scan_remote_mounts 로 detail 에 남긴다), SCAN_TIMEOUT(기본 900초) 제한을 건다.
+# 출력: 찾은 경로(최대 건수) + 끝까지 돌았으면 마지막 줄 "__RC=<find 종료코드>"(124=시간 초과).
+# 최대 건수를 넘으면 그 자리에서 끊는다(이때는 __RC 줄이 없음 - 결과가 있으므로 판정에는 지장 없음).
+scan_local_mounts() {
+    printf '/\n'
+    [ -r /proc/mounts ] || return 0
+    awk '$2 != "/" && $3 !~ /^(proc|sysfs|devtmpfs|devpts|tmpfs|cgroup2?|mqueue|securityfs|pstore|bpf|tracefs|debugfs|configfs|fusectl|hugetlbfs|autofs|binfmt_misc|overlay|nsfs|rpc_pipefs|efivarfs|ramfs|squashfs|nfsd|selinuxfs|nfs4?|cifs|smb3|smbfs|fuse|fuse\..*|sshfs|glusterfs|ceph|9p|davfs|afs)$/ \
+        && $2 !~ /^\/(proc|sys|dev|run)(\/|$)/ && $2 !~ /^\/etc\/(hosts|hostname|resolv\.conf)$/ && $2 !~ /\\/ { print $2 }' /proc/mounts | sort -u
+}
+scan_remote_mounts() {
+    [ -r /proc/mounts ] || return 0
+    awk '$3 ~ /^(nfs4?|cifs|smb3|smbfs|fuse|fuse\..*|sshfs|glusterfs|ceph|9p|davfs|afs)$/ { printf "%s(%s) ", $2, $3 }' /proc/mounts
+}
+scan_find() {
+    _sf_lim=$1; shift
+    _sf_starts=$(scan_local_mounts)
+    low_prio true >/dev/null 2>&1   # LOW_PRIO_PREFIX 초기화 - run_to(timeout)는 셸 함수 low_prio 를 실행할 수 없다
+    _sf_ifs=$IFS; IFS='
+'
+    # shellcheck disable=SC2086
+    set -f; set -- $_sf_starts -xdev "$@"; set +f
+    IFS=$_sf_ifs
+    # shellcheck disable=SC2086
+    { run_to "${SCAN_TIMEOUT:-900}" $LOW_PRIO_PREFIX find "$@" 2>/dev/null; echo "__RC=$?"; } \
+        | awk -v n="$_sf_lim" '/^__RC=/ { print; exit } { c++; if (c <= n) print; else exit }'
+}
+# fix_inetd_disable <서비스명...> -- /etc/inetd.conf 에서 해당 서비스의 주석이 아닌 줄을 주석 처리한다(조치 전용).
+# check_service_disabled 가 inetd.conf 를 보게 되면서(진단 검수 U-R6) 조치도 같은 기준을 따라야 재검증이 통과한다.
+# 바꾼 것이 있으면 inetd 를 reload 하고 0, 없으면 1.
+fix_inetd_disable() {
+    [ -f /etc/inetd.conf ] || return 1
+    _fid_s=" $* "
+    awk -v s="$_fid_s" '$0 !~ /^[[:space:]]*#/ && NF >= 6 && index(s, " " $1 " ") { f = 1 } END { exit !f }' /etc/inetd.conf || return 1
+    fix_backup /etc/inetd.conf
+    _fid_tmp="/etc/inetd.conf.kisa.$$"
+    awk -v s="$_fid_s" '$0 !~ /^[[:space:]]*#/ && NF >= 6 && index(s, " " $1 " ") { print "#" $0; next } { print }' /etc/inetd.conf > "$_fid_tmp" \
+        && cat "$_fid_tmp" > /etc/inetd.conf
+    rm -f "$_fid_tmp"
+    if command -v systemctl >/dev/null 2>&1; then
+        for _fid_u in inetd openbsd-inetd inetutils-inetd; do
+            run_to 30 systemctl try-reload-or-restart "$_fid_u" 2>/dev/null
+        done
+    elif [ -f /var/run/inetd.pid ]; then
+        kill -HUP "$(cat /var/run/inetd.pid)" 2>/dev/null
+    fi
+    return 0
+}
+
+# banner_custom_lines <파일> -- 배포판 기본 문구를 뺀 나머지 줄 수(U-62 진단·조치 공용). 진단 검수 U-R17: 예전에는
+# 비어 있지만 않으면 경고 메시지로 인정해, 설치 직후의 /etc/issue("Debian GNU/Linux 12 \n \l", "\S / Kernel \r on
+# an \m")·/etc/motd(Debian 무보증 안내문)만으로 GOOD 이었다. getty 이스케이프(\n \l \S \r \m 등)만 남는 줄, 배포판
+# 이름이 든 줄, 알려진 기본 안내 문구 줄은 경고문으로 세지 않는다(문구 판별은 휴리스틱).
+banner_custom_lines() {
+    awk '{ l = $0; gsub(/\\[a-zA-Z]/, "", l); gsub(/[[:space:]]/, "", l) }
+        l == "" { next }
+        /Kernel .* on an/ || /GNU\/Linux/ || /Debian|Ubuntu|Red Hat|CentOS|Rocky|AlmaLinux|Fedora|SUSE/ { next }
+        /programs included with the|exact distribution terms|individual files in \/usr\/share\/doc|ABSOLUTELY NO WARRANTY|permitted by applicable law/ { next }
+        /^[[:space:]]*\*[[:space:]]+(Documentation|Management|Support):/ { next }
+        { c++ } END { print c + 0 }' "$1" 2>/dev/null
+}
+
+# snmpd_conf_lines <주 설정 파일> -- snmpd.conf 의 주석·빈 줄을 뺀 설정 줄을 includeFile/includeDir(*.conf) 까지 따라가
+# 출력한다(U-59~61). 읽지 못한 파일은 "!unread<TAB>경로" 줄로 알린다. com2sec(6) 의 "-Cn <context>" 옵션은 지워
+# 필드 위치(secname source community)를 고정한다. 예전에는 주 파일 한 개만 봐서 Debian 기본 "includeDir
+# /etc/snmp/snmpd.conf.d" 아래 설정과 rocommunity6 등 IPv6 지시어를 놓쳤다(진단 검수 U-R15).
+snmpd_conf_lines() {
+    awk -v main="$1" '
+    function rd(f, d,   line, rc, a, k, n, i, cmd, lst, m) {
+        if (d > 5 || (f in seen)) return
+        seen[f] = 1
+        while ((rc = (getline line < f)) > 0) {
+            if (line ~ /^[[:space:]]*(#|$)/) continue
+            n = split(line, a, /[ \t]+/); k = (a[1] == "" ? 2 : 1)
+            if (tolower(a[k]) == "includefile") { inc[++ni] = a[k + 1]; incd[ni] = d + 1; continue }
+            if (tolower(a[k]) == "includedir") {
+                cmd = "ls -1 \"" a[k + 1] "\" 2>/dev/null"; m = 0
+                while ((cmd | getline lst) > 0) if (lst ~ /\.conf$/) { inc[++ni] = a[k + 1] "/" lst; incd[ni] = d + 1 }
+                close(cmd); continue
+            }
+            if (tolower(a[k]) ~ /^com2sec6?$/ && a[k + 1] == "-Cn") { sub(/[[:space:]]-Cn[[:space:]]+[^[:space:]]+/, "", line) }
+            print line
+        }
+        close(f)
+        if (rc < 0) print "!unread\t" f
+    }
+    BEGIN { ni = 0; rd(main, 0); for (j = 1; j <= ni; j++) rd(inc[j], incd[j]) }'
+}
+
+# named_conf_flatten <주 설정 파일> -- BIND 설정을 include 까지 따라가 주석(// # /* */)을 지우고 문장 단위로 펼친다.
+# 출력(탭 구분): "@file<TAB>경로"(읽은 파일) / "!unread<TAB>경로"(읽지 못한 include) /
+#               "<문맥><TAB><키워드><TAB><값>" - 문맥은 options, zone "x", view "v" > zone "x" 처럼 블록 경로
+#               (존 이름에 "/" 가 들어갈 수 있어 구분자는 " > ").
+#               키워드는 allow-transfer·allow-update·update-policy(값=중괄호 안 내용), type(zone 종류).
+# Debian 의 /etc/bind/named.conf 는 include 만 있고, 여러 줄 블록·주석도 흔하다 - 예전에는 첫 grep 한 줄만 봐서
+# 주석 속 값이나 include 안의 설정을 못 봤다(진단 검수 U-R5). 상대 경로 include 는 주 설정 파일의 폴더 기준.
+named_conf_flatten() {
+    awk -v main="$1" '
+    function strip(t,   o, a, b) {
+        o = ""
+        while ((a = index(t, "/*")) > 0) {
+            b = index(substr(t, a + 2), "*/")
+            o = o substr(t, 1, a - 1) " "
+            if (b == 0) { t = ""; break }
+            t = substr(t, a + 2 + b + 1)
+        }
+        t = o t
+        gsub(/\/\/[^\n]*/, "", t); gsub(/#[^\n]*/, "", t)
+        return t
+    }
+    function slurp(f, depth,   line, txt, rc, out, stmt, p) {
+        if (depth > 10 || (f in seen)) return ""
+        seen[f] = 1
+        txt = ""
+        while ((rc = (getline line < f)) > 0) txt = txt line "\n"
+        close(f)
+        if (rc < 0) { print "!unread\t" f; return "" }
+        print "@file\t" f
+        txt = strip(txt); out = ""
+        while (match(txt, /include[ \t\n]+"[^"]+"[ \t\n]*;/)) {
+            stmt = substr(txt, RSTART, RLENGTH)
+            p = stmt; sub(/^include[ \t\n]+"/, "", p); sub(/".*$/, "", p)
+            if (p !~ /^\//) p = base "/" p
+            out = out substr(txt, 1, RSTART - 1) " " slurp(p, depth + 1) " "
+            txt = substr(txt, RSTART + RLENGTH)
+        }
+        return out txt
+    }
+    BEGIN {
+        base = main; sub(/\/[^\/]*$/, "", base); if (base == "") base = "/"
+        t = slurp(main, 0)
+        gsub(/[{};]/, " & ", t)
+        n = split(t, tok, /[ \t\n]+/)
+        sp = 0; nst = 0; cap = 0
+        for (i = 1; i <= n; i++) {
+            w = tok[i]; if (w == "") continue
+            if (cap > 0) {
+                if (w == "{") cap++
+                else if (w == "}") { cap--; if (cap == 0) { print ctx() "\t" capkey "\t" capval; skipsemi = 1; continue } }
+                capval = capval " " w
+                continue
+            }
+            if (w == "{") {
+                k = tolower(st[1])
+                if (k == "allow-transfer" || k == "allow-update" || k == "update-policy") { cap = 1; capkey = k; capval = "" }
+                else { h = st[1]; for (j = 2; j <= nst; j++) if (tolower(st[j]) != "in") h = h " " st[j]; stack[++sp] = h }
+                nst = 0; continue
+            }
+            if (w == "}") { if (sp > 0) sp--; nst = 0; skipsemi = 1; continue }
+            if (w == ";") {
+                if (!skipsemi && nst >= 2 && tolower(st[1]) == "type") print ctx() "\ttype\t" tolower(st[2])
+                nst = 0; skipsemi = 0; continue
+            }
+            skipsemi = 0
+            st[++nst] = w
+        }
+    }
+    function ctx(   c, j) { c = ""; for (j = 1; j <= sp; j++) c = c (j > 1 ? " > " : "") stack[j]; return (c == "" ? "-" : c) }
+    '
+}
+
 # ---- 웹 엔진 자동 탐지 및 설정 경로 조회 (03_web 전용) -------------------------
 # 여러 엔진이 동시에 설치되어 있을 수 있으므로 공백 구분 목록으로 반환한다.
+# WEB_ENGINES 가 이미 정해져 있으면(run.sh -e 로 지정했거나 진입점이 이미 탐지함) 다시 탐지하지 않는다 -
+# 예전에는 각 check 가 이 함수를 다시 불러 -e 지정이 무시됐다(진단 검수 WEB-R5).
+# pgrep 이 없는 최소 이미지에서도 동작하도록 실행 중 프로세스는 /proc 로 확인한다.
 detect_web_engines() {
+    [ -n "${WEB_ENGINES:-}" ] && return 0
     WEB_ENGINES=""
     { command -v httpd >/dev/null 2>&1 || command -v apache2 >/dev/null 2>&1 || \
-      [ -x /usr/local/apache2/bin/httpd ]; } && WEB_ENGINES="$WEB_ENGINES apache"
-    { command -v nginx >/dev/null 2>&1 || pgrep -x nginx >/dev/null 2>&1; } && \
+      [ -x /usr/local/apache2/bin/httpd ] || [ -n "$(proc_pids_by_comm httpd)$(proc_pids_by_comm apache2)" ]; } && \
+      WEB_ENGINES="$WEB_ENGINES apache"
+    { command -v nginx >/dev/null 2>&1 || [ -x /usr/local/nginx/sbin/nginx ] || [ -n "$(proc_pids_by_comm nginx)" ]; } && \
       WEB_ENGINES="$WEB_ENGINES nginx"
-    { [ -n "${CATALINA_HOME:-}" ] || pgrep -f catalina >/dev/null 2>&1 || \
-      [ -x /usr/local/tomcat/bin/catalina.sh ]; } && WEB_ENGINES="$WEB_ENGINES tomcat"
+    { [ -n "${CATALINA_HOME:-}" ] || [ -n "${CATALINA_BASE:-}" ] || [ -n "$(tomcat_pids)" ] || \
+      [ -x /usr/local/tomcat/bin/catalina.sh ] || tomcat_conf_dir >/dev/null 2>&1; } && WEB_ENGINES="$WEB_ENGINES tomcat"
     pgrep -f jeus >/dev/null 2>&1 && WEB_ENGINES="$WEB_ENGINES jeus"
     pgrep -x wsbtoc >/dev/null 2>&1 && WEB_ENGINES="$WEB_ENGINES webtob"
     WEB_ENGINES=$(printf '%s' "$WEB_ENGINES" | sed -E 's/^ //')
@@ -483,80 +714,315 @@ detect_web_engines() {
 
 # apache_conf_path — 대표적인 설치 레이아웃(공식 도커/소스, Debian/Ubuntu, RHEL 계열) 순으로 탐색
 apache_conf_path() {
-    for p in /usr/local/apache2/conf/httpd.conf /etc/apache2/apache2.conf /etc/httpd/conf/httpd.conf; do
+    for p in /usr/local/apache2/conf/httpd.conf /etc/apache2/apache2.conf /etc/httpd/conf/httpd.conf /usr/local/apache/conf/httpd.conf; do
         [ -f "$p" ] && { echo "$p"; return 0; }
     done
     return 1
 }
 
-# apache_extra_confs — httpd.conf 가 "실제로" Include/IncludeOptional 하는 파일만 재귀적으로
-# 찾아 반환한다. 공식 Docker 이미지 등은 conf/extra/ 안에 기본적으로 비활성(주석 처리된
+# apache_extra_confs — httpd.conf 가 "실제로" Include/IncludeOptional 하는 파일만 찾아 반환한다
+# (메인 설정 제외). 공식 Docker 이미지 등은 conf/extra/ 안에 기본적으로 비활성(주석 처리된
 # Include) 샘플 설정이 다수 들어있어, 디렉터리를 통째로 훑으면 실제로는 로드되지 않는 설정
 # (예: httpd-dav.conf 의 "Dav On" 예시)을 활성 설정으로 오판하는 실제 버그가 있었다
 # (03_web WEB-18 을 Docker 컨테이너로 검증하다 발견). 반드시 Include 체인을 따라간다.
-_apache_resolve_includes() {
-    _file=$1; _root=$2
-    [ -f "$_file" ] || return 0
-    grep -E '^[[:space:]]*Include(Optional)?[[:space:]]+' "$_file" 2>/dev/null | \
-    sed -E 's/^[[:space:]]*Include(Optional)?[[:space:]]+"?([^"]*)"?[[:space:]]*$/\2/' | \
-    while IFS= read -r _pat; do
-        case "$_pat" in
-            /*) _resolved="$_pat" ;;
-            *) _resolved="$_root/$_pat" ;;
+# 1.3.x(진단 검수 WEB-R1/R6): Debian/Ubuntu 는 ServerRoot 가 주석이라 예전 계산(메인 설정의 상위의 상위)이
+# /etc 가 되어 mods-enabled·sites-enabled·conf-enabled 를 하나도 따라가지 못했다(WEB-04/18 등 거짓 GOOD).
+# 이제 ServerRoot 미지정 시 메인 설정 폴더(conf/ 안이면 그 상위)를 기준으로 하고, 소문자 include·디렉터리
+# Include(안의 모든 파일)·Include 순환(같은 파일은 한 번만, 깊이 16·파일 512개 상한 - S2)을 처리한다.
+_WEB_NL='
+'
+# _web_expand_pattern <절대경로 패턴> -> 일치하는 파일(디렉터리면 그 안의 모든 파일, 정렬) 목록
+_web_expand_pattern() {
+    for _wep in $1; do
+        if [ -d "$_wep" ]; then
+            find "$_wep" -maxdepth 8 -type f 2>/dev/null | LC_ALL=C sort
+        elif [ -f "$_wep" ]; then
+            printf '%s\n' "$_wep"
+        fi
+    done
+}
+
+# apache_server_root <메인 설정> -> ServerRoot(주석이 아닌 지시자), 없으면 메인 설정 폴더(conf/ 안이면 그 상위)
+apache_server_root() {
+    _asr=$(awk 'tolower($1) == "serverroot" { v = $2; gsub(/"/, "", v); print v; exit }' "$1" 2>/dev/null)
+    if [ -z "$_asr" ]; then
+        _asr=$(dirname "$1")
+        [ "$(basename "$_asr")" = conf ] && _asr=$(dirname "$_asr")
+    fi
+    printf '%s\n' "$_asr"
+}
+
+# _apache_walk <메인 설정> <ServerRoot> -> "파일<TAB>줄번호<TAB>내용" 을 Apache 가 읽는 순서대로(Include 자리에서
+# 포함 파일을 펼쳐) 출력한다. 파일마다 "파일<TAB>0<TAB>" 표지를 먼저 낸다(빈 파일·읽지 못한 파일도 목록에 남게).
+# 상한에 걸려 펼치지 못한 Include 가 있으면 "!trunc<TAB>0<TAB>" 을 낸다(web_conf_files 가 확인 불가로 처리).
+# 재귀 함수 대신 스택(줄바꿈 구분 "깊이|시작줄|파일")을 쓴다 - POSIX sh 에는 지역 변수가 없다.
+_apache_walk() {
+    _aw_root=$2; _aw_stack="0|1|$1"; _aw_seen="$1"; _aw_loads=0
+    while [ -n "$_aw_stack" ]; do
+        _aw_top=${_aw_stack%%"$_WEB_NL"*}
+        case "$_aw_stack" in *"$_WEB_NL"*) _aw_stack=${_aw_stack#*"$_WEB_NL"} ;; *) _aw_stack="" ;; esac
+        _aw_depth=${_aw_top%%|*}; _aw_rest=${_aw_top#*|}
+        _aw_start=${_aw_rest%%|*}; _aw_file=${_aw_rest#*|}
+        [ "$_aw_start" = 1 ] && printf '%s\t0\t\n' "$_aw_file"
+        _aw_out=$(awk -v s="$_aw_start" -v f="$_aw_file" '
+            NR < s { next }
+            { line = $0; sub(/\r$/, "", line); printf "%s\t%d\t%s\n", f, NR, line
+              t = line; sub(/^[ \t]+/, "", t)
+              if (tolower(t) ~ /^include(optional)?[ \t]/) {
+                  p = t; sub(/^[^ \t]+[ \t]+/, "", p); sub(/[ \t]+$/, "", p); gsub(/"/, "", p)
+                  printf "@INC@%d|%s\n", NR, p; exit
+              } }' "$_aw_file" 2>/dev/null)
+        _aw_inc=""
+        case "$_aw_out" in
+            *"$_WEB_NL@INC@"*) _aw_inc=${_aw_out##*"$_WEB_NL@INC@"}; _aw_out=${_aw_out%"$_WEB_NL@INC@"*} ;;
         esac
-        for _f in $_resolved; do
-            [ -f "$_f" ] || continue
-            echo "$_f"
-            _apache_resolve_includes "$_f" "$_root"
-        done
+        [ -n "$_aw_out" ] && printf '%s\n' "$_aw_out"
+        [ -n "$_aw_inc" ] || continue
+        _aw_next="$_aw_depth|$((${_aw_inc%%|*} + 1))|$_aw_file"
+        _aw_pat=${_aw_inc#*|}
+        _aw_kids=""
+        if [ "$_aw_depth" -ge 16 ] || [ "$_aw_loads" -ge 512 ]; then
+            printf '!trunc\t0\t\n'
+        else
+            case "$_aw_pat" in /*) ;; *) _aw_pat="$_aw_root/$_aw_pat" ;; esac
+            while IFS= read -r _aw_c; do
+                [ -n "$_aw_c" ] || continue
+                case "$_WEB_NL$_aw_seen$_WEB_NL" in *"$_WEB_NL$_aw_c$_WEB_NL"*) continue ;; esac
+                _aw_seen="$_aw_seen$_WEB_NL$_aw_c"; _aw_loads=$((_aw_loads + 1))
+                _aw_kids="$_aw_kids$((_aw_depth + 1))|1|$_aw_c$_WEB_NL"
+            done <<EOF_AW
+$(_web_expand_pattern "$_aw_pat")
+EOF_AW
+        fi
+        _aw_stack="$_aw_kids$_aw_next${_aw_stack:+$_WEB_NL$_aw_stack}"
     done
 }
 
 apache_extra_confs() {
     _main=$(apache_conf_path) || return 1
-    _root=$(grep -E '^[[:space:]]*ServerRoot' "$_main" 2>/dev/null | head -n1 | \
-            sed -E 's/^[[:space:]]*ServerRoot[[:space:]]+"?([^"]*)"?.*/\1/')
-    [ -z "$_root" ] && _root=$(dirname "$(dirname "$_main")")
-    _apache_resolve_includes "$_main" "$_root"
+    _apache_walk "$_main" "$(apache_server_root "$_main")" | cut -f1 | \
+        awk -v m="$_main" '!s[$0]++ && $0 != m && $0 != "!trunc"'
+}
+
+# apache_conf_stream -> 실제 로드 순서대로 펼친 설정 "파일<TAB>줄번호<TAB>내용"(같은 지시자가 여러 번 나오면
+# 마지막 값이 적용되는 항목 - ServerTokens 등 - 은 이 순서로 판정해야 한다)
+apache_conf_stream() {
+    _main=$(apache_conf_path) || return 1
+    _apache_walk "$_main" "$(apache_server_root "$_main")"
 }
 
 nginx_conf_path() {
-    for p in /etc/nginx/nginx.conf /usr/local/nginx/conf/nginx.conf; do
+    for p in /etc/nginx/nginx.conf /usr/local/nginx/conf/nginx.conf /usr/local/etc/nginx/nginx.conf /opt/nginx/conf/nginx.conf; do
         [ -f "$p" ] && { echo "$p"; return 0; }
     done
     return 1
 }
 
-# nginx_extra_confs — nginx.conf 가 "실제로" include 하는 파일만 재귀적으로 찾아 반환한다
-# (Apache 와 동일한 이유로 디렉터리 전체를 훑지 않는다).
-_nginx_resolve_includes() {
-    _file=$1
-    [ -f "$_file" ] || return 0
-    grep -E '^[[:space:]]*include[[:space:]]+' "$_file" 2>/dev/null | \
-    sed -E 's/^[[:space:]]*include[[:space:]]+"?([^";]*)"?[[:space:]]*;.*/\1/' | \
-    while IFS= read -r _pat; do
-        for _f in $_pat; do
-            [ -f "$_f" ] || continue
-            echo "$_f"
-            _nginx_resolve_includes "$_f"
-        done
+# nginx_extra_confs — nginx.conf 가 "실제로" include 하는 파일만 찾아 반환한다(메인 제외, Apache 와 동일한
+# 이유로 디렉터리 전체를 훑지 않는다). 상대 경로 include 는 nginx 설정 폴더(메인 설정의 폴더) 기준이다 -
+# 예전에는 진단 실행 위치(작업 디렉터리) 기준으로 풀어 "include mime.types;" 류를 놓쳤다(WEB-R6).
+# 한 줄에 여러 지시자가 있어도 include 를 찾고, 주석(#)은 제외, 순환·폭주는 Apache 와 같은 상한.
+_nginx_walk() {
+    _nw_base=$(dirname "$1"); _nw_stack="0|$1"; _nw_seen="$1"; _nw_loads=0
+    while [ -n "$_nw_stack" ]; do
+        _nw_top=${_nw_stack%%"$_WEB_NL"*}
+        case "$_nw_stack" in *"$_WEB_NL"*) _nw_stack=${_nw_stack#*"$_WEB_NL"} ;; *) _nw_stack="" ;; esac
+        _nw_depth=${_nw_top%%|*}; _nw_file=${_nw_top#*|}
+        printf '%s\n' "$_nw_file"
+        _nw_kids=""
+        while IFS= read -r _nw_pat; do
+            [ -n "$_nw_pat" ] || continue
+            if [ "$_nw_depth" -ge 16 ] || [ "$_nw_loads" -ge 512 ]; then
+                printf '!trunc\n'; break
+            fi
+            case "$_nw_pat" in /*) ;; *) _nw_pat="$_nw_base/$_nw_pat" ;; esac
+            while IFS= read -r _nw_c; do
+                [ -n "$_nw_c" ] || continue
+                case "$_WEB_NL$_nw_seen$_WEB_NL" in *"$_WEB_NL$_nw_c$_WEB_NL"*) continue ;; esac
+                _nw_seen="$_nw_seen$_WEB_NL$_nw_c"; _nw_loads=$((_nw_loads + 1))
+                _nw_kids="$_nw_kids$((_nw_depth + 1))|$_nw_c$_WEB_NL"
+            done <<EOF_NW2
+$(_web_expand_pattern "$_nw_pat")
+EOF_NW2
+        done <<EOF_NW1
+$(awk '{ sub(/\r$/, ""); sub(/#.*/, ""); s = $0
+         while (match(s, /(^|[ \t;{}])include[ \t]+[^;]+;/)) {
+             p = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+             sub(/^[ \t;{}]*include[ \t]+/, "", p); sub(/[ \t]*;$/, "", p); gsub(/"/, "", p); print p } }' "$_nw_file" 2>/dev/null)
+EOF_NW1
+        _nw_stack="$_nw_kids$_nw_stack"
     done
 }
 
 nginx_extra_confs() {
     _main=$(nginx_conf_path) || return 1
-    _nginx_resolve_includes "$_main"
+    _nginx_walk "$_main" | awk -v m="$_main" '!s[$0]++ && $0 != m && $0 != "!trunc"'
 }
 
-# tomcat_home — $CATALINA_HOME 우선, 없으면 대표 설치 경로 탐색
-tomcat_home() {
-    if [ -n "${CATALINA_HOME:-}" ] && [ -d "$CATALINA_HOME" ]; then
-        echo "$CATALINA_HOME"; return 0
+# web_conf_files <apache|nginx> -> 실제 로드되는 설정 파일(메인 포함) 목록.
+# rc 1 = 메인 설정을 찾지 못함, 2 = 읽을 수 없는 설정 파일이 있거나 Include 상한에 걸림(목록은 그래도 출력).
+web_conf_files() {
+    case $1 in
+        apache) _wcf_main=$(apache_conf_path) || return 1
+                _wcf_list=$(_apache_walk "$_wcf_main" "$(apache_server_root "$_wcf_main")" | cut -f1 | awk '!s[$0]++') ;;
+        nginx) _wcf_main=$(nginx_conf_path) || return 1
+               _wcf_list=$(_nginx_walk "$_wcf_main" | awk '!s[$0]++') ;;
+        *) return 1 ;;
+    esac
+    _wcf_rc=0
+    while IFS= read -r _wcf_f; do
+        case "$_wcf_f" in
+            "") ;;
+            '!trunc') _wcf_rc=2 ;;
+            *) [ -r "$_wcf_f" ] || _wcf_rc=2; printf '%s\n' "$_wcf_f" ;;
+        esac
+    done <<EOF_WCF
+$_wcf_list
+EOF_WCF
+    return $_wcf_rc
+}
+
+# web_load_conf <apache|nginx> -> WEB_FILES(공백 구분 설정 파일 목록) 설정. 엔진이 감지됐는데 설정을 찾거나
+# 읽지 못하면 "확인 못 함"이다(S6, 진단 검수 WEB-R3) - 호출 측 errors 변수에 사유를 붙인다.
+# 메인 설정을 못 찾으면 1(이 엔진 판정 생략), 일부 파일만 못 읽으면 0(찾은 위반은 그대로 VULN, 없으면 ERROR).
+web_load_conf() {
+    WEB_FILES=$(web_conf_files "$1")
+    case $? in
+        0) return 0 ;;
+        2) errors="${errors:-} $1(읽을 수 없는 설정 파일이 있거나 Include 상한 초과)"; return 0 ;;
+        *) WEB_FILES=""; errors="${errors:-} $1(설정 파일을 찾지 못함)"; return 1 ;;
+    esac
+}
+
+# web_finish <VULN 문구> <GOOD 문구> [MANUAL 문구] -- 엔진별 판정 변수(checked/violations/errors/manuals/evidence)를
+# 종합한다. VULN(하나라도 위반) > ERROR(설정을 확인하지 못한 엔진 - S6) > MANUAL > GOOD, 대상 엔진이 없으면 NA.
+web_finish() {
+    if [ "${checked:-0}" -eq 0 ]; then
+        CHECK_STATUS="NA"; CHECK_DETAIL="대상 엔진이 감지되지 않음 (감지된 엔진: ${WEB_ENGINES:-없음})"
+    elif [ -n "${violations:-}" ]; then
+        CHECK_STATUS="VULN"; CHECK_DETAIL="$1:$violations${errors:+ / 확인하지 못한 엔진:$errors}"
+    elif [ -n "${errors:-}" ]; then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="설정을 확인하지 못한 엔진이 있어 양호로 판정할 수 없음:$errors${manuals:+ / 수동 확인:$manuals}"
+    elif [ -n "${manuals:-}" ]; then
+        CHECK_STATUS="MANUAL"; CHECK_DETAIL="${3:-자동 판정이 제한적인 엔진 존재}:$manuals"
+    else
+        CHECK_STATUS="GOOD"; CHECK_DETAIL="$2"
     fi
-    for d in /usr/local/tomcat /opt/tomcat /usr/share/tomcat9 /usr/share/tomcat10 /var/lib/tomcat9; do
-        [ -d "$d" ] && { echo "$d"; return 0; }
+    CHECK_EVIDENCE="${evidence:-}"
+}
+
+# web_mask_xml_secrets (stdin -> stdout) -- Tomcat XML 증적에서 비밀번호류 속성 값(keystorePass,
+# truststorePass, certificateKeystorePassword, password, secret 등)을 **** 로 가린다(S5, 진단 검수 WEB-R9).
+web_mask_xml_secrets() {
+    sed -E "s/([A-Za-z]*([Pp]ass|[Pp]assword|[Ss]ecret|[Pp]wd))([[:space:]]*=[[:space:]]*)(\"[^\"]*\"|'[^']*')/\\1\\3\"****\"/g"
+}
+
+# web_apache_option_hits <옵션> <파일...> -> 옵션이 켜진(무표기·+옵션·All) 주석 아닌 Options 줄을 "파일:줄: 내용"
+# 으로 출력. All 은 MultiViews 를 뺀 모든 옵션(Indexes·Includes·FollowSymLinks·ExecCGI)을 켠다(진단 검수 WEB-R10).
+# Includes 는 IncludesNOEXEC 도 SSI 활성으로 본다. -옵션(무효화)은 당연히 제외한다.
+web_apache_option_hits() {
+    _wao_opt=$1; shift
+    [ $# -gt 0 ] || return 0
+    awk -v tok="$_wao_opt" '
+        BEGIN { tok = tolower(tok) }
+        { body = $0; sub(/\r$/, "", body); sub(/^[ \t]+/, "", body); n = split(body, a, /[ \t]+/)
+          if (n >= 1 && tolower(a[1]) == "options")
+              for (i = 2; i <= n; i++) {
+                  w = tolower(a[i]); sub(/^\+/, "", w)
+                  if (w == tok || w == "all" || (tok == "includes" && w == "includesnoexec")) { print FILENAME ":" FNR ": " body; break }
+              } }' "$@" 2>/dev/null
+}
+
+# apache_last_directive <지시자> -> 실제 로드 순서상 마지막(=적용되는) 주석 아닌 지시자를 "값<TAB>파일:줄: 내용"
+# 으로 출력(없으면 빈 출력). ServerTokens 처럼 마지막 값이 이기는 지시자용 - "어딘가에 Prod 가 있으면 양호"로
+# 보면 Debian conf-enabled/security.conf 의 "ServerTokens OS" 가 나중에 덮어써도 GOOD 이 된다(진단 검수 WEB-R11).
+apache_last_directive() {
+    apache_conf_stream | awk -v d="$1" '
+        BEGIN { d = tolower(d) }
+        { t = $0; f = $0; sub(/^[^\t]*\t[^\t]*\t/, "", t); sub(/^[ \t]+/, "", t)
+          n = split(t, a, /[ \t]+/)
+          if (n >= 1 && tolower(a[1]) == d) { split(f, h, "\t"); v = (n >= 2 ? a[2] : ""); gsub(/"/, "", v); last = v "\t" h[1] ":" h[2] ": " t } }
+        END { if (last != "") print last }'
+}
+
+# web_log_dirs <apache|nginx|tomcat> -> 로그 폴더(존재하는 것만, 실제 경로로 중복 제거). 대표 경로 + 설정의
+# ErrorLog/CustomLog(Apache, 상대 경로는 ServerRoot 기준)·error_log/access_log(Nginx) 의 폴더.
+# 변수(${APACHE_LOG_DIR})·파이프(|)·syslog·/dev/·/proc/(공식 httpd 이미지의 /proc/self/fd/2) 대상은 건너뛴다. RHEL(/var/log/httpd, /var/log/tomcat) 포함(WEB-R11).
+web_log_dirs() {
+    _wld_cfg=""
+    case $1 in
+        apache)
+            _wld="/usr/local/apache2/logs /var/log/apache2 /var/log/httpd"
+            if _wld_main=$(apache_conf_path); then
+                _wld_root=$(apache_server_root "$_wld_main")
+                _wld_cfg=$(apache_conf_stream 2>/dev/null | awk -v r="$_wld_root" '
+                    { t = $0; sub(/^[^\t]*\t[^\t]*\t/, "", t); sub(/^[ \t]+/, "", t); n = split(t, a, /[ \t]+/); k = tolower(a[1])
+                      if ((k == "errorlog" || k == "customlog" || k == "transferlog") && n >= 2) {
+                          p = a[2]; gsub(/"/, "", p)
+                          if (p ~ /[$|]/ || p ~ /^syslog/ || p ~ /^\/(dev|proc)\//) next
+                          if (p !~ /^\//) p = r "/" p
+                          sub(/\/[^\/]*$/, "", p); print p } }')
+            fi ;;
+        nginx)
+            _wld="/var/log/nginx /usr/local/nginx/logs"
+            _wld_cfg=$(web_conf_files nginx 2>/dev/null | while IFS= read -r _wld_f; do
+                awk '{ sub(/#.*/, ""); s = $0
+                       while (match(s, /(access|error)_log[ \t]+[^ \t;]+/)) {
+                           p = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH); sub(/^[^ \t]+[ \t]+/, "", p); gsub(/"/, "", p)
+                           if (p ~ /^\// && p !~ /^\/(dev|proc)\// && p !~ /[$]/) { sub(/\/[^\/]*$/, "", p); print p } } }' "$_wld_f" 2>/dev/null
+            done) ;;
+        tomcat)
+            _wld="/var/log/tomcat /var/log/tomcat9 /var/log/tomcat10"
+            _wld_h=$(tomcat_home) && _wld="$_wld_h/logs $_wld" ;;
+        *) return 1 ;;
+    esac
+    for _wld_d in $_wld $_wld_cfg; do
+        [ -d "$_wld_d" ] && (cd "$_wld_d" 2>/dev/null && pwd -P)
+    done | awk '!s[$0]++'
+}
+
+# tomcat_pids -> Tomcat(org.apache.catalina.startup.Bootstrap) java 프로세스 PID 목록. 다른 java 프로세스
+# (Elasticsearch 등)를 Tomcat 으로 보지 않는다(진단 검수 WEB-R10).
+tomcat_pids() {
+    for _tp in $(proc_pids_by_comm java); do
+        tr '\000' '\n' 2>/dev/null < "/proc/$_tp/cmdline" | grep -qx 'org\.apache\.catalina\.startup\.Bootstrap' && echo "$_tp"
+    done
+}
+
+# tomcat_home — Tomcat 인스턴스 경로(CATALINA_BASE: conf/·logs/·webapps/ 가 있는 곳).
+# 1) 실행 중인 Tomcat 의 -Dcatalina.base=  2) CATALINA_BASE·CATALINA_HOME 환경변수  3) 대표 경로
+# (Debian 은 /var/lib/tomcatN 이 BASE 이고 /usr/share/tomcatN 은 HOME 이라 conf/ 가 없다 - BASE 를 먼저 본다,
+# RHEL 은 /usr/share/tomcat/conf -> /etc/tomcat). conf/ 폴더가 있는 경로만 인정한다(진단 검수 WEB-R4).
+tomcat_home() {
+    for _th_pid in $(tomcat_pids); do
+        _th_b=$(tr '\000' '\n' 2>/dev/null < "/proc/$_th_pid/cmdline" | sed -n 's/^-Dcatalina\.base=//p' | head -n 1)
+        [ -n "$_th_b" ] && [ -d "$_th_b/conf" ] && { echo "$_th_b"; return 0; }
+    done
+    for _th_d in "${CATALINA_BASE:-}" "${CATALINA_HOME:-}" /usr/local/tomcat /opt/tomcat /var/lib/tomcat10 /var/lib/tomcat9 \
+                 /var/lib/tomcat /usr/share/tomcat /usr/share/tomcat10 /usr/share/tomcat9; do
+        [ -n "$_th_d" ] && [ -d "$_th_d/conf" ] && { echo "$_th_d"; return 0; }
     done
     return 1
+}
+
+# tomcat_conf_dir -> Tomcat conf 폴더(tomcat_home/conf, 없으면 RHEL·Debian 의 /etc/tomcat*). 못 찾으면 1.
+tomcat_conf_dir() {
+    _tcd_h=$(tomcat_home) && { echo "$_tcd_h/conf"; return 0; }
+    for _tcd in /etc/tomcat /etc/tomcat10 /etc/tomcat9; do
+        [ -f "$_tcd/server.xml" ] && { echo "$_tcd"; return 0; }
+    done
+    return 1
+}
+
+# web_load_tomcat_conf <파일명> -> TC_FILE 설정. conf 폴더를 못 찾거나 파일이 없거나 읽지 못하면 호출 측
+# errors 변수에 사유를 붙이고 1(예전에는 이때 검사할 파일이 없어 GOOD 이 나왔다 - 진단 검수 WEB-R3).
+web_load_tomcat_conf() {
+    TC_FILE=""
+    _wlt_dir=$(tomcat_conf_dir) || { errors="${errors:-} tomcat(설치 경로·conf 폴더를 찾지 못함)"; return 1; }
+    TC_FILE="$_wlt_dir/$1"
+    [ -f "$TC_FILE" ] || { errors="${errors:-} tomcat($TC_FILE 없음)"; return 1; }
+    [ -r "$TC_FILE" ] || { errors="${errors:-} tomcat($TC_FILE 읽기 불가)"; return 1; }
+    return 0
 }
 
 # ---- /proc 기반 프로세스 조회 (pgrep/ps 미설치 환경 대비) ---------------------
@@ -564,18 +1030,21 @@ tomcat_home() {
 # ps/pgrep 자체가 없는 경우가 흔하다. /proc/*/comm, /proc/*/status 는 커널이 직접 제공하므로
 # 항상 사용 가능하며, 이 방식이 더 이식성이 높다 (03_web WEB-09 구현 중 실제로 겪은 문제).
 # proc_pids_by_comm <comm 이름> -> 일치하는 PID 목록(줄바꿈 구분)
+# 프로세스마다 cat 을 fork 하던 것을 셸 내장 read 로 바꿨다(프로세스가 많은 운영 서버 부하 - S4, WEB-R12).
 proc_pids_by_comm() {
     _name=$1
     for _p in /proc/[0-9]*; do
-        [ -r "$_p/comm" ] || continue
-        _c=$(cat "$_p/comm" 2>/dev/null)
+        _c=""
+        { IFS= read -r _c < "$_p/comm"; } 2>/dev/null || [ -n "$_c" ] || continue
         [ "$_c" = "$_name" ] && echo "${_p#/proc/}"
     done
 }
 
 # proc_uid <pid> -> 실제 UID (숫자, root=0)
 proc_uid() {
-    awk '/^Uid:/{print $2; exit}' "/proc/$1/status" 2>/dev/null
+    { while read -r _pu_k _pu_v _pu_rest; do
+        [ "$_pu_k" = "Uid:" ] && { echo "$_pu_v"; break; }
+    done < "/proc/$1/status"; } 2>/dev/null
 }
 
 # proc_pids_by_comm_glob <패턴> -> 부분 일치(예: "*pmon*")하는 PID 목록. Oracle 백그라운드
@@ -662,16 +1131,35 @@ _db_conn_blocked() {
     return 0
 }
 
+# Oracle 비밀번호 만료 "예고" 경고(실패 아님): 28002·28011(구버전), 28098(23ai 이상)
+ORACLE_PW_WARN_RE='^ORA-(28002|28011|28098)'
+
 # db_preflight  -- DBMS_ENGINE 에 맞춰 접속을 1회 시험. 실패 시 0이 아닌 값 반환 + DB_CONN_FAILED=1
 db_preflight() {
     DB_CONN_FAILED=0; DB_CONN_FAIL_MSG=""
     case "${DBMS_ENGINE:-}" in
-        mysql) _pf_out=$(mysql_query "SELECT 1;") ;;
-        postgres) _pf_out=$(psql_query "SELECT 1;") ;;
-        oracle) _pf_out=$(oracle_query "SELECT 1 FROM dual;") ;;
+        mysql) _pf_out=$(mysql_query "SELECT 1;"); _pf_rc=$? ;;
+        postgres) _pf_out=$(psql_query "SELECT 1;"); _pf_rc=$? ;;
+        oracle)
+            # 1단계: connect 한 줄만 보내고 표준입력을 바로 닫는다(진단 검수 D-R11). 비밀번호가 만료(ORA-28001)
+            # 되면 sqlplus 가 "New password:" 를 표준입력에서 읽는데, 예전처럼 connect 뒤에 SET/SELECT 줄이 이어지면
+            # 그 줄이 새 비밀번호로 읽힐 여지가 있었다. 여기서는 EOF 만 읽혀 비밀번호는 바뀌지 않는다. 접속 실패면
+            # 이 1회로 끝나고(S3), 성공했을 때만 2단계 SELECT 로 넘어간다.
+            _pf_out=$( { printf 'whenever sqlerror exit sql.sqlcode\n'
+                         printf 'whenever oserror exit failure\n'
+                         oracle_connect_line; } | _db_run sqlplus -s /nolog 2>"${DB_ERR_FILE:-/dev/null}" )
+            _pf_rc=$?
+            if printf '%s\n' "$_pf_out" | grep -qE 'ORA-28001|ORA-28000'; then
+                _pf_rc=1
+            elif [ "$_pf_rc" -eq 0 ] && printf '%s\n' "$_pf_out" | grep -vE "$ORACLE_PW_WARN_RE" | grep -qE '^(ORA-[0-9]+|SP2-[0-9]+)'; then
+                _pf_rc=1
+            fi
+            if [ "$_pf_rc" -eq 0 ]; then
+                _pf_out=$(oracle_query "SELECT 1 FROM dual;"); _pf_rc=$?
+            fi
+            ;;
         *) return 0 ;;
     esac
-    _pf_rc=$?
     if [ "$_pf_rc" -ne 0 ]; then
         DB_CONN_FAILED=1
         DB_CONN_FAIL_MSG=$( { head -n 1 "${DB_ERR_FILE:-/dev/null}"
@@ -679,6 +1167,95 @@ db_preflight() {
     fi
     export DB_CONN_FAILED DB_CONN_FAIL_MSG
     return "$_pf_rc"
+}
+
+# ---- DBMS 공통: 원격 모드 판별 (진단 검수 D-R1) ---------------------------------------
+# --host 로 다른 서버에 접속하면 DB 조회는 원격 서버를 보지만, 설정 파일(my.cnf·pg_hba.conf·sqlnet.ora)·
+# 프로세스(/proc)는 이 스크립트를 실행한 PC 의 것을 읽는다. 예전에는 분석자 PC(또는 클라이언트 컨테이너)의
+# /etc/my.cnf 권한으로 D-14 를 VULN/GOOD 판정했다. 원격이면 해당 항목은 MANUAL 로 돌린다.
+# db_is_remote  -- DB_HOST 가 비었거나 이 호스트 자신(이름·IP·루프백)이면 1(로컬), 아니면 0(원격)
+db_is_remote() {
+    _dr_h=${DB_HOST:-}
+    _dr_h=${_dr_h#[}; _dr_h=${_dr_h%]}
+    case "$_dr_h" in
+        ""|localhost|localhost.localdomain|127.*|::1|0:0:0:0:0:0:0:1) return 1 ;;
+    esac
+    _dr_self=$( { hostname; hostname -f; hostname -s; hostname -I | tr ' ' '\n'
+                  ip -o addr show | awk '{sub(/\/.*/, "", $4); print $4}'; } 2>/dev/null | awk 'NF')
+    printf '%s\n' "$_dr_self" | grep -qixF -- "$_dr_h" && return 1
+    # 이름이 이 호스트 IP 로 풀리면 로컬(예: --host db01.example.com 이 자기 자신). 조회는 5초 제한.
+    for _dr_ip in $(run_to 5 getent hosts "$_dr_h" 2>/dev/null | awk '{print $1}'); do
+        case "$_dr_ip" in 127.*|::1) return 1 ;; esac
+        printf '%s\n' "$_dr_self" | grep -qixF -- "$_dr_ip" && return 1
+    done
+    return 0
+}
+
+# db_remote_skip <확인 대상 설명>  -- 원격 모드면 CHECK_* 를 MANUAL 로 채우고 0 반환(호출 check 는 return).
+# DB_REMOTE 는 run.sh 가 한 번 계산해 export 하고, 없으면(fix.sh 재검증 등) 여기서 계산한다.
+db_remote_skip() {
+    if [ -z "${DB_REMOTE:-}" ]; then
+        if db_is_remote; then DB_REMOTE=1; else DB_REMOTE=0; fi
+    fi
+    [ "$DB_REMOTE" = "1" ] || return 1
+    CHECK_STATUS="MANUAL"
+    CHECK_DETAIL="원격 모드 - DB 서버 호스트에서 실행 필요: $1 은(는) DB 서버의 로컬 정보라 이 PC(--host ${DB_HOST:-})에서 확인할 수 없음"
+    CHECK_EVIDENCE=""
+    return 0
+}
+
+# ---- DBMS 공통: 접속 계정 권한 사전 확인 (진단 검수 D-R2/D-R5) ------------------------------
+# 관리자가 아닌 계정은 카탈로그에서 자기 행만 보거나(information_schema·role_table_grants) 설정 경로
+# 조회(SHOW hba_file)를 거부당해, "없음"을 GOOD 으로 읽는 거짓 양호가 났다. preflight 성공 뒤 1회 확인해
+# DB_PRIV_LIMITED(항목 코드 목록)·DB_PRIV_MSG·DB_PRIV_STATUS 를 세운다 - run.sh 가 이 항목들의 판정을
+# DB_PRIV_STATUS(기본 ERROR)로 바꾼다. 확인 쿼리 자체가 실패해도 "권한 부족"으로 본다(MSSQL 과 동일).
+db_privilege_check() {
+    DB_PRIV_LIMITED=""; DB_PRIV_MSG=""; DB_PRIV_STATUS="ERROR"
+    [ "${DB_CONN_FAILED:-0}" = "1" ] && return 0
+    case "${DBMS_ENGINE:-}" in
+        mysql)
+            if ! mysql_query "SELECT 1 FROM mysql.user LIMIT 1;" >/dev/null 2>&1; then
+                DB_PRIV_LIMITED="D-01 D-02 D-04 D-06 D-08 D-10 D-11 D-21"
+                DB_PRIV_MSG="접속 계정이 mysql.user 를 읽을 수 없음(관리자 권한 아님)"
+            fi ;;
+        postgres)
+            _pc=$(psql_query "SELECT rolsuper::text || '|' || pg_has_role(current_user, 'pg_read_all_settings', 'USAGE')::text FROM pg_roles WHERE rolname = current_user;" 2>/dev/null | tr -d ' \t\r')
+            case "$_pc" in
+                true\|*) : ;;
+                false\|true)
+                    DB_PRIV_LIMITED="D-01 D-08 D-11"
+                    DB_PRIV_MSG="접속 계정이 superuser 가 아님(pg_shadow·pg_authid 미조회, role_table_grants 는 자기 관련 행만 보임)" ;;
+                *)
+                    DB_PRIV_LIMITED="D-01 D-03 D-08 D-10 D-11 D-14"
+                    DB_PRIV_MSG="접속 계정이 superuser·pg_read_all_settings 가 아님(설정 경로·일부 설정값·권한 카탈로그 미조회)" ;;
+            esac ;;
+        oracle)
+            # CDB$ROOT 로 접속하면 dba_* 뷰가 루트 컨테이너만 보여 PDB 의 계정·객체가 빠진다(진단 검수 D-R5).
+            _con=$(oracle_query "SELECT sys_context('USERENV','CON_NAME') FROM dual;" 2>/dev/null | tr -d ' \t\r' | awk 'NF' | head -n 1)
+            if [ "$_con" = "CDB\$ROOT" ]; then
+                _npdb=$(oracle_query "SELECT COUNT(*) FROM v\$pdbs WHERE name <> 'PDB\$SEED';" 2>/dev/null | tr -d ' \t\r' | awk 'NF' | head -n 1)
+                if [ -n "$_npdb" ] && [ "$_npdb" != "0" ]; then
+                    DB_PRIV_LIMITED="D-01 D-02 D-03 D-04 D-05 D-06 D-09 D-11 D-17 D-18 D-20 D-21"
+                    DB_PRIV_MSG="CDB\$ROOT 에 접속함 - PDB(${_npdb}개)의 계정·객체는 조회되지 않음. PDB 서비스명(--db)으로 각각 다시 진단 필요"
+                    DB_PRIV_STATUS="MANUAL"
+                fi
+            fi ;;
+    esac
+    export DB_PRIV_LIMITED DB_PRIV_MSG DB_PRIV_STATUS
+}
+
+# db_privilege_apply <code>  -- run.sh 루프에서 check 직후 호출. DB_PRIV_LIMITED 에 든 항목의 GOOD/VULN/MANUAL 을
+# DB_PRIV_STATUS 로 바꾸고 원래 판정은 detail 에 남긴다. CDB$ROOT(DB_PRIV_STATUS=MANUAL)는 루트에서 찾은 취약은
+# 그 자체로 사실이므로 GOOD 만 바꾼다(Oracle 실기: 루트의 OPEN 기본 계정 VULN 을 MANUAL 로 덮던 문제).
+db_privilege_apply() {
+    [ -n "${DB_PRIV_LIMITED:-}" ] || return 0
+    case " $DB_PRIV_LIMITED " in *" $1 "*) ;; *) return 0 ;; esac
+    case "$CHECK_STATUS" in
+        GOOD|VULN|MANUAL)
+            [ "$DB_PRIV_STATUS" = "MANUAL" ] && [ "$CHECK_STATUS" != "GOOD" ] && return 0
+            CHECK_DETAIL="$DB_PRIV_MSG - 전체 정보를 보지 못해 판정 불가(일부만 보고 내린 판정: $CHECK_STATUS - $CHECK_DETAIL)"
+            CHECK_STATUS="$DB_PRIV_STATUS" ;;
+    esac
 }
 
 # ---- DBMS 공통: MySQL 연결/쿼리 ---------------------------------------------
@@ -753,6 +1330,20 @@ postgres_hba_path() {
     done
 }
 
+# postgres_other_dbs_manual  -- 접속한 DB 하나만 보고 GOOD 을 낸 check 가 호출한다. 접속 가능한 다른 DB 가
+# 있으면 CHECK_STATUS 를 MANUAL 로 바꾸고 그 목록을 남긴다(진단 검수 D-R7, D-11/D-20). 다른 DB 에 추가로
+# 접속하지 않는 이유: pg_hba 가 DB 별로 달라 접속 실패(로그인 실패 기록)가 늘 수 있다(S3).
+postgres_other_dbs_manual() {
+    _odb=$(psql_query "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate AND datname <> current_database() ORDER BY datname;" 2>/dev/null)
+    _odb_rc=$?
+    if [ "$_odb_rc" -ne 0 ]; then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="다른 데이터베이스 목록을 조회하지 못함 - 접속 DB 판정: $CHECK_DETAIL"
+    elif [ -n "$_odb" ]; then
+        CHECK_STATUS="MANUAL"
+        CHECK_DETAIL="접속한 DB(${DB_NAME:-postgres})에서는 양호: $CHECK_DETAIL - 다른 DB($(printf '%s' "$_odb" | tr '\n' ' '))는 확인하지 않음, --db 로 각각 진단 필요"
+    fi
+}
+
 # ---- DBMS 공통: Oracle 연결/쿼리 --------------------------------------------
 # 비밀번호는 sqlplus 인자(argv)로 절대 넘기지 않고, 접속 문자열을 표준입력(파이프)으로만
 # 전달한다(ps 목록 노출 방지). DB_USER/DB_PASSWORD 미지정 시 OS 인증("/ as sysdba")으로 접속한다.
@@ -783,11 +1374,32 @@ oracle_query() {
         } | _db_run sqlplus -s /nolog 2>"${DB_ERR_FILE:-/dev/null}"
     )
     _rc=$?
+    # ORA-28002/28011(구버전)·ORA-28098(23ai 이상)은 비밀번호 만료 예고로, 접속 성공 시 함께 찍히는 경고다 - 예전에는
+    # 이 줄 때문에 전 항목이 ERROR 가 됐다(진단 검수 D-R11). 경고 블록("ERROR:" 머리줄, 이어지는 설명 줄, Help 링크)만
+    # 지우고 판정한다 - 남기면 "결과 있음=취약" check 가 거짓 VULN 을 낸다. ORA-28001(만료)은 db_preflight 1단계에서 걸러진다.
+    if printf '%s\n' "$_out" | grep -qE "$ORACLE_PW_WARN_RE"; then
+        _out=$(printf '%s\n' "$_out" | grep -vE "$ORACLE_PW_WARN_RE"'|^ERROR:[[:space:]]*$|password will expire|^Help: https?://docs\.oracle\.com/error-help/db/ora-280(02|11|98)' | sed '/^[[:space:]]*$/d')
+    fi
     if [ "$_rc" -eq 0 ] && printf '%s\n' "$_out" | grep -qE '^(ORA-[0-9]+|SP2-[0-9]+)'; then
         _rc=1
     fi
     printf '%s\n' "$_out"
     return $_rc
+}
+
+# oracle_profile_limits <'RES1','RES2'>  -- "프로파일|자원|실효값" 행 출력. DEFAULT 프로파일과, 잠기지 않은(OPEN)
+# 계정이 쓰는 모든 프로파일을 대상으로 하고, 사용자 정의 프로파일의 LIMIT 'DEFAULT' 는 DEFAULT 프로파일 값으로
+# 풀어 쓴다. 예전에는 DEFAULT 프로파일만 봐서 실제 계정에 붙은 사용자 정의 프로파일이 UNLIMITED 여도 양호였다
+# (진단 검수 D-R5, D-03/05/09).
+oracle_profile_limits() {
+    oracle_query "SELECT p.profile || '|' || p.resource_name || '|' || CASE WHEN p.limit = 'DEFAULT' THEN d.limit ELSE p.limit END FROM dba_profiles p JOIN dba_profiles d ON d.profile = 'DEFAULT' AND d.resource_name = p.resource_name WHERE p.resource_name IN ($1) AND (p.profile = 'DEFAULT' OR p.profile IN (SELECT profile FROM dba_users WHERE account_status = 'OPEN')) ORDER BY p.profile, p.resource_name;"
+}
+
+# oracle_conf_active <file>  -- .ora 파일에서 # 주석을 지운 내용을 출력(진단 검수 D-R6: 주석 처리된 설정을
+# 유효한 설정으로 읽어 거짓 GOOD 이 났다). 읽지 못하면 0이 아닌 값 반환.
+oracle_conf_active() {
+    [ -r "$1" ] || return 1
+    sed 's/#.*$//' "$1"
 }
 
 oracle_home() {
@@ -820,7 +1432,12 @@ oracle_listener_ora() {
 # (D-Bus 장애) 처럼 운영 환경에서 멈출 수 있는 명령에 쓴다.
 run_to() {
     _rt_s=$1; shift
-    if command -v timeout >/dev/null 2>&1; then timeout "$_rt_s" "$@"; else "$@"; fi
+    # -k 5: TERM 을 무시하는 명령도 5초 뒤 KILL(진단 검수 R-07). -k 가 없는 구형 timeout 은 그대로 쓴다.
+    if [ -z "${_RUN_TO_K+x}" ]; then
+        _RUN_TO_K=""; timeout -k 1 1 true >/dev/null 2>&1 && _RUN_TO_K="-k 5"
+    fi
+    # shellcheck disable=SC2086
+    if command -v timeout >/dev/null 2>&1; then timeout $_RUN_TO_K "$_rt_s" "$@"; else "$@"; fi
 }
 
 # low_prio <명령...> — 가능하면 nice -n 19 + ionice -c3(idle) 로 실행해 운영 서비스의 CPU/디스크 I/O 와
@@ -830,7 +1447,8 @@ low_prio() {
     if [ -z "${_LOW_PRIO_INIT:-}" ]; then
         _LOW_PRIO_INIT=1; LOW_PRIO_PREFIX=""
         nice -n 19 true >/dev/null 2>&1 && LOW_PRIO_PREFIX="nice -n 19"
-        ionice -c3 true >/dev/null 2>&1 && LOW_PRIO_PREFIX="$LOW_PRIO_PREFIX ionice -c3"
+        # -c3(idle) 는 디스크 I/O 가 끊이지 않는 서버에서 사실상 무기한 대기할 수 있다(진단 검수 R-07) - 최하위 best-effort
+        ionice -c2 -n7 true >/dev/null 2>&1 && LOW_PRIO_PREFIX="$LOW_PRIO_PREFIX ionice -c2 -n7"
     fi
     # shellcheck disable=SC2086
     $LOW_PRIO_PREFIX "$@"
@@ -878,8 +1496,78 @@ prepare_output_dir() {
     OUT_DIR="${_base}/${_host}_${_cat_num}_${_ts}-$$"
     make_private_dir "$OUT_DIR"
     make_private_dir "$OUT_DIR/raw"
+    # 진단(run.*) 전용 함수라 여기서는 umask 를 바꿔도 된다(진단은 출력물 외에 파일을 만들지 않음). 폴더만 700 이고
+    # 안의 result.json·raw/*.txt 는 644 로 만들어져, 결과 폴더를 복사·압축해 옮기면 그대로 남에게 읽혔다
+    # (진단 실행 검수 lib/tests/run_safety.sh 로 발견).
+    umask 077
     RUN_LOG="$OUT_DIR/run.log"
     : > "$RUN_LOG"
+}
+
+# nonroot_unverified -- root 가 아닌 실행에서 GOOD/NA 를 "확인 못 함(ERROR)"으로 바꾼다(01_unix·03_web 진입점 공용).
+# 읽지 못한 설정 파일(vsftpd.conf 0600, named.conf 0640, tomcat conf 등)·보이지 않는 남의 프로세스(hidepid)를
+# 각 check 가 "설정 없음/서비스 없음"으로 받아들여 GOOD·NA 가 나왔다(진단 검수 U-R1/WEB-R3). check 마다
+# [ -r ] 를 빠짐없이 넣는 대신 진입점에서 일괄 처리한다 - 원래 판정은 detail 에 남긴다. VULN 은 그대로 둔다.
+nonroot_unverified() {
+    [ "$(id -u 2>/dev/null)" = "0" ] && return 0
+    case "$CHECK_STATUS" in
+        GOOD|NA)
+            CHECK_DETAIL="root 권한이 아니어서 확인하지 못함(읽을 수 없는 설정·프로세스를 '없음'으로 판정했을 수 있음) - root 로 다시 실행 필요 / 비 root 판정: $CHECK_STATUS - $CHECK_DETAIL"
+            CHECK_STATUS="ERROR" ;;
+    esac
+}
+
+# run_lock_acquire <out_base> <category_num> / run_lock_release -- 같은 카테고리 진단이 동시에 두 번 돌지 않게 한다
+# (전체 find / 가 겹쳐 운영 서버 부하가 두 배가 됨 - 진단 검수 R-06). 잠금은 결과 기본 폴더 안에 두고,
+# 잠금을 잡은 프로세스가 이미 없으면(강제 종료 등) 정리하고 진행한다.
+run_lock_acquire() {
+    ( umask 077; mkdir -p "$1" ) 2>/dev/null
+    RUN_LOCK_DIR="$1/.run_$2.lock"
+    if ! mkdir "$RUN_LOCK_DIR" 2>/dev/null; then
+        _lpid=$(cat "$RUN_LOCK_DIR/pid" 2>/dev/null)
+        if [ -n "$_lpid" ] && kill -0 "$_lpid" 2>/dev/null; then
+            log_error "같은 카테고리 진단이 이미 실행 중입니다(PID $_lpid). 끝난 뒤 다시 실행하세요. (잠금: $RUN_LOCK_DIR)"
+            RUN_LOCK_DIR=""
+            exit 2
+        fi
+        log_warn "이전 진단이 남긴 잠금을 정리합니다(PID ${_lpid:-알 수 없음}, 실행 중 아님)."
+        rm -rf "$RUN_LOCK_DIR"
+        mkdir "$RUN_LOCK_DIR" 2>/dev/null || { log_error "잠금을 만들 수 없습니다: $RUN_LOCK_DIR"; RUN_LOCK_DIR=""; exit 2; }
+    fi
+    echo $$ > "$RUN_LOCK_DIR/pid"
+}
+run_lock_release() {
+    [ -n "${RUN_LOCK_DIR:-}" ] && rm -rf "$RUN_LOCK_DIR"
+    RUN_LOCK_DIR=""
+}
+
+# run_check_isolated <check 파일>  -- check 1개를 서브셸에서 실행하고 CHECK_STATUS/DETAIL/EVIDENCE 를 받아온다.
+# 예전에는 check 를 진단 셸에서 바로 실행해, 한 항목의 미설정 변수 하나(set -u)로 진단 전체가 중간에 죽었다
+# (U-61: snmpd.conf 의 "rocommunity <값>" 처럼 인자가 적은 줄 - 진단 실행 검수로 발견). 이제 그 항목만 ERROR
+# 로 남기고 다음 항목으로 넘어간다. 조치(fix.sh)의 재검증에도 쓴다 - 재검증이 죽으면 원복으로 이어져야 한다.
+run_check_isolated() {
+    _rci_dir="${OUT_DIR:-${FIX_OUT_DIR:-${TMPDIR:-/tmp}}}/.check.$$"
+    rm -rf "$_rci_dir"
+    ( umask 077; mkdir -p "$_rci_dir" ) || { CHECK_STATUS="ERROR"; CHECK_DETAIL="임시 폴더를 만들 수 없음: $_rci_dir"; CHECK_EVIDENCE=""; return; }
+    (
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="check 가 결과를 남기지 않음"; CHECK_EVIDENCE=""
+        # shellcheck disable=SC1090
+        . "$1"
+        if command -v run_check >/dev/null 2>&1; then run_check; fi
+        printf '%s' "$CHECK_STATUS" > "$_rci_dir/s"
+        printf '%s' "$CHECK_DETAIL" > "$_rci_dir/d"
+        printf '%s' "$CHECK_EVIDENCE" > "$_rci_dir/e"
+    ) 2> "$_rci_dir/err"
+    _rci_rc=$?
+    if [ -f "$_rci_dir/s" ] && [ -f "$_rci_dir/e" ]; then
+        CHECK_STATUS=$(cat "$_rci_dir/s"); CHECK_DETAIL=$(cat "$_rci_dir/d"); CHECK_EVIDENCE=$(cat "$_rci_dir/e")
+    else
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="check 실행 중 비정상 종료(rc=$_rci_rc): $(tail -n 2 "$_rci_dir/err" 2>/dev/null | tr '\n' ' ')"
+        CHECK_EVIDENCE=""
+    fi
+    [ -s "$_rci_dir/err" ] && cat "$_rci_dir/err" >&2
+    rm -rf "$_rci_dir"
 }
 
 # ============================================================================

@@ -14,13 +14,19 @@ $targets = @(
 
 $running = @()
 $evidence = @()
+$unverified = @()
 foreach ($t in $targets) {
-    $svc = Get-Service -Name $t.Name -ErrorAction SilentlyContinue
+    # 조회 실패(비관리자 배치 실행 등)를 "서비스 없음"으로 읽지 않는다(CI 실측: 비관리자 실행에서 VULN→NA)
+    try { $svc = Get-ServiceChecked -Name $t.Name }
+    catch { $unverified += $t.Label; $evidence += "$($t.Label) ($($t.Name)): 조회 실패 - $($_.Exception.Message)"; continue }
     if (-not $svc) { continue }
     $evidence += "$($t.Label) ($($t.Name)): $($svc.Status)"
     if ($svc.Status -eq "Running") { $running += $t.Label }
 }
 
+if ($running.Count -eq 0 -and $unverified.Count -gt 0) {
+    return New-CheckResult -Code "W-18" -Status "ERROR" -Detail ("서비스 상태를 조회하지 못함: " + ($unverified -join ", ")) -Evidence ($evidence -join "`n")
+}
 if ($evidence.Count -eq 0) {
     return New-CheckResult -Code "W-18" -Status "NA" -Detail "점검 대상 서비스(가이드 예시 목록)가 이 시스템에 존재하지 않음"
 }

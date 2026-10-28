@@ -29,7 +29,37 @@ FIXTURES_DIR = os.path.join(TESTS_DIR, "fixtures")
 CASES = [
     ("cisco_ios_vuln.txt", "expected_vuln.json"),
     ("cisco_ios_hardened.txt", "expected_hardened.json"),
+    # 경계 사례(진단 검수 D-R4/D-R10/D-R11): 비밀값이 결과물에 남지 않는지, view/ipv6 community·이름 ACL·
+    # no login VTY·tftp alias 판정. expected 는 해당 항목만 담는다.
+    ("cisco_ios_edge.txt", "expected_edge.json"),
 ]
+
+# 결과 폴더의 어떤 파일(result.json·raw·report.html·result.csv·summary)에도 나오면 안 되는 비밀값 원문(S5).
+# vuln 픽스처의 community(public 은 기본값이라 검사하지 않음)·VTY 평문 비밀번호, edge 픽스처의 모든 비밀값.
+SECRETS = {
+    "cisco_ios_vuln.txt": ["private2024", "telnetpass", "cisco123"],
+    "cisco_ios_hardened.txt": ["K9x$mPz2qLw8", "StrongPass9!", "StrongAdmin9!"],
+    "cisco_ios_edge.txt": [
+        "EdgeEnableHashLeak01", "EdgeUserT7", "EdgeAuditSecretLeak02", "EdgeOspfKeyLeak03",
+        "EdgeTacacsKeyLeak04", "EdgeIsakmpKeyLeak05", "EdgeV13w#Comm06", "EdgeIpv6#Comm07",
+        "EdgeAuthKeyLeak08", "EdgePrivKeyLeak09", "EdgeTrapCommLeak10", "EdgeTrapCommLeak11",
+        "EdgeVtyPassT7Leak12", "EdgeVtyPlainLeak13",
+    ],
+}
+
+
+def _secret_leaks(fixture_file: str, out_dir: str) -> list[str]:
+    leaks = []
+    for root, _dirs, files in os.walk(out_dir):
+        for name in files:
+            p = os.path.join(root, name)
+            with open(p, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            for s in SECRETS.get(fixture_file, []):
+                # result.json 은 "</" 만 이스케이프하므로 원문 그대로 검색하면 된다.
+                if s in text:
+                    leaks.append(f"{fixture_file}: 비밀값 '{s}' 가 결과물 {os.path.relpath(p, out_dir)} 에 남음")
+    return leaks
 
 
 def run_one(fixture_file: str, expected_file: str) -> list[str]:
@@ -52,8 +82,9 @@ def run_one(fixture_file: str, expected_file: str) -> list[str]:
         with open(result_paths[0], encoding="utf-8") as f:
             result = json.load(f)
         actual = {it["code"]: it["status"] for it in result["items"]}
+        leaks = _secret_leaks(fixture_file, out_dir)
 
-    failures = []
+    failures = list(leaks)
     for code, expected_status in expected.items():
         actual_status = actual.get(code)
         if actual_status != expected_status:

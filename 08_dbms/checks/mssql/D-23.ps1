@@ -3,7 +3,8 @@
 #                        (2) 서비스 계정에 sysadmin 미부여 를 모두 만족
 #                        취약 = 활성화 & 위 조건 불충족
 
-$out = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT value FROM sys.configurations WHERE name = 'xp_cmdshell';"
+# value 는 설정만 해두고 RECONFIGURE 하지 않은 값일 수 있다 - 실제 적용값인 value_in_use 로 판정한다(진단 검수 D-R11).
+$out = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT value_in_use FROM sys.configurations WHERE name = 'xp_cmdshell';"
 if (-not $Global:DbQueryOk) {
     $err = if (Test-Path $Global:DbErrFile) { Get-Content -Raw $Global:DbErrFile } else { "" }
     return New-CheckResult -Code "D-23" -Status "ERROR" -Detail "MSSQL 연결/쿼리 실패: $err" -Evidence ($out -join "`n")

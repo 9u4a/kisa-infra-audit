@@ -80,7 +80,7 @@ SELECTED=""
 if [ -n "$ITEM_FILTER" ]; then
     _old_ifs=$IFS; IFS=,
     for code in $ITEM_FILTER; do
-        SELECTED="$SELECTED $code"
+        if code_is_known "$code" "$ALL_CODES"; then SELECTED="$SELECTED $code"; else log_warn "알 수 없는 항목 코드라 건너뜀: $code"; fi
     done
     IFS=$_old_ifs
 elif [ -n "$GROUP_FILTER" ]; then
@@ -98,6 +98,7 @@ if [ "$TOTAL" -eq 0 ]; then
     exit 2
 fi
 
+run_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
 prepare_output_dir "$OUT_BASE" "$CATEGORY_NUM"
 NDJSON="$OUT_DIR/.result.ndjson"
 : > "$NDJSON"
@@ -123,13 +124,9 @@ for code in $SELECTED; do
     CHECK_EVIDENCE=""
 
     if [ -f "$check_file" ]; then
-        # shellcheck disable=SC1090
-        . "$check_file"
-        if command -v run_check >/dev/null 2>&1; then
-            run_check
-        fi
-        unset -f run_check 2>/dev/null || true
+        run_check_isolated "$check_file"
     fi
+    nonroot_unverified
     # Solaris/AIX/HP-UX 는 Docker 등으로 실기 검증할 수 없는 환경이라(lib/common.sh
     # append_unverified_note 주석 참고) 판정 결과마다 "미검증" 안내를 투명하게 덧붙인다 - 개별
     # check 파일 67개 전부에 중복 작성하지 않고 여기 한 곳에서 일괄 처리한다.
@@ -155,6 +152,7 @@ done
 RESULT_JSON="$OUT_DIR/result.json"
 result_finalize "$NDJSON" "$RESULT_JSON" "$CATEGORY_NAME" "$HOST_NAME" "$OS_FAMILY"
 rm -f "$NDJSON"
+run_lock_release
 
 render_report_html "$LIB_DIR" "$GUIDE_JSON" "$RESULT_JSON" "$OUT_DIR/report.html"
 write_summary "$OUT_DIR/summary.txt" "$CATEGORY_NAME" "$HOST_NAME" "$OS_FAMILY" "$N_VULN" "$N_MANUAL" "$N_ERROR" "$N_NA" "$N_GOOD"

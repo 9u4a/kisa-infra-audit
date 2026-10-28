@@ -19,7 +19,12 @@ foreach ($site in $sites) {
         $hidden = Get-WebConfiguration -Filter "system.webServer/security/requestFiltering/hiddenSegments/add" -PSPath "IIS:\Sites\$site" -ErrorAction Stop
         $names = @($hidden | ForEach-Object { $_.segment })
     } catch {
-        $names = @()
+        # WEB-R7: 예전에는 조회 실패를 "목록 비어 있음"으로 보아 거짓 VULN 이었다 - 실패 표시만 남기고 판정에서 뺀다
+        # (다른 사이트가 모두 GOOD 이면 run.ps1 이 ERROR 로 바꾼다)
+        $Global:IisConfigQueryFailed = $true
+        $Global:IisConfigQueryError = "hiddenSegments ($site): $($_.Exception.Message)"
+        $evid += "[$site] hiddenSegments 조회 실패: $($_.Exception.Message)"
+        continue
     }
     $hasWebConfig = $names -contains "web.config"
     $evid += "[$site] hiddenSegments = $($names -join ', ')"

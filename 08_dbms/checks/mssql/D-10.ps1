@@ -5,6 +5,10 @@
 # 활성화되어 있는지"(전혀 없으면 명백한 취약)까지만 자동 판정하고, IP 허용 목록의 구체적
 # 범위는 MANUAL로 안내한다.
 
+if (Test-MssqlRemoteTarget) {
+    # -SqlHost 가 다른 서버면 아래 조회는 이 PC 의 방화벽을 본다(진단 검수 D-R1)
+    return New-CheckResult -Code "D-10" -Status "MANUAL" -Detail "원격 모드 - DB 서버 호스트에서 실행 필요: Windows 방화벽은 DB 서버의 로컬 설정이라 이 PC(-SqlHost $env:DB_HOST)에서 확인할 수 없음"
+}
 try {
     $profiles = Get-NetFirewallProfile -ErrorAction Stop
 } catch {

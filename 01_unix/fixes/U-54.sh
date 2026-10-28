@@ -3,6 +3,8 @@
 run_fix() {
     fix_service_disable vsftpd proftpd
     fix_xinetd_disable /etc/xinetd.d/ftp
+    # check 가 /etc/inetd.conf 를 보게 되어(진단 검수 U-R6) 조치도 같은 항목을 주석 처리한다.
+    fix_inetd_disable ftp
     pkill -f 'vsftpd|proftpd|in\.ftpd' 2>/dev/null
     FIX_STATUS="APPLIED"
     FIX_DETAIL="평문 FTP 서비스(vsftpd/proftpd)를 정지/비활성화함(SFTP 사용 권장)"

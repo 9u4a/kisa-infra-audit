@@ -6,12 +6,12 @@ run_check() {
     detect_web_engines
     case " $WEB_ENGINES " in
         *" tomcat "*)
-            home=$(tomcat_home)
-            f="$home/conf/server.xml"
-            if [ ! -f "$f" ]; then
-                CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 파일을 찾을 수 없음"; CHECK_EVIDENCE=""
+            errors=""
+            if ! web_load_tomcat_conf server.xml; then
+                CHECK_STATUS="ERROR"; CHECK_DETAIL="server.xml 을 확인하지 못함:$errors"; CHECK_EVIDENCE=""
                 return
             fi
+            f=$TC_FILE
             digest=$(strip_xml_comments "$f" | grep -oE 'digest="[^"]*"' | head -n1)
             if [ -z "$digest" ]; then
                 CHECK_STATUS="NA"; CHECK_DETAIL="LDAP Realm(digest 속성)이 설정되어 있지 않음"; CHECK_EVIDENCE="$f 에 digest 속성 없음"

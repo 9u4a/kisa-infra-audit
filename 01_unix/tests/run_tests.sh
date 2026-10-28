@@ -80,4 +80,22 @@ else
     echo "FAIL: fix-apply - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
 fi
 
+# ---- 진단(run.sh) 운영 안전 실기 검사 (lib/tests/run_safety.sh) ----------------------
+# 진단 전후 파일시스템·/etc 내용·프로세스·/tmp 가 같은지(S1), 비대화형으로 제한 시간 안에 끝나는지(S2),
+# 비밀값(/etc/passwd 비밀번호 필드·SNMP community)이 출력물 어디에도 없고 권한이 실행자 전용인지(S5),
+# 일반 사용자로 돌렸을 때 root 에서 VULN 인 항목이 GOOD/NA 로 바뀌지 않는지(S6).
+# snmpd.conf 의 "rocommunity <값>"(소스 생략) 줄은 1.3.1 까지 U-61 에서 진단 전체를 죽였다 - 재발 방지로 넣어 둔다.
+rs_dir="rs_unix_$$"
+docker rm -f kisa-rs-unix >/dev/null 2>&1 || true
+docker create --name kisa-rs-unix "$IMAGE" sh -c "
+    sh 01_unix/tests/fixtures/setup.sh vuln >/dev/null 2>&1
+    mkdir -p /etc/snmp && echo 'rocommunity KisaComm77Secret' >> /etc/snmp/snmpd.conf
+    RUN_CMD='sh 01_unix/run.sh -e debian' SECRETS='plainhash123|KisaComm77Secret' sh lib/tests/run_safety.sh
+" >/dev/null
+docker start -a kisa-rs-unix >/dev/null
+docker cp kisa-rs-unix:/rs "$rs_dir" >/dev/null 2>&1
+docker rm kisa-rs-unix >/dev/null
+python3 lib/tests/run_safety_check.py "$rs_dir" 01_unix --expect U-61=VULN || fail=1
+rm -rf "$rs_dir"
+
 exit $fail

@@ -1,23 +1,24 @@
 # N-20 (상) SNMP Community 권한 설정 [Cisco IOS]
 # 판단 기준(가이드 원문): 양호 = SNMP 커뮤니티 권한이 RO(읽기 전용) / 취약 = RW(읽기 쓰기)
 # 주의: Cisco IOS는 RO/RW를 생략하면 기본값이 RW이므로, 명시적 RO가 없으면 취약으로 판단한다.
+from parsers import cisco_ios as cio
+
+
 def check(ctx):
-    # 주의: \s 는 개행도 포함하므로 옵션 그룹에 쓰면 다음 줄(예: "!")까지 캡처해버리는 버그가 있었다
-    # (N-19에서 실기 테스트로 발견). 줄 내부 공백만 매치하도록 [ \t] 를 사용해 줄 경계를 넘지 않게 한다.
-    community_lines = ctx.find(r"^(snmp-server community \S+(?:[ \t]+(?:RO|RW))?(?:[ \t]+\S+)?)[ \t]*$")
+    # view/ipv6 토큰이 있는 줄도 해석한다(진단 검수 D-R10 - 예전 정규식은 그런 줄을 놓쳤다).
+    community_lines = cio.snmp_community_lines(ctx)
     if not community_lines:
         return {"status": "NA", "detail": "SNMP community 설정이 없음(SNMP 미사용)", "evidence": ""}
     # Community String은 증적에 원문으로 남기지 않고 마스킹한다.
     evidence_lines = []
     rw_count = 0
     for line in community_lines:
-        tokens = line.split()
-        rest = tokens[3:]
-        is_rw = "RW" in rest or "RO" not in rest  # RO/RW 생략 시 기본값은 RW
-        if is_rw:
+        info = cio.parse_snmp_community(line)
+        if info is None:
+            continue
+        if info["mode"] != "RO":  # RO/RW 생략 시 기본값은 RW
             rw_count += 1
-        masked = " ".join(["snmp-server", "community", "<community>"] + rest)
-        evidence_lines.append(masked)
+        evidence_lines.append(" ".join(["snmp-server", "community", "<community>"] + info["rest"]))
     evidence = "\n".join(evidence_lines)
     if rw_count:
         return {"status": "VULN", "detail": f"읽기-쓰기(RW) 권한의 SNMP community 설정이 {rw_count}건 존재함", "evidence": evidence}

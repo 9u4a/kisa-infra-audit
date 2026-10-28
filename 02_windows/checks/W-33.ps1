@@ -3,9 +3,14 @@
 # 자동화 범위: HTTP(W3SVC)는 실제 응답 헤더(Server)를 조회해 판정. FTP/SMTP는 서비스 구동
 #             여부만 확인 가능하고 배너 문구 자체 확인은 어려워 구동 중이면 MANUAL.
 
-$web = Get-Service -Name "W3SVC" -ErrorAction SilentlyContinue
-$ftp = Get-Service -Name "FTPSVC" -ErrorAction SilentlyContinue
-$smtp = Get-Service -Name "SMTPSVC" -ErrorAction SilentlyContinue
+# 서비스 조회 실패(비관리자 배치 실행 등)를 "미사용 = GOOD" 으로 읽지 않는다(CI 실측: 비관리자 실행에서 VULN→GOOD)
+try {
+    $web = Get-ServiceChecked -Name "W3SVC"
+    $ftp = Get-ServiceChecked -Name "FTPSVC"
+    $smtp = Get-ServiceChecked -Name "SMTPSVC"
+} catch {
+    return New-CheckResult -Code "W-33" -Status "ERROR" -Detail "웹/FTP/SMTP 서비스 상태를 조회하지 못함: $($_.Exception.Message)"
+}
 
 $anyRunning = $false
 $evidence = @()
@@ -18,21 +23,30 @@ if ($web -and $web.Status -eq "Running") {
     # 운영 IIS 에 실제 요청이 1~2회 발생한다(앱 풀 기동·접속 로그 기록). 유휴 앱 풀은 첫 요청이
     # cold start 로 늦을 수 있어 1회 재시도한다. 끝내 응답이 없으면 "헤더 없음 = 양호"로 단정하지
     # 않고 ERROR 로 남긴다(예전에는 시간 초과도 GOOD 이 됐다 - CI 러너에서 실제로 재현됨).
+    # W-R15: 리디렉션을 따라가지 않고(AllowAutoRedirect=false) 시스템 프록시도 쓰지 않는다(Proxy=$null) - 예전
+    # Invoke-WebRequest 는 localhost 의 302 응답을 따라 외부 호스트로 요청을 보낼 수 있었다. 3xx 응답의 Server
+    # 헤더만으로 판정한다.
     $serverHeader = $null; $gotResponse = $false; $lastErr = ""
     foreach ($timeoutSec in 5, 15) {
+        $resp = $null
         try {
-            $resp = Invoke-WebRequest -Uri "http://localhost/" -UseBasicParsing -TimeoutSec $timeoutSec -ErrorAction Stop
+            $req = [System.Net.HttpWebRequest]::Create("http://localhost/")
+            $req.AllowAutoRedirect = $false
+            $req.Proxy = $null
+            $req.Method = "GET"
+            $req.Timeout = $timeoutSec * 1000
+            $req.ReadWriteTimeout = $timeoutSec * 1000
+            $resp = $req.GetResponse()
             $serverHeader = $resp.Headers["Server"]; $gotResponse = $true; break
-        } catch {
+        } catch [System.Net.WebException] {
+            # 4xx/5xx 도 응답이다(WebException.Response 에 헤더가 있음)
             $r = $_.Exception.Response
-            if ($r) {
-                # 4xx/5xx 도 응답이다. PS 5.1 은 HttpWebResponse, PS 7 은 HttpResponseMessage 라 헤더 접근법이 다르다.
-                $gotResponse = $true
-                if ($r -is [System.Net.HttpWebResponse]) { $serverHeader = $r.Headers["Server"] }
-                else { try { $serverHeader = @($r.Headers.Server | ForEach-Object { $_.ToString() }) -join " " } catch { $serverHeader = $null } }
-                break
-            }
+            if ($r) { $gotResponse = $true; $serverHeader = $r.Headers["Server"]; $r.Close(); break }
             $lastErr = $_.Exception.Message
+        } catch {
+            $lastErr = $_.Exception.Message
+        } finally {
+            if ($resp) { $resp.Close() }
         }
     }
     $serverHeader = "$(@($serverHeader) -join ' ')".Trim()

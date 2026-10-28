@@ -10,28 +10,45 @@ run_check() {
             faillock_conf="/etc/security/faillock.conf"
             deny=""
             evidence=""
+            pam_active=0
 
+            # 주석(#) 줄은 설정이 아니다 - 예전에는 "#auth ... pam_tally2.so deny=5" 를 설정으로 셌다(진단 검수 U-R4).
+            # PAM 은 줄 단위로 모듈을 쌓으므로 활성 줄이 여러 개면 마지막으로 찾은 deny= 값을 쓴다(기존 동작 유지).
             for f in $pam_files; do
                 [ -f "$f" ] || continue
-                line=$(grep -E 'pam_(faillock|tally2?)\.so' "$f" 2>/dev/null | grep -E 'deny=' | head -n1)
+                active=$(grep -vE '^[[:space:]]*#' "$f" 2>/dev/null | grep -E 'pam_(faillock|tally2?)\.so')
+                [ -n "$active" ] || continue
+                pam_active=1
+                evidence="$evidence
+$f: $(printf '%s' "$active" | head -n 3)"
+                line=$(printf '%s\n' "$active" | grep -E 'deny=' | head -n1)
                 if [ -n "$line" ]; then
-                    evidence="$evidence
-$f: $line"
                     d=$(printf '%s' "$line" | sed -nE 's/.*deny=([0-9]+).*/\1/p')
                     [ -n "$d" ] && deny="$d"
                 fi
             done
 
-            if [ -z "$deny" ] && [ -f "$faillock_conf" ]; then
+            # faillock.conf 는 pam_faillock.so 가 PAM 스택에 있을 때만 쓰인다 - 파일만 있고 모듈이 없으면
+            # 잠금이 동작하지 않는데 예전에는 GOOD 이었다(진단 검수 U-R4). 같은 키가 여러 번이면 마지막 값이 적용된다.
+            conf_deny=""
+            if [ -f "$faillock_conf" ]; then
                 line=$(grep -E '^[[:space:]]*deny[[:space:]]*=' "$faillock_conf" 2>/dev/null | tail -n1)
                 if [ -n "$line" ]; then
                     evidence="$evidence
 $faillock_conf: $line"
-                    deny=$(printf '%s' "$line" | sed -nE 's/.*deny[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p')
+                    conf_deny=$(printf '%s' "$line" | sed -nE 's/.*deny[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p')
                 fi
             fi
+            [ -z "$deny" ] && [ "$pam_active" -eq 1 ] && deny="$conf_deny"
 
-            if [ -z "$deny" ]; then
+            if [ "$pam_active" -eq 0 ]; then
+                CHECK_STATUS="VULN"
+                if [ -n "$conf_deny" ]; then
+                    CHECK_DETAIL="$faillock_conf 에 deny=${conf_deny} 가 있으나 PAM 스택(${pam_files})에 pam_faillock/pam_tally 모듈이 없어 계정 잠금이 동작하지 않음"
+                else
+                    CHECK_DETAIL="PAM 스택에 pam_faillock/pam_tally 모듈이 없음 (계정 잠금 임계값 미설정)"
+                fi
+            elif [ -z "$deny" ]; then
                 CHECK_STATUS="VULN"
                 CHECK_DETAIL="pam_faillock/pam_tally deny 설정 또는 faillock.conf 설정을 찾을 수 없음 (계정 잠금 임계값 미설정)"
             elif [ "$deny" -ge 1 ] 2>/dev/null && [ "$deny" -le 10 ] 2>/dev/null; then

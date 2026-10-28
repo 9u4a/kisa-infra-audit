@@ -11,7 +11,7 @@ run_fix() {
         [ -z "$f" ] && continue
         [ -f "$f" ] || continue
         perm=$(stat -L -c '%a' "$f" 2>/dev/null)
-        [ -n "$perm" ] && [ "$perm" -le 640 ] 2>/dev/null && continue
+        [ -n "$perm" ] && perm_within "$perm" 640 && continue
         owner=$(stat -L -c '%U' "$f" 2>/dev/null)
         case "$owner" in
             root|postgres) : ;;

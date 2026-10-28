@@ -12,7 +12,7 @@
   "WEB-11": "VULN",
   "WEB-12": "VULN",
   "WEB-13": "NA",
-  "WEB-14": "GOOD",
+  "WEB-14": "VULN",
   "WEB-15": "NA",
   "WEB-16": "VULN",
   "WEB-17": "MANUAL",
@@ -24,5 +24,5 @@
   "WEB-23": "NA",
   "WEB-24": "MANUAL",
   "WEB-25": "MANUAL",
-  "WEB-26": "GOOD"
+  "WEB-26": "VULN"
 }

@@ -20,9 +20,10 @@ run_fix() {
 
     for f in /etc/samba/smb.conf /usr/lib/smb.conf; do
         [ -f "$f" ] || continue
-        grep -qiE '^[[:space:]]*guest ok[[:space:]]*=[[:space:]]*yes' "$f" || continue
+        # check(U-35)와 같은 기준(진단 검수 U-R15): 모든 섹션의 guest ok/public = yes|true|1
+        grep -qiE '^[[:space:]]*(guest[[:space:]]*ok|public)[[:space:]]*=[[:space:]]*(yes|true|1)[[:space:]]*$' "$f" || continue
         fix_backup "$f"
-        sed -i -E 's/^([[:space:]]*)guest ok[[:space:]]*=[[:space:]]*yes/\1guest ok = no/I' "$f"
+        sed -i -E 's/^([[:space:]]*)(guest[[:space:]]*ok|public)[[:space:]]*=[[:space:]]*(yes|true|1)[[:space:]]*$/\1\2 = no/I' "$f"
         applied="$applied $f(guest ok=no)"
     done
 

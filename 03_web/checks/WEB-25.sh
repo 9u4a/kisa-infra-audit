@@ -23,11 +23,18 @@ run_check() {
 [Nginx] $v"
     esac
     case " $WEB_ENGINES " in *" tomcat "*)
-        home=$(tomcat_home)
-        v="확인 실패"
-        [ -f "$home/lib/catalina.jar" ] && v=$(find "$home/lib" -name 'catalina.jar' -exec sh -c 'unzip -p "$1" META-INF/MANIFEST.MF 2>/dev/null' _ {} \; | grep -i 'Implementation-Version' | head -n1)
+        home=$(tomcat_home) || home="(설치 경로를 찾지 못함)"
+        v="버전 확인 실패"
+        # Debian 등은 CATALINA_BASE(/var/lib/tomcatN)와 CATALINA_HOME(/usr/share/tomcatN, lib/catalina.jar)이 다르다
+        for jar in "$home/lib/catalina.jar" "${CATALINA_HOME:-/nonexistent}/lib/catalina.jar" /usr/share/tomcat10/lib/catalina.jar \
+                   /usr/share/tomcat9/lib/catalina.jar /usr/share/tomcat/lib/catalina.jar; do
+            [ -f "$jar" ] || continue
+            v=$(unzip -p "$jar" META-INF/MANIFEST.MF 2>/dev/null | grep -i 'Implementation-Version' | head -n1)
+            [ -n "$v" ] || v="$jar (unzip 없음 - 버전 확인 실패)"
+            break
+        done
         evidence="$evidence
-[Tomcat] CATALINA_HOME=$home $v"
+[Tomcat] CATALINA_BASE=$home $v"
     esac
 
     CHECK_STATUS="MANUAL"

@@ -2,24 +2,31 @@
 # 판단 기준(가이드 원문): 양호 = 관리자 비밀번호가 암호화되어 있거나 유추 어려운 비밀번호
 #                        취약 = 평문 저장이거나 유추하기 쉬운 비밀번호
 # 대상: Tomcat, IIS, JEUS. 자동화 범위: Tomcat tomcat-users.xml 평문 비밀번호 길이/복잡도 휴리스틱.
+# <user> 요소가 여러 줄에 걸쳐 있어도 요소 단위로 잘라 본다(예전에는 줄 단위라 놓침 - 진단 검수 WEB-R11).
+# 비밀번호 원문은 증적에 남기지 않고 길이만 남긴다(S5).
 
 run_check() {
     detect_web_engines
     case " $WEB_ENGINES " in
         *" tomcat "*)
-            home=$(tomcat_home)
-            f="$home/conf/tomcat-users.xml"
+            if ! confdir=$(tomcat_conf_dir); then
+                CHECK_STATUS="ERROR"; CHECK_DETAIL="Tomcat 이 감지됐으나 설치 경로(CATALINA_BASE)·conf 폴더를 찾지 못해 관리자 비밀번호를 확인하지 못함"; CHECK_EVIDENCE=""
+                return
+            fi
+            f="$confdir/tomcat-users.xml"
             if [ ! -f "$f" ]; then
-                CHECK_STATUS="NA"; CHECK_DETAIL="tomcat-users.xml 이 없음"; CHECK_EVIDENCE=""
+                CHECK_STATUS="NA"; CHECK_DETAIL="tomcat-users.xml 이 없음"; CHECK_EVIDENCE="$f 없음"
                 return
             fi
             if [ ! -r "$f" ]; then
                 CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 를 읽을 수 없음(권한 부족) - 비밀번호 확인 불가"; CHECK_EVIDENCE=""
                 return
             fi
-            mgr_lines=$(strip_xml_comments "$f" | grep -E 'roles="[^"]*manager-gui')
+            mgr_lines=$(strip_xml_comments "$f" | tr '\n' ' ' | \
+                grep -oE '<user([[:space:]]+[A-Za-z_:.-]+[[:space:]]*=[[:space:]]*"[^"]*")*[[:space:]]*/?>' | \
+                grep -E 'roles="[^"]*manager-gui')
             if [ -z "$mgr_lines" ]; then
-                CHECK_STATUS="GOOD"; CHECK_DETAIL="manager-gui 계정이 없어 해당 없음(관리자 페이지 미사용)"; CHECK_EVIDENCE=""
+                CHECK_STATUS="GOOD"; CHECK_DETAIL="manager-gui 계정이 없어 해당 없음(관리자 페이지 미사용)"; CHECK_EVIDENCE="$f 확인"
                 return
             fi
             weak=""
@@ -28,8 +35,8 @@ run_check() {
 '
             for line in $mgr_lines; do
                 IFS=$old_ifs
-                user=$(printf '%s' "$line" | sed -nE 's/.*username="([^"]*)".*/\1/p')
-                pass=$(printf '%s' "$line" | sed -nE 's/.*password="([^"]*)".*/\1/p')
+                user=$(printf '%s' "$line" | sed -nE 's/.*[[:space:]]username="([^"]*)".*/\1/p')
+                pass=$(printf '%s' "$line" | sed -nE 's/.*[[:space:]]password="([^"]*)".*/\1/p')
                 len=${#pass}
                 evidence="$evidence
 계정 $user: 비밀번호 길이=$len"

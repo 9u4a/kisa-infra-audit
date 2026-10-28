@@ -7,7 +7,9 @@ $auPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
 $auOptions = Test-RegistryValue -Path $auPath -Name "AUOptions"
 $noAuto = Test-RegistryValue -Path $auPath -Name "NoAutoUpdate"
 
-$recentHotfix = Get-HotFix -ErrorAction SilentlyContinue | Sort-Object InstalledOn -Descending | Select-Object -First 5
+# W-R16: Get-HotFix 는 시간 제한이 없어 WMI 이상 시 무기한 대기할 수 있다 - 같은 클래스를 Get-CimInstance(30초 제한)로 조회
+$recentHotfix = @(Get-CimInstance -ClassName Win32_QuickFixEngineering -OperationTimeoutSec 30 -ErrorAction SilentlyContinue |
+    Sort-Object { try { [datetime]$_.InstalledOn } catch { [datetime]::MinValue } } -Descending | Select-Object -First 5)
 $evidence = "AUOptions=$auOptions NoAutoUpdate=$noAuto`n최근 설치된 HotFix(최대 5개):`n" +
     (($recentHotfix | ForEach-Object { "$($_.HotFixID) $($_.InstalledOn)" }) -join "`n")
 

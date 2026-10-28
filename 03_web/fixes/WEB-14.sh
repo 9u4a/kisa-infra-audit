@@ -7,7 +7,7 @@ run_fix() {
         conf=$(apache_conf_path)
         if [ -f "$conf" ]; then
             perm=$(stat -L -c '%a' "$conf" 2>/dev/null)
-            if [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null; then
+            if [ -n "$perm" ] && perm_exceeds "$perm" 750; then
                 owner=$(stat -L -c '%U' "$conf" 2>/dev/null)
                 fix_set_owner_perm "$conf" "$owner" 750
                 applied="$applied apache($conf)"
@@ -19,7 +19,7 @@ run_fix() {
         conf=$(nginx_conf_path)
         if [ -f "$conf" ]; then
             perm=$(stat -L -c '%a' "$conf" 2>/dev/null)
-            if [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null; then
+            if [ -n "$perm" ] && perm_exceeds "$perm" 750; then
                 owner=$(stat -L -c '%U' "$conf" 2>/dev/null)
                 fix_set_owner_perm "$conf" "$owner" 750
                 applied="$applied nginx($conf)"
@@ -32,7 +32,7 @@ run_fix() {
         f="$home/conf/web.xml"
         if [ -f "$f" ]; then
             perm=$(stat -L -c '%a' "$f" 2>/dev/null)
-            if [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null; then
+            if [ -n "$perm" ] && perm_exceeds "$perm" 750; then
                 owner=$(stat -L -c '%U' "$f" 2>/dev/null)
                 fix_set_owner_perm "$f" "$owner" 750
                 applied="$applied tomcat($f)"

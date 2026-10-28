@@ -6,15 +6,12 @@ run_fix() {
     applied=""
     for f in /root/.bash_profile /root/.bashrc /root/.profile /etc/profile; do
         [ -f "$f" ] || continue
-        line=$(grep -E '^[[:space:]]*(export[[:space:]]+)?PATH=' "$f" 2>/dev/null | tail -n1)
-        [ -z "$line" ] && continue
-        case "$line" in
-            *:.:*|*=.:*)
-                fix_backup "$f"
-                sed -i -E '/^[[:space:]]*(export[[:space:]]+)?PATH=/ { s/(:)\.(:)/\1\2/g; s/(=)\.:/\1/; }' "$f"
-                applied="$applied $f"
-                ;;
-        esac
+        # check(U-14)와 같이 모든 PATH= 줄, 따옴표로 감싼 값(PATH=".:$PATH")도 대상으로 한다(진단 검수 U-R9).
+        if grep -E '^[[:space:]]*(export[[:space:]]+)?PATH=' "$f" 2>/dev/null | grep -qE ':\.:|=["'"'"']?\.:'; then
+            fix_backup "$f"
+            sed -i -E '/^[[:space:]]*(export[[:space:]]+)?PATH=/ { s/(:)\.(:)/\1\2/g; s/(=["'"'"']?)\.:/\1/; }' "$f"
+            applied="$applied $f"
+        fi
     done
     if [ -z "$applied" ]; then
         FIX_STATUS="APPLIED"; FIX_DETAIL="root 쉘 시작 파일에서 조치가 필요한 PATH 설정을 찾지 못함(현재 프로세스 PATH만 취약했을 수 있음 - 재로그인 후 재확인 필요)"; FIX_EVIDENCE=""

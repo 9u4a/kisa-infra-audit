@@ -31,15 +31,16 @@ foreach ($site in $sites) {
     try {
         $acl = Get-Acl -Path $logDir -ErrorAction Stop
     } catch {
+        # WEB-R7: ACL 조회 실패를 건너뛴 채 GOOD 을 내지 않는다(실패 표시 → run.ps1 이 GOOD 을 ERROR 로)
+        $Global:IisConfigQueryFailed = $true
+        $Global:IisConfigQueryError = "ACL 조회 실패: $($_.Exception.Message)"
         $evid += "[$site] $logDir ACL 조회 실패: $($_.Exception.Message)"
         continue
     }
-    $bad = $acl.Access | Where-Object {
-        $_.AccessControlType -eq 'Allow' -and
-        $_.IdentityReference.Value -match 'Everyone|BUILTIN\\Users|Authenticated Users'
-    }
-    $evid += "[$site] $logDir 일반 사용자 ACE: $(if ($bad) { (@($bad | ForEach-Object { "$($_.IdentityReference):$($_.FileSystemRights)" })) -join '; ' } else { '없음' })"
-    if ($bad) { $vuln += $logDir }
+    # 이름 패턴 대신 SID(Everyone S-1-1-0, Users S-1-5-32-545, Authenticated Users S-1-5-11)로 비교한다(비영문 OS)
+    $bad = @(Get-AclAllowRulesForSids -Acl $acl -Sids @('S-1-1-0', 'S-1-5-32-545', 'S-1-5-11'))
+    $evid += "[$site] $logDir 일반 사용자 ACE: $(if ($bad.Count -gt 0) { (@($bad | ForEach-Object { "$(ConvertFrom-Sid $_.IdentityReference.Value):$($_.FileSystemRights)" })) -join '; ' } else { '없음' })"
+    if ($bad.Count -gt 0) { $vuln += $logDir }
 }
 
 if ($vuln.Count -gt 0) {

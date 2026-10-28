@@ -3,7 +3,12 @@
 #                        취약 = 5분 초과
 # 도메인 컨트롤러 전용 정책(Kerberos 정책)이므로, 도메인 컨트롤러가 아닌 경우 NA 로 처리한다.
 
-$productType = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).ProductType
+# W-R14: 예전에는 CIM 조회 실패($null)를 "DC 아님 = NA" 로 처리했다 - 확인하지 못하면 ERROR.
+try {
+    $productType = (Get-CimInstance Win32_OperatingSystem -ErrorAction Stop).ProductType
+} catch {
+    return New-CheckResult -Code "W-63" -Status "ERROR" -Detail "도메인 컨트롤러 여부(Win32_OperatingSystem) 조회 실패: $($_.Exception.Message)"
+}
 # ProductType: 1=워크스테이션/멤버서버, 2=도메인 컨트롤러, 3=서버
 if ($productType -ne 2) {
     return New-CheckResult -Code "W-63" -Status "NA" -Detail "이 시스템은 도메인 컨트롤러가 아니므로 Kerberos 정책이 적용되지 않음" -Evidence "ProductType=$productType"

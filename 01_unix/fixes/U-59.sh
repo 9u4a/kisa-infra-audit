@@ -10,12 +10,14 @@ run_fix() {
         FIX_STATUS="APPLIED"; FIX_DETAIL="SNMP 미사용으로 조치 불필요"; FIX_EVIDENCE=""
         return
     fi
-    if ! grep -qE '^[[:space:]]*(com2sec|rocommunity|rwcommunity)[[:space:]]' "$conf"; then
+    # check(U-59)와 같이 IPv6 지시어(com2sec6/rocommunity6/rwcommunity6)도 대상(진단 검수 U-R15).
+    # 한계: includeFile/includeDir 로 불러온 파일은 고치지 않는다(재검증이 실패하면 원복됨 - 수동 조치).
+    if ! grep -qE '^[[:space:]]*(com2sec6?|rocommunity6?|rwcommunity6?)[[:space:]]' "$conf"; then
         FIX_STATUS="APPLIED"; FIX_DETAIL="v1/v2 community 설정이 없어 조치 불필요"; FIX_EVIDENCE=""
         return
     fi
     fix_backup "$conf"
-    sed -i -E 's/^([[:space:]]*)(com2sec|rocommunity|rwcommunity)([[:space:]])/\1#\2\3/' "$conf"
+    sed -i -E 's/^([[:space:]]*)(com2sec6?|rocommunity6?|rwcommunity6?)([[:space:]])/\1#\2\3/' "$conf"
     FIX_STATUS="APPLIED"
     FIX_DETAIL="$conf 의 SNMP v1/v2(com2sec/rocommunity/rwcommunity) 설정을 비활성화함(v3 전환 필요) — snmpd 재시작 후 적용"
     FIX_EVIDENCE="$(grep -E '(com2sec|rocommunity|rwcommunity)' "$conf")"

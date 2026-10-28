@@ -2,12 +2,14 @@
 # 판단 기준(가이드 원문): 양호 = 주요 설정 파일의 일반 사용자 수정 권한 제거 / 취약 = 아님
 # 가이드 원문 기준 권한: network/admin(755), listener.ora/sqlnet.ora(644), dbs/init.ora(640).
 run_check() {
+    db_remote_skip "listener.ora/sqlnet.ora 파일 권한" && return
     home=$(oracle_home)
     if [ -z "$home" ]; then
         CHECK_STATUS="ERROR"; CHECK_DETAIL="ORACLE_HOME 을 찾을 수 없음"; CHECK_EVIDENCE=""
         return
     fi
     _bad=""
+    _unk=""
     _evidence=""
     for spec in "$home/network/admin/listener.ora:644" "$home/network/admin/sqlnet.ora:644"; do
         f=${spec%:*}; maxperm=${spec#*:}
@@ -16,12 +18,16 @@ run_check() {
         _evidence="$_evidence
 [$f] $CHECK_STATUS $CHECK_DETAIL"
         [ "$CHECK_STATUS" = "VULN" ] && _bad="$_bad $f"
+        # 확인 못 한 파일(ERROR)을 무시하고 GOOD 을 내던 문제(진단 검수 D-R11)
+        if [ "$CHECK_STATUS" = "ERROR" ] || [ "$CHECK_STATUS" = "NA" ]; then _unk="$_unk $f"; fi
     done
     CHECK_EVIDENCE="$_evidence"
     if [ -z "$_evidence" ]; then
         CHECK_STATUS="ERROR"; CHECK_DETAIL="주요 설정 파일(listener.ora/sqlnet.ora)을 찾을 수 없음"
     elif [ -n "$_bad" ]; then
-        CHECK_STATUS="VULN"; CHECK_DETAIL="다음 파일의 권한이 부적절함:$_bad"
+        CHECK_STATUS="VULN"; CHECK_DETAIL="다음 파일의 권한이 부적절함:$_bad${_unk:+ / 확인 못 함:$_unk}"
+    elif [ -n "$_unk" ]; then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="다음 파일의 권한을 확인하지 못함:$_unk"
     else
         CHECK_STATUS="GOOD"; CHECK_DETAIL="주요 설정 파일 권한이 적절함"
     fi

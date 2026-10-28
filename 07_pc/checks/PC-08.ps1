@@ -5,12 +5,17 @@
 # 항상 GOOD 이었다. 구분선 수에서 부팅 관리자 1개를 뺀 값이 부팅 메뉴의 OS 수다.
 # /enum osloader 는 복구 환경(WinRE) 로더까지 포함해 단일 OS 에서도 2개가 나오므로 쓰지 않는다.
 
+# W-R16: 시간 제한(60초), 실행 파일은 PATH 가 아닌 System32 경로로 지정
 try {
-    $out = & bcdedit /enum 2>&1 | Out-String
-    $rc = $LASTEXITCODE
+    $res = Invoke-NativeCommand -FilePath (Join-Path $env:SystemRoot "System32\bcdedit.exe") -ArgumentList @('/enum') -TimeoutSec 60
 } catch {
     return New-CheckResult -Code "PC-08" -Status "ERROR" -Detail "bcdedit 실행 실패: $($_.Exception.Message)"
 }
+if ($res.TimedOut) {
+    return New-CheckResult -Code "PC-08" -Status "ERROR" -Detail "bcdedit 실행 시간 초과(60초)"
+}
+$out = (($res.Output -join "`n") + "`n" + $res.ErrorText)
+$rc = $res.ExitCode
 if ($rc -ne 0) {
     # 관리자 권한이 없으면 "액세스가 거부되었습니다" 와 함께 실패한다 - 예전에는 이 출력에서 0개를 세어 GOOD 이었다
     return New-CheckResult -Code "PC-08" -Status "ERROR" -Detail "bcdedit 실행 실패(exit=$rc) - 관리자 권한으로 다시 실행 필요" -Evidence $out.Trim()

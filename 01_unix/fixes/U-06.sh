@@ -31,8 +31,11 @@ run_fix() {
     fi
 
     fix_backup "$pam_su"
-    if grep -qE '^[[:space:]]*#[[:space:]]*auth[[:space:]]+(required|requisite|sufficient)[[:space:]]+pam_wheel\.so' "$pam_su"; then
-        sed -i -E 's/^[[:space:]]*#[[:space:]]*(auth[[:space:]]+(required|requisite|sufficient)[[:space:]]+pam_wheel\.so.*)/\1/' "$pam_su"
+    # check(U-06)와 같은 기준(진단 검수 U-R8): 제한이 되는 줄은 required/requisite + deny 없음. 예전에는 주석 처리된
+    # pam_wheel 줄을 전부 풀어 Debian 기본 예시의 "sufficient pam_wheel.so trust"(wheel 무암호 su)·"deny group=nosu"
+    # 까지 활성화했다 - 인자 없는(또는 use_uid 만 있는) required 예시 줄 하나만 푼다.
+    if grep -qE '^[[:space:]]*#[[:space:]]*auth[[:space:]]+required[[:space:]]+pam_wheel\.so([[:space:]]+use_uid)?[[:space:]]*$' "$pam_su"; then
+        sed -i -E '0,/^[[:space:]]*#[[:space:]]*auth[[:space:]]+required[[:space:]]+pam_wheel\.so([[:space:]]+use_uid)?[[:space:]]*$/s//auth required pam_wheel.so\1/' "$pam_su"
     else
         printf 'auth\t\trequired\tpam_wheel.so use_uid\n' >> "$pam_su"
     fi

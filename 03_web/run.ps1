@@ -73,7 +73,13 @@ if (-not $Selected -or $Selected.Count -eq 0) {
 }
 
 if (-not $OutBase) { $OutBase = Join-Path (Split-Path -Parent $ScriptDir) "output" }
-$OutDir = New-OutputDir -BaseDir $OutBase -CategoryNum $CategoryNum
+# R-12: 결과 폴더 접근 권한을 제한하지 못하면 New-PrivateDirectory 가 중단시킨다(예전에는 경고만 하고 진행)
+try { $OutDir = New-OutputDir -BaseDir $OutBase -CategoryNum $CategoryNum }
+catch { Write-Error "결과 폴더 준비 실패: $($_.Exception.Message)"; exit 2 }
+# 비관리자 실행이면서 IIS 가 설치되어 있으면(레지스트리 Services\W3SVC) GOOD/NA 를 ERROR 로 바꾼다 - CI 실측: 비관리자
+# 실행에서 IIS 설정을 읽지 못해 26항목 전부 NA 였다(관리자 실행은 8항목 VULN). IIS 미설치(키 없음)의 NA 는 그대로 둔다.
+$IsElevatedAdmin = Test-IsElevatedAdmin
+$IisInstalled = Test-IisInstalled
 
 if (-not (Test-IisAvailable)) {
     Write-Log "IIS(WebAdministration 모듈)를 찾을 수 없습니다. 모든 항목이 NA 로 표시됩니다." "WARN"
@@ -101,7 +107,7 @@ foreach ($code in $Selected) {
         # IIS 는 설치돼 있으나 설정을 읽을 수 없음 - 예전처럼 "IIS 미설치(NA)"로 숨기지 않는다
         $r = New-CheckResult -Code $code -Status "ERROR" -Detail "IIS(W3SVC)가 설치되어 있으나 IIS 설정을 읽을 수 없음 - 관리자 권한으로 다시 실행 필요"
     } elseif (Test-Path $checkFile) {
-        $Global:IisConfigQueryFailed = $false; $Global:IisConfigQueryError = ""
+        $Global:IisConfigQueryFailed = $false; $Global:IisConfigQueryError = ""; $Global:IisSiteListFailed = $false
         try {
             $r = & $checkFile
             if (-not $r) {
@@ -115,8 +121,16 @@ foreach ($code in $Selected) {
         if ($Global:IisConfigQueryFailed -and $r.status -eq "GOOD") {
             $r = New-CheckResult -Code $code -Status "ERROR" -Detail "IIS 설정 조회에 실패해 양호 판정을 확정할 수 없음: $($Global:IisConfigQueryError)" -Evidence $r.evidence
         }
+        # WEB-R7: 사이트 목록 조회 실패는 "사이트 없음(NA)"이 아니다
+        if ($Global:IisSiteListFailed -and $r.status -eq "NA") {
+            $r = New-CheckResult -Code $code -Status "ERROR" -Detail "IIS 사이트 목록 조회에 실패해 판정할 수 없음: $($Global:IisConfigQueryError)" -Evidence $r.evidence
+        }
     } else {
         $r = New-CheckResult -Code $code -Status "NA" -Detail "이 항목은 IIS 대상이 아니거나 아직 구현되지 않음"
+    }
+
+    if (-not $IsElevatedAdmin -and $IisInstalled -and $r.status -in @("GOOD", "NA")) {
+        $r = New-CheckResult -Code $code -Status "ERROR" -Detail "관리자 권한이 아니어서 확인하지 못함 - 관리자 권한으로 다시 실행 필요 / 비관리자 판정: $($r.status) $($r.detail)" -Evidence $r.evidence
     }
 
     Show-Progress -Current $n -Total $Selected.Count -Code $code -Title $title -Status $r.status

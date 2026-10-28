@@ -3,9 +3,7 @@
 
 run_check() {
     detect_web_engines
-    violations=""
-    evidence=""
-    checked=0
+    violations=""; errors=""; manuals=""; evidence=""; checked=0
 
     case " $WEB_ENGINES " in *" apache "*)
         checked=1
@@ -31,22 +29,18 @@ run_check() {
 
     case " $WEB_ENGINES " in *" tomcat "*)
         checked=1
-        home=$(tomcat_home)
-        found=""
-        for p in "$home/webapps/docs" "$home/webapps/examples" "$home/webapps/host-manager" "$home/webapps/ROOT/RELEASE-NOTES.txt"; do
-            [ -e "$p" ] && found="$found $p"
-        done
-        evidence="$evidence
+        if home=$(tomcat_home); then
+            found=""
+            for p in "$home/webapps/docs" "$home/webapps/examples" "$home/webapps/host-manager" "$home/webapps/ROOT/RELEASE-NOTES.txt"; do
+                [ -e "$p" ] && found="$found $p"
+            done
+            evidence="$evidence
 [Tomcat] 기본 샘플/매뉴얼 경로: ${found:-없음}"
-        [ -n "$found" ] && violations="$violations tomcat"
+            [ -n "$found" ] && violations="$violations tomcat"
+        else
+            errors="$errors tomcat(설치 경로(CATALINA_BASE)를 찾지 못함)"
+        fi
     esac
 
-    if [ "$checked" -eq 0 ]; then
-        CHECK_STATUS="NA"; CHECK_DETAIL="지원 엔진이 감지되지 않음 (감지된 엔진: ${WEB_ENGINES:-없음})"
-    elif [ -n "$violations" ]; then
-        CHECK_STATUS="VULN"; CHECK_DETAIL="기본 생성된 불필요 파일/디렉터리가 존재하는 엔진:$violations"
-    else
-        CHECK_STATUS="GOOD"; CHECK_DETAIL="기본 생성된 불필요 파일/디렉터리가 발견되지 않음"
-    fi
-    CHECK_EVIDENCE="$evidence"
+    web_finish "기본 생성된 불필요 파일/디렉터리가 존재하는 엔진" "기본 생성된 불필요 파일/디렉터리가 발견되지 않음"
 }

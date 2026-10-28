@@ -2,15 +2,19 @@
 # 판단 기준(가이드 원문): 양호 = 관리자 페이지 미사용 또는 계정명이 기본값이 아님
 #                        취약 = 계정명이 기본값(Tomcat: tomcat/admin, JEUS: administrator)이거나 추측 쉬운 계정명
 # 대상: Tomcat, JEUS. 자동화 범위: Tomcat tomcat-users.xml 의 manager-gui 역할 계정명.
+# Tomcat 이 감지됐는데 설치 경로(conf 폴더)를 못 찾으면 "관리자 페이지 미사용(GOOD)"이 아니라 ERROR(진단 검수 WEB-R3).
 
 run_check() {
     detect_web_engines
     case " $WEB_ENGINES " in
         *" tomcat "*)
-            home=$(tomcat_home)
-            f="$home/conf/tomcat-users.xml"
+            if ! confdir=$(tomcat_conf_dir); then
+                CHECK_STATUS="ERROR"; CHECK_DETAIL="Tomcat 이 감지됐으나 설치 경로(CATALINA_BASE)·conf 폴더를 찾지 못해 관리자 계정을 확인하지 못함"; CHECK_EVIDENCE=""
+                return
+            fi
+            f="$confdir/tomcat-users.xml"
             if [ ! -f "$f" ]; then
-                CHECK_STATUS="GOOD"; CHECK_DETAIL="tomcat-users.xml 이 없어 관리자 페이지를 사용하지 않는 것으로 판단"; CHECK_EVIDENCE=""
+                CHECK_STATUS="GOOD"; CHECK_DETAIL="tomcat-users.xml 이 없어 관리자 페이지를 사용하지 않는 것으로 판단"; CHECK_EVIDENCE="$f 없음"
                 return
             fi
             if [ ! -r "$f" ]; then
@@ -28,7 +32,8 @@ run_check() {
                 return
             fi
             default_hit=$(printf '%s' "$mgr_users" | grep -iE 'username="(admin|tomcat)"')
-            CHECK_EVIDENCE="$mgr_users"
+            CHECK_EVIDENCE="$f
+$mgr_users"
             if [ -n "$default_hit" ]; then
                 CHECK_STATUS="VULN"; CHECK_DETAIL="Tomcat manager-gui 계정명이 기본값(admin/tomcat)으로 설정됨"
             else

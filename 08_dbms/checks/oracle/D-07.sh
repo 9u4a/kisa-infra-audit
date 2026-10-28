@@ -4,6 +4,7 @@
 # ps/pgrep 가 없는 최소 구성 이미지 대응을 위해 /proc 기반 프로세스 조회를 사용한다
 # (03_web WEB-09 에서 검증된 패턴 재사용). pmon(백그라운드 프로세스 모니터) 프로세스로 판정한다.
 run_check() {
+    db_remote_skip "Oracle 프로세스(/proc)" && return
     pids=$(proc_pids_by_comm_glob '*pmon*')
     [ -z "$pids" ] && pids=$(proc_pids_by_comm tnslsnr)
     if [ -z "$pids" ]; then

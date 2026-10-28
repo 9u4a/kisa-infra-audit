@@ -18,7 +18,11 @@ foreach ($site in $sites) {
     try {
         $handlers = Get-WebConfiguration -Filter "system.webServer/handlers/add" -PSPath "IIS:\Sites\$site" -ErrorAction Stop
     } catch {
-        $handlers = @()
+        # WEB-R7: 조회 실패를 "매핑 없음 = GOOD" 으로 넘기지 않는다 - 실패 표시(run.ps1 이 GOOD 을 ERROR 로 바꿈)
+        $Global:IisConfigQueryFailed = $true
+        $Global:IisConfigQueryError = "handlers ($site): $($_.Exception.Message)"
+        $evid += "[$site] handler mapping 조회 실패: $($_.Exception.Message)"
+        continue
     }
     $hit = @()
     foreach ($h in $handlers) {

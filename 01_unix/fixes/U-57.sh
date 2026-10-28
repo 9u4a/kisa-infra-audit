@@ -8,10 +8,22 @@ run_fix() {
         grep -qE '^[[:space:]]*root[[:space:]]*$' "$f" || { fix_backup "$f"; printf 'root\n' >> "$f"; applied="$applied $f"; }
     done
 
-    for f in /etc/vsftpd.user_list /etc/vsftpd/user_list; do
+    # check(U-57)와 같은 기준(진단 검수 U-R15): user_list 는 userlist_enable=YES·userlist_deny≠NO(차단 목록)일 때만
+    # root 를 추가한다 - userlist_deny=NO(허용 목록)에 root 를 넣으면 오히려 root 접속을 허용하게 된다.
+    _ul_en=""; _ul_deny=""
+    for f in /etc/vsftpd.conf /etc/vsftpd/vsftpd.conf; do
         [ -f "$f" ] || continue
-        grep -qE '^[[:space:]]*root[[:space:]]*$' "$f" || { fix_backup "$f"; printf 'root\n' >> "$f"; applied="$applied $f"; }
+        _v=$(grep -iE '^[[:space:]]*userlist_enable[[:space:]]*=' "$f" | tail -n1 | sed -E 's/.*=[[:space:]]*//' | tr '[:lower:]' '[:upper:]')
+        [ -n "$_v" ] && _ul_en=$_v
+        _v=$(grep -iE '^[[:space:]]*userlist_deny[[:space:]]*=' "$f" | tail -n1 | sed -E 's/.*=[[:space:]]*//' | tr '[:lower:]' '[:upper:]')
+        [ -n "$_v" ] && _ul_deny=$_v
     done
+    if [ "$_ul_en" = "YES" ] && [ "$_ul_deny" != "NO" ]; then
+        for f in /etc/vsftpd.user_list /etc/vsftpd/user_list; do
+            [ -f "$f" ] || continue
+            grep -qE '^[[:space:]]*root[[:space:]]*$' "$f" || { fix_backup "$f"; printf 'root\n' >> "$f"; applied="$applied $f"; }
+        done
+    fi
 
     for f in /etc/proftpd.conf /etc/proftpd/proftpd.conf; do
         [ -f "$f" ] || continue

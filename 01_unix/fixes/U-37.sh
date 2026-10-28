@@ -6,7 +6,7 @@ run_fix() {
         [ -e "$bin" ] || continue
         perm=$(stat -L -c '%a' "$bin" 2>/dev/null)
         suid=$(find "$bin" -perm -4000 2>/dev/null)
-        if { [ -n "$perm" ] && [ "$perm" -gt 750 ] 2>/dev/null; } || [ -n "$suid" ]; then
+        if { [ -n "$perm" ] && perm_exceeds "$perm" 750; } || [ -n "$suid" ]; then
             fix_backup "$bin"
             chmod 750 "$bin" 2>/dev/null
             applied="$applied $bin(750)"
@@ -31,7 +31,7 @@ EOF
     for f in /etc/cron.allow /etc/cron.deny /etc/at.allow /etc/at.deny; do
         [ -f "$f" ] || continue
         perm=$(stat -L -c '%a' "$f" 2>/dev/null)
-        [ -n "$perm" ] && [ "$perm" -gt 640 ] 2>/dev/null || continue
+        [ -n "$perm" ] && perm_exceeds "$perm" 640 || continue
         fix_backup "$f"
         chmod 640 "$f" 2>/dev/null
         applied="$applied $f(640)"

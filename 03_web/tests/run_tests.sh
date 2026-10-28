@@ -17,8 +17,12 @@ export MSYS_NO_PATHCONV=1   # Windows git-bash에서 docker 인자 경로 자동
 cd "$(dirname "$0")/../.."   # 저장소 루트로 이동
 
 fail=0
-for engine in apache nginx tomcat; do
+# apache-debian: Debian 12 apache2 패키지 레이아웃(/etc/apache2, ServerRoot 주석, *-enabled Include) - 진단 검수 WEB-R1.
+# run.sh 에는 엔진 이름 apache 로 넘긴다.
+run_engine() { case "$1" in apache-debian) echo apache ;; *) echo "$1" ;; esac; }
+for engine in apache nginx tomcat apache-debian; do
     image="kisa-web-${engine}-test"
+    run_e=$(run_engine "$engine")
     echo "[1/2] $engine 이미지 빌드..."
     docker build -q -f "03_web/tests/Dockerfile.$engine" -t "$image" . >/dev/null
 
@@ -26,7 +30,7 @@ for engine in apache nginx tomcat; do
         echo "[*] $engine/$mode 픽스처 실행..."
         cid=$(docker create "$image" sh -c "
             sh 03_web/tests/fixtures/setup.sh $engine $mode >/dev/null 2>&1
-            sh 03_web/run.sh -e $engine -o /tmp/out >/dev/null 2>&1
+            sh 03_web/run.sh -e $run_e -o /tmp/out >/dev/null 2>&1
             cp /tmp/out/*/result.json /result.json
         ")
         docker start -a "$cid" >/dev/null
@@ -52,6 +56,9 @@ failures = [f"{c}: 기대={e} 실제={actual.get(c)}" for c, e in expected.items
 # fixtures/setup.sh 가 tomcat-users.xml 에 넣은 비밀번호 원문이 결과물에 남으면 안 된다(민감정보 미저장)
 if "Leak>Check" in raw or "Leak\\u003eCheck" in raw:
     failures.append("tomcat-users.xml 비밀번호 원문이 result.json 에 저장됨")
+# server.xml Connector 의 keystorePass 원문(진단 검수 WEB-R9)
+if "KsLeak9Pass" in raw:
+    failures.append("server.xml keystorePass 원문이 result.json 에 저장됨")
 if failures:
     print(f"FAIL: {label} - {len(failures)}건 불일치")
     for f in failures:
@@ -85,5 +92,22 @@ if printf '%s\n' "$out" | grep -qx 'FIX_RC=3' && printf '%s\n' "$out" | grep -qx
 else
     echo "FAIL: apache/fix-backupfail - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
 fi
+
+# ---- 진단(run.sh) 운영 안전 실기 검사 (lib/tests/run_safety.sh, 01_unix 와 같은 기준) ---------
+# S1 전후 상태 동일 / S2 제한 시간 / S5 tomcat-users.xml 비밀번호 원문이 출력물 어디에도 없음 / S6 일반 사용자 거짓 양호
+for engine in apache nginx tomcat apache-debian; do
+    run_e=$(run_engine "$engine")
+    rs_dir="rs_web_${engine}_$$"
+    docker rm -f "kisa-rs-web-$engine" >/dev/null 2>&1 || true
+    docker create --name "kisa-rs-web-$engine" "kisa-web-${engine}-test" sh -c "
+        sh 03_web/tests/fixtures/setup.sh $engine vuln >/dev/null 2>&1
+        RUN_CMD='sh 03_web/run.sh -e $run_e' SECRETS='Leak>Check|Pw9Strong|KsLeak9Pass' sh lib/tests/run_safety.sh
+    " >/dev/null
+    docker start -a "kisa-rs-web-$engine" >/dev/null
+    docker cp "kisa-rs-web-$engine:/rs" "$rs_dir" >/dev/null 2>&1
+    docker rm "kisa-rs-web-$engine" >/dev/null
+    python3 lib/tests/run_safety_check.py "$rs_dir" "web/$engine" || fail=1
+    rm -rf "$rs_dir"
+done
 
 exit $fail
