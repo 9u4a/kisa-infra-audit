@@ -10,6 +10,9 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 > (Network는 조치 명령어 스크립트 생성)가 구현되어 있습니다. **1.2.0부터 새 환경/벤더
 > 확장은 중단하고, 이미 구현된 대상에 대한 GitHub Actions CI 기반 회귀 테스트·유지보수에
 > 집중합니다.**
+>
+> ⚠️ 운영 서버에 쓰기 전에 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)(알려진 문제·미검증 범위·검증 환경 한계)를 확인하세요.
+> 진단은 root/관리자 권한으로 실행해야 합니다 - 권한이 없으면 확인하지 못한 항목은 양호가 아니라 ERROR 로 표시됩니다.
 
 ## 핵심 원칙
 1. **가이드 원문 우선** — 항목명·판단기준·조치방법은 가이드 원문 그대로 사용, 자동화에 꼭 필요한
@@ -192,7 +195,9 @@ python lib/extract_guide.py --only 01_unix
 ## 테스트
 매 push/PR마다 [`.github/workflows/test.yml`](.github/workflows/test.yml)이 자동으로
 돕니다 — 전체 저장소 정적분석(ShellCheck/PSScriptAnalyzer/Python) + 카테고리별 Docker/
-windows-latest 기반 vuln·hardened 픽스처 회귀 테스트. 로컬에서 직접 돌리려면:
+windows-latest 기반 vuln·hardened 픽스처 회귀 테스트, 조치 실적용·원복 테스트, 그리고 **진단 실행 검수**
+(`lib/tests/run_safety.sh`·`run_safety_windows.ps1`: 진단 전후 시스템 상태 동일, 비밀값 미저장, 일반 사용자/비관리자
+실행 시 거짓 양호 없음, DB 에 읽기 전용 SQL 만 보냄). 로컬에서 직접 돌리려면:
 ```sh
 python3 05_network/tests/run_tests.py  # Docker 불필요
 sh 01_unix/tests/run_tests.sh       # Docker 필요
@@ -225,6 +230,9 @@ sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL만, Oracle
 | 1.0.0 ✅ | 6개 카테고리 완성·검증 |
 | 1.1.0 ✅ | 01_unix Solaris/AIX/HP-UX 진단 7항목 확장(문서 기준, 미검증) |
 | 1.2.0 ✅ | **환경/벤더 확장 중단, 테스트·유지보수로 전환.** GitHub Actions CI(정적분석 + Docker/windows-latest 기반 회귀 테스트) 도입 |
+| 1.2.1~1.3.0 ✅ | 운영 안전성 우선: DB 계정 잠금·무기한 대기·비밀값 저장 방지, 조치 안전장치(백업·문법검사·접속 차단 사전검사·원복 정직성), 업무 영향 항목 등급 하향 |
+| 1.3.1 ✅ | Windows Server(CI 러너) 실기 검증: IIS 진단·조치 실적용·원복, MSSQL(LocalDB), 방화벽 안전장치 |
+| 1.3.2 ✅ | 진단(run) 전체 검수: 실행 검수 하네스 + 전 파일 코드 대조(약 130건 수정, [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)) |
 | 1.x | 기존 지원 환경 내 버그 수정 및 자동화 정밀도 개선, CI 커버리지 확대(IIS/MSSQL/Oracle/rhel 등) |
 
 ## 라이선스 · 출처
