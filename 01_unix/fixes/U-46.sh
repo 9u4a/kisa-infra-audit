@@ -8,7 +8,7 @@ run_fix() {
         if ! printf '%s' "$line" | grep -qi 'restrictqrun'; then
             fix_backup "$f"
             if [ -n "$line" ]; then
-                sed -i -E "s/^(O[[:space:]]*PrivacyOptions[[:space:]]*=.*)/\1,restrictqrun/I" "$f"
+                fix_sed_inplace "$f" -E "s/^(O[[:space:]]*PrivacyOptions[[:space:]]*=.*)/\1,restrictqrun/I"
             else
                 printf 'O PrivacyOptions=restrictqrun\n' >> "$f"
             fi

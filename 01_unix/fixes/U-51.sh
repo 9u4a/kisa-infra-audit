@@ -16,7 +16,7 @@ run_fix() {
         [ -n "$f" ] && [ -f "$f" ] || continue
         grep -vE '^[[:space:]]*(#|//)' "$f" | grep -qiE 'allow-update[[:space:]]*\{[^}]*any[[:space:]]*;' || continue
         fix_backup "$f"
-        sed -i -E '/^[[:space:]]*(#|\/\/)/!s/allow-update[[:space:]]*\{[^}]*any[[:space:]]*;[^}]*\}[[:space:]]*;/allow-update { none; };/I' "$f"
+        fix_sed_inplace "$f" -E '/^[[:space:]]*(#|\/\/)/!s/allow-update[[:space:]]*\{[^}]*any[[:space:]]*;[^}]*\}[[:space:]]*;/allow-update { none; };/I'
         changed="$changed $f"
     done <<EOF
 $files

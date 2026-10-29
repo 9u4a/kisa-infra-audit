@@ -9,7 +9,7 @@ run_fix() {
         done
         if [ -f /etc/inetd.conf ] && grep -qE "^[[:space:]]*${svc}[[:space:]]" /etc/inetd.conf; then
             fix_backup /etc/inetd.conf
-            sed -i -E "s/^([[:space:]]*${svc}[[:space:]].*)/#\1/" /etc/inetd.conf
+            fix_sed_inplace /etc/inetd.conf -E "s/^([[:space:]]*${svc}[[:space:]].*)/#\1/"
             applied="$applied /etc/inetd.conf(${svc} 주석처리)"
         fi
     done

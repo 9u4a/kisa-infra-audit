@@ -25,7 +25,7 @@ run_fix() {
     if [ -f "$faillock_conf" ]; then
         fix_backup "$faillock_conf"
         if grep -qE '^[[:space:]]*deny[[:space:]]*=' "$faillock_conf"; then
-            sed -i -E 's/^[[:space:]]*deny[[:space:]]*=.*/deny = 5/' "$faillock_conf"
+            fix_sed_inplace "$faillock_conf" -E 's/^[[:space:]]*deny[[:space:]]*=.*/deny = 5/'
         else
             printf 'deny = 5\n' >> "$faillock_conf"
         fi
@@ -39,7 +39,7 @@ run_fix() {
         [ -f "$f" ] || continue
         if grep -vE '^[[:space:]]*#' "$f" | grep -qE 'pam_(faillock|tally2?)\.so.*deny='; then
             fix_backup "$f"
-            sed -i -E '/^[[:space:]]*#/!s/(pam_(faillock|tally2?)\.so.*)deny=[0-9]+/\1deny=5/' "$f"
+            fix_sed_inplace "$f" -E '/^[[:space:]]*#/!s/(pam_(faillock|tally2?)\.so.*)deny=[0-9]+/\1deny=5/'
             FIX_STATUS="APPLIED"
             FIX_DETAIL="$f 의 pam_faillock/tally2 deny 값을 5로 설정함"
             FIX_EVIDENCE="$(grep -E 'pam_(faillock|tally2?)\.so' "$f")"

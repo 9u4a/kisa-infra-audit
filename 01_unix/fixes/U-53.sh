@@ -14,7 +14,7 @@ run_fix() {
         [ -f "$f" ] || continue
         fix_backup "$f"
         if grep -qiE '^[[:space:]]*ServerIdent' "$f"; then
-            sed -i -E 's/^([[:space:]]*ServerIdent[[:space:]]+)on[[:space:]]*$/\1on "Authorized users only."/I' "$f"
+            fix_sed_inplace "$f" -E 's/^([[:space:]]*ServerIdent[[:space:]]+)on[[:space:]]*$/\1on "Authorized users only."/I'
         else
             printf 'ServerIdent on "Authorized users only."\n' >> "$f"
         fi

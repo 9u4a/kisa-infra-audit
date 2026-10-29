@@ -9,7 +9,7 @@ run_fix() {
         # check(U-14)와 같이 모든 PATH= 줄, 따옴표로 감싼 값(PATH=".:$PATH")도 대상으로 한다(진단 검수 U-R9).
         if grep -E '^[[:space:]]*(export[[:space:]]+)?PATH=' "$f" 2>/dev/null | grep -qE ':\.:|=["'"'"']?\.:'; then
             fix_backup "$f"
-            sed -i -E '/^[[:space:]]*(export[[:space:]]+)?PATH=/ { s/(:)\.(:)/\1\2/g; s/(=["'"'"']?)\.:/\1/; }' "$f"
+            fix_sed_inplace "$f" -E '/^[[:space:]]*(export[[:space:]]+)?PATH=/ { s/(:)\.(:)/\1\2/g; s/(=["'"'"']?)\.:/\1/; }'
             applied="$applied $f"
         fi
     done

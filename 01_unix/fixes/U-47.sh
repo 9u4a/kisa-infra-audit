@@ -16,7 +16,7 @@ run_fix() {
         [ -f "$f" ] || continue
         grep -il 'promiscuous_relay' "$f" 2>/dev/null | grep -v '^#' | grep -q . || continue
         fix_backup "$f"
-        sed -i -E '/promiscuous_relay/ s/^/#/I' "$f"
+        fix_sed_inplace "$f" -E '/promiscuous_relay/ s/^/#/I'
         applied="$applied $f(promiscuous_relay 비활성화)"
     done
 

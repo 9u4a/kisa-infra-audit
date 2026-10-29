@@ -1696,6 +1696,70 @@ result_list_vuln_codes() {
     grep '"status":"VULN"' "$_json" | grep -o '"code":"[A-Z]*-[0-9]*"' | sed -E 's/.*"([A-Z]+-[0-9]+)".*/\1/'
 }
 
+# _rt_field <result.json> <키> -- result_finalize 가 쓰는 머리 부분("키": "값")의 값. items 안의 문자열은
+# json_escape 로 따옴표가 \" 가 되어 이 패턴에 걸리지 않는다.
+_rt_field() {
+    grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$1" 2>/dev/null | head -n 1 | sed 's/^[^:]*:[[:space:]]*"\(.*\)"$/\1/'
+}
+
+# _rt_days <YYYY-MM-DD> -- 날짜를 일 수로(그레고리력, 차이 계산용). date -d 는 GNU 전용이라 쓰지 않는다.
+_rt_days() {
+    printf '%s\n' "$1" | awk -F- '{ y = $1 + 0; m = $2 + 0; d = $3 + 0; if (m <= 2) { y--; m += 12 }
+        print 365 * y + int(y / 4) - int(y / 100) + int(y / 400) + int((153 * (m - 3) + 2) / 5) + d }'
+}
+
+# fix_check_result_target <result.json> <run.sh 의 카테고리 이름> [엔진] -- X-06(1.3.4): 조치 입력 result.json 이
+# 이 호스트·이 카테고리(·08 은 이 엔진)의 진단 결과인지 확인한다. 예전에는 result_list_vuln_codes 가 아무 결과나
+# 받아, 다른 서버(또는 오래된) 결과로 --apply --yes 를 돌리면 auto 항목이 확인 없이 바뀌었다(원복에만 호스트 확인이
+# 있었음). Windows 쪽 Test-FixResultTarget 과 같은 기준:
+#   호스트·카테고리·엔진 불일치 → --force(FORCE=1) 없이는 변경 없이 exit 2 (dry-run 도 같음 - 남의 결과 미리보기는 무의미)
+#   진단 시각(generated_at)이 7일 넘게 지났거나 해석 불가 → --apply 면 터미널에서 y 확인(--force 면 경고만, --yes 로는
+#   넘어가지 않음 - 그 사이 설정이 바뀌었을 수 있어서), 비대화형이면 변경 없이 exit 2. dry-run 은 경고만.
+fix_check_result_target() {
+    _rt_json=$1; _rt_cat=$2; _rt_env=${3:-}
+    _rt_this=$(hostname 2>/dev/null || echo unknown)
+    _rt_h=$(_rt_field "$_rt_json" host)
+    _rt_c=$(_rt_field "$_rt_json" category)
+    _rt_e=$(_rt_field "$_rt_json" env)
+    _rt_bad=""
+    [ "$_rt_h" = "$_rt_this" ] || _rt_bad="$_rt_bad / 호스트 불일치(결과: ${_rt_h:-없음}, 현재: $_rt_this)"
+    [ "$_rt_c" = "$_rt_cat" ] || _rt_bad="$_rt_bad / 카테고리 불일치(결과: ${_rt_c:-없음}, 기대: $_rt_cat)"
+    if [ -n "$_rt_env" ] && [ "$_rt_e" != "$_rt_env" ]; then
+        _rt_bad="$_rt_bad / 엔진 불일치(결과: ${_rt_e:-없음}, 지정: $_rt_env)"
+    fi
+    if [ -n "$_rt_bad" ]; then
+        _rt_bad=${_rt_bad# / }
+        if [ "${FORCE:-0}" -eq 1 ]; then
+            log_warn "--force 로 계속합니다: $_rt_bad"
+        else
+            log_error "이 result.json 은 이 대상의 진단 결과가 아닙니다 - $_rt_bad. 변경 없이 중단합니다(의도한 경우 --force): $_rt_json"
+            exit 2
+        fi
+    fi
+    _rt_gen=$(_rt_field "$_rt_json" generated_at)
+    _rt_d=$(printf '%s' "$_rt_gen" | sed -n 's/^\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)T.*/\1/p')
+    _rt_old=""
+    if [ -z "$_rt_d" ]; then
+        _rt_old="진단 시각(generated_at)을 해석할 수 없음: ${_rt_gen:-없음}"
+    else
+        _rt_age=$(( $(_rt_days "$(date '+%Y-%m-%d')") - $(_rt_days "$_rt_d") ))
+        [ "$_rt_age" -gt 7 ] && _rt_old="진단 결과가 ${_rt_age}일 전 것임($_rt_gen) - 그 사이 설정이 바뀌었을 수 있음"
+    fi
+    [ -n "$_rt_old" ] || return 0
+    if [ "${FORCE:-0}" -eq 1 ]; then
+        log_warn "--force 로 계속합니다: $_rt_old"
+    elif [ "${APPLY:-0}" -ne 1 ]; then
+        log_warn "$_rt_old (dry-run 이라 계속 - --apply 때는 확인을 받음, 가능하면 진단을 다시 실행할 것)"
+    else
+        log_warn "$_rt_old"
+        if ! fix_confirm_tty "그래도 이 진단 결과로 조치를 진행하시겠습니까?"; then
+            log_error "중단 - 아무것도 변경하지 않았습니다. 진단(run.sh)을 다시 실행하세요(비대화형에서 그대로 진행하려면 --force)."
+            exit 2
+        fi
+    fi
+    return 0
+}
+
 # fix_prepare_dir <base_dir> <category_num> -> FIX_OUT_DIR/FIX_BACKUP_DIR/FIX_LOG 설정
 fix_prepare_dir() {
     _base=$1; _cat_num=$2
@@ -1719,14 +1783,64 @@ fix_log_stamp() {
 
 # fix_abort_item <사유> — 백업 실패처럼 "이대로 바꾸면 원복할 수 없는" 상황(운영 안전 기준 F1).
 # 이 항목에서 이미 백업·변경한 것을 원복하고 조치 실행 전체를 중단한다(이후 항목도 바꾸지 않음).
-# fixes/*.sh 는 run_fix 를 현재 셸에서 실행하므로 exit 가 fix.sh 전체를 끝낸다 - 그래서 fix_backup 을
-# 파이프(| while)·$(...) 같은 서브셸 안에서 부르면 안 된다(here-doc 반복문을 쓸 것).
+# X-04(1.3.4) 종료 코드 규약: exit 3 은 이 함수 전용이다. 조치는 run_fix_isolated 의 서브셸에서 돌고, 그
+# 서브셸이 3 으로 끝나면 fix.sh 가 이어서 exit 3 으로 실행 전체를 끝낸다(예전 동작과 같음). 조치 안에서
+# 다시 파이프(| while)·$(...) 같은 "한 단계 더 안쪽" 서브셸에서 fix_backup 을 부르면 그 exit 3 은 그 안쪽만
+# 끝내고 조치는 계속 진행되므로 여전히 금지다(here-doc 반복문을 쓸 것).
 fix_abort_item() {
     log_error "[${FIX_CODE:-?}] $1 — 이 항목의 변경을 원복하고 조치 실행을 중단합니다(이후 항목은 변경하지 않음)."
     [ -n "${FIX_CODE:-}" ] && fix_rollback_item "$FIX_CODE"
     printf '%s\t-\tABORTED\t%s (이 항목 원복 후 실행 중단)%s\n' "${FIX_CODE:-?}" "$1" \
         "$(printf '%s' "${FIX_ROLLBACK_FAILS:-}" | tr '\n' ' ')" | fix_log_stamp >> "${FIX_LOG:-/dev/null}"
     exit 3
+}
+
+# run_fix_isolated <fix 파일> -- X-04(1.3.4): 조치 1개를 서브셸에서 실행하고 FIX_STATUS/FIX_DETAIL/FIX_EVIDENCE 를
+# 받아온다. 예전에는 fix.sh 가 조치 파일을 현재 셸에서 실행해(. "$fix_file"; run_fix), set -u 의 미설정 변수 하나나
+# 치명 오류로 fix.sh 전체가 죽었다 - 그 항목은 반쯤 바뀐 채 원복도 changes.log 기록도 없이 남고 이후 항목도
+# 처리되지 않았다. 진단 쪽 run_check_isolated(R-01)와 같은 방식이다. 반환값 규약:
+#   0    조치가 끝까지 실행되어 결과를 남김 - 성공/실패 판정·재검증·원복은 기존대로 fix.sh 가 한다
+#   3    fix_abort_item(백업 실패 등, F1): 서브셸 안에서 이미 이 항목을 원복하고 ABORTED 를 기록했다 -
+#        호출부(fix.sh)는 exit 3 으로 실행 전체를 끝낸다(이후 항목은 바꾸지 않음)
+#   1    비정상 종료(미설정 변수·문법 오류·예상 밖 exit 등): FIX_STATUS=ERROR + 사유(종료 코드·표준오류 끝부분).
+#        fix.sh 의 실패 경로가 fix_rollback_item 으로 이 항목에서 백업한 것을 되돌리고 FAILED_ROLLED_BACK /
+#        FAILED_NOT_ROLLED_BACK 을 기록한 뒤 다음 항목으로 넘어간다
+# fix.sh 가 조치 뒤에 쓰는 전역 값은 FIX_STATUS/DETAIL/EVIDENCE 뿐이다(백업·원복 기록은 FIX_BACKUP_DIR 의 파일,
+# changes.log 는 파일로 남으므로 그대로 전달됨). 조치 안에서 바꾼 IFS 등 다른 전역 값은 다음 항목으로 새지 않는다.
+# 서브셸은 표준입출력과 /dev/tty 를 그대로 물려받아 확인(fix_confirm_tty)·비밀번호 입력(fix_read_new_password,
+# stty -echo)이 그대로 동작한다. 표준오류는 사유를 남기려고 파일로 받아 항목이 끝난 뒤 한꺼번에 보여 준다.
+run_fix_isolated() {
+    _rfi_dir="${FIX_OUT_DIR:-${TMPDIR:-/tmp}}/.fix.$$"
+    rm -rf "$_rfi_dir"
+    # 결과를 받을 곳조차 만들 수 없으면(디스크 가득 참 등 - 백업도 실패할 상황) 조치하지 않고 중단한다(F1)
+    ( umask 077; mkdir -p "$_rfi_dir" ) 2>/dev/null \
+        || fix_abort_item "조치 결과 임시 폴더를 만들 수 없음(디스크 공간·권한 확인): $_rfi_dir"
+    (
+        trap - EXIT
+        FIX_STATUS="ERROR"; FIX_DETAIL="조치 스크립트가 결과를 반환하지 않음"; FIX_EVIDENCE=""
+        # shellcheck disable=SC1090
+        . "$1"
+        if command -v run_fix >/dev/null 2>&1; then run_fix; fi
+        printf '%s' "$FIX_STATUS" > "$_rfi_dir/s" && printf '%s' "$FIX_DETAIL" > "$_rfi_dir/d" \
+            && printf '%s' "$FIX_EVIDENCE" > "$_rfi_dir/e" && : > "$_rfi_dir/ok"
+    ) 2> "$_rfi_dir/err"
+    _rfi_rc=$?
+    [ -s "$_rfi_dir/err" ] && cat "$_rfi_dir/err" >&2
+    if [ "$_rfi_rc" -eq 3 ]; then
+        rm -rf "$_rfi_dir"
+        return 3
+    fi
+    if [ -f "$_rfi_dir/ok" ]; then
+        FIX_STATUS=$(cat "$_rfi_dir/s"); FIX_DETAIL=$(cat "$_rfi_dir/d"); FIX_EVIDENCE=$(cat "$_rfi_dir/e")
+        _rfi_rc=0
+    else
+        FIX_STATUS="ERROR"
+        FIX_DETAIL="조치 스크립트 비정상 종료(rc=$_rfi_rc, 변경 도중 멈췄을 수 있음): $(tail -n 2 "$_rfi_dir/err" 2>/dev/null | tr '\n' ' ')"
+        FIX_EVIDENCE=""
+        _rfi_rc=1
+    fi
+    rm -rf "$_rfi_dir"
+    return "$_rfi_rc"
 }
 
 # fix_backup <파일경로> — 항목별(FIX_CODE) 백업 디렉터리에 원본을 상대경로 구조로 보존한다.
@@ -1875,16 +1989,19 @@ apache_options_enabled() {
     [ -n "$(web_apache_option_hits "$2" "$1")" ]
 }
 
-# web_sed_inplace <파일> <sed 인자...> — sed -i 대신 쓴다. sed -i 는 새 파일을 만들어 바꿔치기하므로 Debian 의
-# sites-enabled/mods-enabled·conf-enabled 심볼릭 링크를 일반 파일로 바꿔 버리고(링크 대상은 그대로 남아
-# 원복해도 링크가 돌아오지 않음 - fix_safety 실기로 발견) 소유자·SELinux 라벨도 바뀔 수 있다. 결과를
-# fix_write_back 으로 내용만 덮어쓴다. sed 실패 시 원본을 건드리지 않고 1.
-web_sed_inplace() {
-    _wsi_f=$1; shift
-    if sed "$@" "$_wsi_f" > "$_wsi_f.kisa_tmp" 2>/dev/null; then
-        fix_write_back "$_wsi_f.kisa_tmp" "$_wsi_f"
+# fix_sed_inplace <파일> <sed 인자...> — 모든 조치(fixes/*)에서 sed -i 대신 쓴다(X-07, 1.3.4 에 03_web 의
+# web_sed_inplace 를 공통화). sed -i 는 새 파일을 만들어 바꿔치기하므로 심볼릭 링크를 일반 파일로 바꿔 버린다 -
+# Debian 의 sites-enabled/mods-enabled 링크(fix_safety 실기로 발견), RHEL 의 /etc/pam.d/system-auth →
+# authselect 링크 등. 링크 대상은 그대로 남아 원복(cp -p 로 링크 경로에 덮어씀)해도 링크가 돌아오지 않고,
+# 소유자·권한·SELinux 라벨·inode 도 바뀔 수 있다. 결과를 fix_write_back 으로 내용만 덮어써(cat > 경로 는 링크를
+# 따라가 대상 파일에 씀) 링크·inode·소유자를 유지한다. sed 실패 시 원본을 건드리지 않고 1.
+# CI(static-analysis)가 */fixes/ 에 sed -i 가 다시 들어오면 실패시킨다.
+fix_sed_inplace() {
+    _fsi_f=$1; shift
+    if sed "$@" "$_fsi_f" > "$_fsi_f.kisa_tmp" 2>/dev/null; then
+        fix_write_back "$_fsi_f.kisa_tmp" "$_fsi_f"
     else
-        rm -f "$_wsi_f.kisa_tmp"; return 1
+        rm -f "$_fsi_f.kisa_tmp"; return 1
     fi
 }
 
@@ -2376,7 +2493,7 @@ fix_xinetd_disable() {
         [ -f "$_f" ] || continue
         grep -qE '^[[:space:]]*disable[[:space:]]*=[[:space:]]*no' "$_f" || continue
         fix_backup "$_f"
-        sed -i -E 's/^([[:space:]]*disable[[:space:]]*=[[:space:]]*)no/\1yes/' "$_f"
+        fix_sed_inplace "$_f" -E 's/^([[:space:]]*disable[[:space:]]*=[[:space:]]*)no/\1yes/'
         _changed=1
     done
     if [ "$_changed" -eq 1 ]; then

@@ -24,7 +24,7 @@ run_fix() {
         return
     fi
     fix_backup "$f"
-    web_sed_inplace "$f" -E 's/digest="[^"]*"/digest="SHA-256"/'
+    fix_sed_inplace "$f" -E 's/digest="[^"]*"/digest="SHA-256"/'
     FIX_STATUS="APPLIED"
     FIX_DETAIL="LDAP Realm digest 알고리즘을 SHA-256 으로 설정함"
     FIX_EVIDENCE="변경 전: $digest"

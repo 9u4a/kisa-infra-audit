@@ -30,7 +30,7 @@ run_fix() {
         line=$(grep -iE '^[[:space:]]*RootLogin' "$f" | tail -n1)
         printf '%s' "$line" | grep -qi 'on' || continue
         fix_backup "$f"
-        sed -i -E 's/^([[:space:]]*RootLogin[[:space:]]+)on/\1off/I' "$f"
+        fix_sed_inplace "$f" -E 's/^([[:space:]]*RootLogin[[:space:]]+)on/\1off/I'
         applied="$applied $f(RootLogin off)"
     done
 

@@ -11,6 +11,7 @@
 #   fix.sh -r <result.json>                       dry-run: 적용 대상·등급만 출력
 #   fix.sh -r <result.json> -i WEB-01,WEB-16 --apply  지정 항목만 실제 적용
 #   fix.sh -r <result.json> --apply --yes         적용 전 변경 목록 확인(1회)을 생략(confirm 등급은 항상 개별 y/N)
+#   fix.sh -r <result.json> --apply --force       result.json 의 호스트·카테고리 불일치·7일 경과 확인을 무시(X-06)
 #   fix.sh --rollback <output/host_03_fix_TS 디렉터리>   백업에서 원복
 #
 # guide.json 의 fix 등급: auto(영향 없음, 즉시 적용) / confirm(서비스 영향 가능, 항목별 확인
@@ -31,11 +32,12 @@ RESULT_JSON=""
 ITEM_FILTER=""
 APPLY=0
 YES=0
+FORCE=0
 ROLLBACK_DIR=""
 OUT_BASE="$SCRIPT_DIR/../output"
 
 usage() {
-    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -45,6 +47,7 @@ while [ $# -gt 0 ]; do
         -o) OUT_BASE=$2; shift 2 ;;
         --apply) APPLY=1; shift ;;
         --yes) YES=1; shift ;;
+        --force) FORCE=1; shift ;;
         --rollback) ROLLBACK_DIR=$2; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "알 수 없는 옵션: $1" >&2; usage; exit 2 ;;
@@ -73,6 +76,10 @@ if [ ! -f "$GUIDE_JSON" ]; then
     echo "오류: $GUIDE_JSON 이 없습니다." >&2
     exit 2
 fi
+
+# X-06(1.3.4): 이 호스트·카테고리의 진단 결과인지, 너무 오래되지 않았는지 확인(불일치는 --force 없이는 exit 2).
+# 카테고리 이름은 run.sh 의 CATEGORY_NAME(result.json "category")과 같은 값이어야 한다
+fix_check_result_target "$RESULT_JSON" "웹 서비스"
 
 VULN_CODES=$(result_list_vuln_codes "$RESULT_JSON")
 
@@ -177,13 +184,11 @@ for code in $VULN_CODES; do
 
     FIX_CODE="$code"
     export FIX_CODE
-    FIX_STATUS="ERROR"; FIX_DETAIL="조치 스크립트가 결과를 반환하지 않음"; FIX_EVIDENCE=""
-    # shellcheck disable=SC1090
-    . "$fix_file"
-    if command -v run_fix >/dev/null 2>&1; then
-        run_fix
-    fi
-    unset -f run_fix 2>/dev/null || true
+    # X-04(1.3.4): 조치는 서브셸에서 실행한다(lib/common.sh run_fix_isolated). 미설정 변수 등으로 조치가 중간에 죽어도
+    # FIX_STATUS=ERROR 로 돌아와 아래 실패 경로가 이 항목을 원복하고 FAILED_* 를 기록한 뒤 다음 항목으로 넘어간다.
+    # 반환값 3 = fix_abort_item(백업 실패 등): 서브셸이 이미 이 항목을 원복·ABORTED 기록 → 실행 전체 중단(F1).
+    _rfi=0; run_fix_isolated "$fix_file" || _rfi=$?
+    [ "$_rfi" -eq 3 ] && exit 3
 
     if [ "$FIX_STATUS" = "APPLIED" ]; then
         for _e in $WEB_BASE_OK; do

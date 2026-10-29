@@ -53,7 +53,7 @@ run_fix() {
             hit=$(strip_xml_comments "$f" | grep -inE 'allowLinking[[:space:]]*=[[:space:]]*"?true')
             if [ -n "$hit" ]; then
                 fix_backup "$f"
-                web_sed_inplace "$f" -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I'
+                fix_sed_inplace "$f" -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I'
                 applied="$applied tomcat($f)"
             fi
         fi

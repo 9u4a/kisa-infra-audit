@@ -22,7 +22,7 @@ run_fix() {
             [ -f "$f" ] || continue
             grep -qE '^[^#]*autoindex[[:space:]]+on' "$f" 2>/dev/null || continue
             fix_backup "$f"
-            web_sed_inplace "$f" -E 's/^([[:space:]]*)autoindex[[:space:]]+on/\1autoindex off/'
+            fix_sed_inplace "$f" -E 's/^([[:space:]]*)autoindex[[:space:]]+on/\1autoindex off/'
             applied="$applied nginx($f)"
         done
     esac

@@ -28,7 +28,7 @@ run_fix() {
             # 다른 블록의 server_tokens on/build 도 check 는 노출로 본다 - off 로 바꾼다
             if grep -qE '^[^#]*server_tokens[[:space:]]+(on|build)' "$f" 2>/dev/null; then
                 fix_backup "$f"
-                web_sed_inplace "$f" -E 's/^([^#]*server_tokens[[:space:]]+)(on|build)/\1off/'
+                fix_sed_inplace "$f" -E 's/^([^#]*server_tokens[[:space:]]+)(on|build)/\1off/'
                 applied="$applied nginx($f: on->off)"
             fi
         done

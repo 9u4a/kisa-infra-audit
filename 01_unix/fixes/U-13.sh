@@ -22,7 +22,7 @@ run_fix() {
     fi
     fix_backup "$logindefs"
     if grep -qE '^[[:space:]]*ENCRYPT_METHOD' "$logindefs"; then
-        sed -i -E 's/^[[:space:]]*ENCRYPT_METHOD.*/ENCRYPT_METHOD SHA512/' "$logindefs"
+        fix_sed_inplace "$logindefs" -E 's/^[[:space:]]*ENCRYPT_METHOD.*/ENCRYPT_METHOD SHA512/'
     else
         printf 'ENCRYPT_METHOD SHA512\n' >> "$logindefs"
     fi

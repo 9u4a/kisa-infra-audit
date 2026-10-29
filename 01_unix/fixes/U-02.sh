@@ -12,7 +12,7 @@ run_fix() {
     if [ -f "$logindefs" ]; then
         fix_backup "$logindefs"
         if grep -qE '^[[:space:]]*PASS_MAX_DAYS' "$logindefs"; then
-            sed -i -E 's/^[[:space:]]*PASS_MAX_DAYS.*/PASS_MAX_DAYS   90/' "$logindefs"
+            fix_sed_inplace "$logindefs" -E 's/^[[:space:]]*PASS_MAX_DAYS.*/PASS_MAX_DAYS   90/'
         else
             printf 'PASS_MAX_DAYS   90\n' >> "$logindefs"
         fi
@@ -22,7 +22,7 @@ run_fix() {
     if [ -f "$pwquality" ]; then
         fix_backup "$pwquality"
         if grep -qE '^[[:space:]]*minlen' "$pwquality"; then
-            sed -i -E 's/^[[:space:]]*minlen.*/minlen = 8/' "$pwquality"
+            fix_sed_inplace "$pwquality" -E 's/^[[:space:]]*minlen.*/minlen = 8/'
         else
             printf 'minlen = 8\n' >> "$pwquality"
         fi

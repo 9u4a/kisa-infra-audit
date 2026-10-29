@@ -19,7 +19,7 @@ run_fix() {
             fix_backup /etc/issue.net
             printf '%s\n' "$banner_text" > /etc/issue.net
             if grep -qiE '^[[:space:]]*Banner[[:space:]]' /etc/ssh/sshd_config; then
-                sed -i -E 's#^([[:space:]]*Banner[[:space:]]+).*#\1/etc/issue.net#I' /etc/ssh/sshd_config
+                fix_sed_inplace /etc/ssh/sshd_config -E 's#^([[:space:]]*Banner[[:space:]]+).*#\1/etc/issue.net#I'
             else
                 printf 'Banner /etc/issue.net\n' >> /etc/ssh/sshd_config
             fi

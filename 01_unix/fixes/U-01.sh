@@ -49,14 +49,29 @@ run_fix() {
         return
     fi
 
-    base_ok=1
-    if command -v sshd >/dev/null 2>&1; then sshd -t -f "$sshd_cfg" >/dev/null 2>&1 || base_ok=0; else base_ok=0; fi
+    # X-07(1.3.4, F2): 변경 후 문법 검사(sshd -t)를 할 수 없으면 바꾸지 않는다. 예전에는 sshd 가 없거나 기존 설정이
+    # 이미 sshd -t 에 실패하면 검증을 건너뛰고 APPLIED 로 남겨, 다음 sshd 재시작 때 기동 실패(원격 관리 차단)를
+    # 알 수 없었다.
+    #  - sshd 명령 없음 → 이 조치로 바꿀 대상(실행 중인 sshd)이 없어 변경 없이 SKIPPED
+    #  - 기존 설정이 이미 sshd -t 실패 → 변경 없이 ERROR(기존 오류부터 수동으로 고칠 것)
+    if ! command -v sshd >/dev/null 2>&1; then
+        FIX_STATUS="SKIPPED"
+        FIX_DETAIL="sshd 명령이 없어(OpenSSH 서버 미설치 또는 PATH 밖) 변경 후 문법 검사를 할 수 없음 - 변경하지 않음. $sshd_cfg 를 쓰는 sshd 가 있으면 그 경로를 PATH 에 넣고 다시 실행하거나 가이드 조치 방법대로 수동 조치할 것"
+        FIX_EVIDENCE=""
+        return
+    fi
+    if ! base_out=$(sshd -t -f "$sshd_cfg" 2>&1); then
+        FIX_STATUS="ERROR"
+        FIX_DETAIL="기존 sshd 설정이 조치 전부터 sshd -t 문법 검사에 실패해 변경 후 검증을 할 수 없음 - 변경하지 않음(기존 오류를 먼저 수동으로 고칠 것): $(printf '%s' "$base_out" | tail -n 2 | tr '\n' ' ')"
+        FIX_EVIDENCE="$base_out"
+        return
+    fi
 
     fix_backup "$sshd_cfg"
     { printf '# KISA U-01: root 원격 접속 제한 (sshd 는 처음 나온 값을 적용하므로 맨 앞에 둠)\nPermitRootLogin no\n'
       cat "$sshd_cfg"; } > "$sshd_cfg.kisa_tmp" && fix_write_back "$sshd_cfg.kisa_tmp" "$sshd_cfg"
 
-    if [ "$base_ok" -eq 1 ] && ! out=$(sshd -t -f "$sshd_cfg" 2>&1); then
+    if ! out=$(sshd -t -f "$sshd_cfg" 2>&1); then
         FIX_STATUS="ERROR"; FIX_DETAIL="변경 후 sshd -t 문법 검사 실패 - 원복함: $out"; FIX_EVIDENCE="$out"
         return
     fi
@@ -71,7 +86,6 @@ run_fix() {
     [ -n "$overrides" ] && note="$note / Match 블록 예외는 유지함(비상 접근 여부 확인 필요): $overrides"
     [ -n "${SSH_CONNECTION:-}" ] && [ -z "${SUDO_USER:-}" ] && \
         note="$note / 주의: 현재 세션이 root 로 직접 SSH 접속한 것으로 보임 - sshd 재시작 후에는 관리자 계정으로 접속해 sudo 를 쓸 것"
-    [ "$base_ok" -eq 0 ] && note="$note / sshd -t 검사를 할 수 없어(명령 없음 또는 기존 설정 자체가 검사 실패) 문법 검증 생략"
 
     FIX_STATUS="APPLIED"
     FIX_DETAIL="$sshd_cfg 맨 앞에 PermitRootLogin no 설정함 (sshd 재시작/reload 후 적용 — 현재 세션 영향 없음, 대체 관리자: ${admins:-}${sudoers_users:+ sudoers:$sudoers_users})$note"

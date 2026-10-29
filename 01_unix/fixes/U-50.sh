@@ -22,12 +22,12 @@ run_fix() {
         [ -n "$f" ] && [ -f "$f" ] || continue
         if grep -vE '^[[:space:]]*(#|//)' "$f" | grep -qiE 'allow-transfer[[:space:]]*\{[^}]*any[[:space:]]*;'; then
             fix_backup "$f"
-            sed -i -E '/^[[:space:]]*(#|\/\/)/!s/allow-transfer[[:space:]]*\{[^}]*any[[:space:]]*;[^}]*\}[[:space:]]*;/allow-transfer { none; };/I' "$f"
+            fix_sed_inplace "$f" -E '/^[[:space:]]*(#|\/\/)/!s/allow-transfer[[:space:]]*\{[^}]*any[[:space:]]*;[^}]*\}[[:space:]]*;/allow-transfer { none; };/I'
             changed="$changed $f"
         fi
         if [ -z "$has_opt" ] && grep -qE '^[[:space:]]*options[[:space:]]*\{' "$f"; then
             fix_backup "$f"
-            sed -i -E '0,/^[[:space:]]*options[[:space:]]*\{/{s/^([[:space:]]*options[[:space:]]*\{)/\1\n\tallow-transfer { none; };/}' "$f"
+            fix_sed_inplace "$f" -E '0,/^[[:space:]]*options[[:space:]]*\{/{s/^([[:space:]]*options[[:space:]]*\{)/\1\n\tallow-transfer { none; };/}'
             has_opt=1
             changed="$changed $f"
         fi

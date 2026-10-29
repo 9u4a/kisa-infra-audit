@@ -17,7 +17,7 @@ run_fix() {
 
     fix_backup "$conf"
     if grep -qE '^[[:space:]]*user[[:space:]]*=' "$conf"; then
-        sed -i -E 's/^[[:space:]]*user[[:space:]]*=.*/user = mysql/' "$conf"
+        fix_sed_inplace "$conf" -E 's/^[[:space:]]*user[[:space:]]*=.*/user = mysql/'
     else
         printf '\n[mysqld]\nuser = mysql\n' >> "$conf"
     fi

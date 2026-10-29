@@ -8,7 +8,7 @@ run_fix() {
     fi
     fix_backup "$f"
     if grep -qi 'ALLOWED_LOGON_VERSION_SERVER' "$f"; then
-        sed -i -E 's/^([[:space:]]*SQLNET\.ALLOWED_LOGON_VERSION_SERVER[[:space:]]*=).*/\1 12/I' "$f"
+        fix_sed_inplace "$f" -E 's/^([[:space:]]*SQLNET\.ALLOWED_LOGON_VERSION_SERVER[[:space:]]*=).*/\1 12/I'
     else
         printf '\nSQLNET.ALLOWED_LOGON_VERSION_SERVER=12\n' >> "$f"
     fi

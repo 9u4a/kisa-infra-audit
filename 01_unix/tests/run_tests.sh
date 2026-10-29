@@ -75,6 +75,10 @@ done
 # ⑤ 일괄 적용(auto)의 결과를 고정한다: APPLIED 항목 집합이 정확히 같고, 실패(FAILED_*·ABORTED)는 0건, 조치로 해소할 수
 #    없어 변경 없이 건너뛴 항목(SKIPPED)도 고정. 예전에는 APPLIED≠0 만 봐서 U-13/15/65 의 실패·원복을 놓쳤다.
 #    vuln 픽스처를 바꿔 항목이 늘거나 줄면 이 목록도 함께 고친다(fix_safety.sh 출력의 APPLIED_CODES 참고).
+# ⑥ 1.3.4: X-07 U-01 은 기존 설정이 sshd -t 에 실패하면 ERROR·sshd 가 없으면 SKIPPED(둘 다 변경 없음). sed -i 금지 -
+#    /etc/pam.d/su 가 심볼릭 링크여도 U-06 조치·원복 뒤 링크 유지. X-04 가짜 조치(백업 → 변경 → 미설정 변수)가 죽어도
+#    그 항목만 원복·FAILED_ROLLED_BACK(사유 기록) 후 다음 항목(U-18) 진행, fix_abort_item 은 종료코드 3·ABORTED·다음 항목
+#    미변경. X-06 다른 호스트·카테고리·7일 지난 result.json 은 exit 2·변경 없음, --force 면 진행.
 FIX_EXPECT_APPLIED='U-09,U-11,U-14,U-15,U-16,U-17,U-18,U-20,U-27,U-30,U-32,U-34,U-35,U-36,U-40,U-52,U-53,U-62,'
 FIX_EXPECT_SKIPPED='U-13,U-65,'
 out=$(docker run --rm "$IMAGE" sh 01_unix/tests/fixtures/fix_safety.sh)
@@ -91,7 +95,17 @@ if printf '%s\n' "$out" | grep -qx 'FIX_RC=0' && printf '%s\n' "$out" | grep -qx
    && printf '%s\n' "$out" | grep -qx 'SNMP_U-59=APPLIED/GOOD/rb-ok' \
    && printf '%s\n' "$out" | grep -qx 'SNMP_ROLLBACK=same' \
    && printf '%s\n' "$out" | grep -qx 'U01_TELNET=SKIPPED/VULN/unchanged' \
-   && printf '%s\n' "$out" | grep -qx 'U01_SSHD=APPLIED/GOOD/rb-ok/same'; then
+   && printf '%s\n' "$out" | grep -qx 'U01_SSHD=APPLIED/GOOD/rb-ok/same' \
+   && printf '%s\n' "$out" | grep -qx 'U01_BADBASE=ERROR/VULN/unchanged' \
+   && printf '%s\n' "$out" | grep -qx 'U01_NOSSHD=SKIPPED/VULN/unchanged' \
+   && printf '%s\n' "$out" | grep -qx 'PAM_SYMLINK=APPLIED/GOOD/link/target-written/rb-ok/link/same' \
+   && printf '%s\n' "$out" | grep -qx 'ISO_RC=0' \
+   && printf '%s\n' "$out" | grep -qx 'ISO=U-16:FAILED_ROLLED_BACK,U-18:APPLIED,' \
+   && printf '%s\n' "$out" | grep -qx 'ISO_REASON=logged' && printf '%s\n' "$out" | grep -qx 'ISO_TARGET=restored' \
+   && printf '%s\n' "$out" | grep -qx 'ABORT_RC=3' && printf '%s\n' "$out" | grep -qx 'ABORT=U-16:ABORTED,' \
+   && printf '%s\n' "$out" | grep -qx 'ABORT_TARGET=restored' && printf '%s\n' "$out" | grep -qx 'ABORT_NEXT=untouched' \
+   && printf '%s\n' "$out" | grep -qx 'TARGET_HOST=2/unchanged' && printf '%s\n' "$out" | grep -qx 'TARGET_CAT=2' \
+   && printf '%s\n' "$out" | grep -qx 'TARGET_OLD=2/unchanged' && printf '%s\n' "$out" | grep -qx 'TARGET_FORCE=0/APPLIED'; then
     echo "PASS: fix-apply ($(printf '%s' "$out" | tr '\n' ' '))"
 else
     echo "FAIL: fix-apply - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1

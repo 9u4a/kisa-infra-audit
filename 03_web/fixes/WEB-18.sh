@@ -41,11 +41,11 @@ run_fix() {
             if [ -n "$dav_loaded" ]; then
                 grep -qE "^[[:space:]]*LoadModule[[:space:]]+dav(_fs|_lock)?_module|$dav_dir_re" "$f" 2>/dev/null || continue
                 fix_backup "$f"
-                web_sed_inplace "$f" -E 's/^([[:space:]]*)(LoadModule[[:space:]]+dav(_fs|_lock)?_module.*)/\1#\2/; s/^([[:space:]]*)([Dd][Aa][Vv][A-Za-z]*[[:space:]].*)/\1#\2/'
+                fix_sed_inplace "$f" -E 's/^([[:space:]]*)(LoadModule[[:space:]]+dav(_fs|_lock)?_module.*)/\1#\2/; s/^([[:space:]]*)([Dd][Aa][Vv][A-Za-z]*[[:space:]].*)/\1#\2/'
             else
                 grep -qiE '^[^#]*Dav[[:space:]]+On' "$f" 2>/dev/null || continue
                 fix_backup "$f"
-                web_sed_inplace "$f" -E 's/^([[:space:]]*[Dd][Aa][Vv][[:space:]]+)[Oo][Nn]/\1Off/'
+                fix_sed_inplace "$f" -E 's/^([[:space:]]*[Dd][Aa][Vv][[:space:]]+)[Oo][Nn]/\1Off/'
             fi
             applied="$applied apache($f)"
         done
@@ -58,7 +58,7 @@ run_fix() {
             [ -f "$f" ] || continue
             grep -qE '^[^#]*dav_methods' "$f" 2>/dev/null || continue
             fix_backup "$f"
-            web_sed_inplace "$f" -E 's/^([[:space:]]*)(dav_methods.*)/\1#\2/'
+            fix_sed_inplace "$f" -E 's/^([[:space:]]*)(dav_methods.*)/\1#\2/'
             applied="$applied nginx($f)"
         done
     esac

@@ -21,7 +21,7 @@ run_fix() {
         return
     fi
     fix_backup "$f"
-    web_sed_inplace "$f" -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I'
+    fix_sed_inplace "$f" -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I'
     FIX_STATUS="APPLIED"
     FIX_DETAIL="Tomcat Context allowLinking 을 false 로 설정함"
     FIX_EVIDENCE="$hit"

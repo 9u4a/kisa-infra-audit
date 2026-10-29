@@ -6,7 +6,7 @@ run_fix() {
         [ -f "$f" ] || continue
         grep -qiE '^[[:space:]]*anonymous_enable[[:space:]]*=[[:space:]]*yes' "$f" || continue
         fix_backup "$f"
-        sed -i -E 's/^([[:space:]]*)anonymous_enable[[:space:]]*=[[:space:]]*yes/\1anonymous_enable=NO/I' "$f"
+        fix_sed_inplace "$f" -E 's/^([[:space:]]*)anonymous_enable[[:space:]]*=[[:space:]]*yes/\1anonymous_enable=NO/I'
         applied="$applied $f(anonymous_enable=NO)"
     done
 
@@ -14,7 +14,7 @@ run_fix() {
         [ -f "$f" ] || continue
         grep -q '<Anonymous' "$f" 2>/dev/null || continue
         fix_backup "$f"
-        sed -i -E '/<Anonymous/,/<\/Anonymous>/ { /^[[:space:]]*#/! s/^/#/ }' "$f"
+        fix_sed_inplace "$f" -E '/<Anonymous/,/<\/Anonymous>/ { /^[[:space:]]*#/! s/^/#/ }'
         applied="$applied $f(Anonymous 블록 주석 처리)"
     done
 
@@ -23,7 +23,7 @@ run_fix() {
         # check(U-35)와 같은 기준(진단 검수 U-R15): 모든 섹션의 guest ok/public = yes|true|1
         grep -qiE '^[[:space:]]*(guest[[:space:]]*ok|public)[[:space:]]*=[[:space:]]*(yes|true|1)[[:space:]]*$' "$f" || continue
         fix_backup "$f"
-        sed -i -E 's/^([[:space:]]*)(guest[[:space:]]*ok|public)[[:space:]]*=[[:space:]]*(yes|true|1)[[:space:]]*$/\1\2 = no/I' "$f"
+        fix_sed_inplace "$f" -E 's/^([[:space:]]*)(guest[[:space:]]*ok|public)[[:space:]]*=[[:space:]]*(yes|true|1)[[:space:]]*$/\1\2 = no/I'
         applied="$applied $f(guest ok=no)"
     done
 

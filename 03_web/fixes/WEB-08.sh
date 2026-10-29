@@ -18,7 +18,7 @@ run_fix() {
             [ -f "$f" ] || continue
             grep -qiE '^[^#]*LimitRequestBody[[:space:]]+0+([^0-9]|$)' "$f" 2>/dev/null || continue
             fix_backup "$f"
-            web_sed_inplace "$f" -E 's/^([^#]*[Ll][Ii][Mm][Ii][Tt][Rr][Ee][Qq][Uu][Ee][Ss][Tt][Bb][Oo][Dd][Yy][[:space:]]+)0+([^0-9]|$)/\110485760\2/'
+            fix_sed_inplace "$f" -E 's/^([^#]*[Ll][Ii][Mm][Ii][Tt][Rr][Ee][Qq][Uu][Ee][Ss][Tt][Bb][Oo][Dd][Yy][[:space:]]+)0+([^0-9]|$)/\110485760\2/'
             applied="$applied apache($f: 0->10485760)"
         done
         if [ -z "$hit" ] && [ -f "$conf" ]; then
@@ -37,7 +37,7 @@ run_fix() {
             hit=$(strip_xml_comments "$f" | grep -oE '(maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*"[^"]*"')
             if printf '%s\n' "$hit" | grep -qE '"[[:space:]]*-[0-9]'; then
                 fix_backup "$f"
-                web_sed_inplace "$f" -E 's/((maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*")[[:space:]]*-[0-9]+"/\110485760"/g'
+                fix_sed_inplace "$f" -E 's/((maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*")[[:space:]]*-[0-9]+"/\110485760"/g'
                 applied="$applied tomcat($f: 음수->10485760)"
             elif [ -z "$hit" ]; then
                 fix_backup "$f"

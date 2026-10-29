@@ -25,7 +25,7 @@ run_fix() {
             [ -f "$f" ] || continue
             grep -qE '^[^#]*ssi[[:space:]]+on' "$f" 2>/dev/null || continue
             fix_backup "$f"
-            web_sed_inplace "$f" -E 's/^([[:space:]]*)ssi[[:space:]]+on/\1ssi off/'
+            fix_sed_inplace "$f" -E 's/^([[:space:]]*)ssi[[:space:]]+on/\1ssi off/'
             applied="$applied nginx($f)"
         done
     esac

@@ -29,6 +29,18 @@ jobs:
           echo "검사 대상: $(echo "$files" | wc -l)개"
           shellcheck -S error -s sh $files
 
+      - name: 조치(fixes)에서 sed -i 금지(X-07)
+        # sed -i 는 파일을 새로 만들어 바꿔치기해 심볼릭 링크(/etc/pam.d/system-auth → authselect, Debian sites-enabled 등)를
+        # 일반 파일로 바꾸고 원복으로도 링크가 돌아오지 않는다. lib/common.sh 의 fix_sed_inplace 를 쓸 것(주석 줄은 제외).
+        run: |
+          hits=$(grep -rnE '(^|[^[:alnum:]_])sed[[:space:]]+([^|;]*[[:space:]])?(-[A-Za-z]*i|--in-place)' --include=*.sh */fixes lib/common.sh \
+                 | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
+          if [ -n "$hits" ]; then
+            echo "sed -i 사용 금지 - fix_sed_inplace <파일> <sed 인자...> 로 바꿀 것:"
+            echo "$hits"
+            exit 1
+          fi
+
       - name: PSScriptAnalyzer (전체 *.ps1 / *.psm1)
         shell: pwsh
         run: |

@@ -11,7 +11,7 @@ run_fix() {
         if [ "$ok" -ne 1 ]; then
             fix_backup "$f"
             if [ -n "$line" ]; then
-                sed -i -E "s/^(O[[:space:]]*PrivacyOptions[[:space:]]*=.*)/\1,noexpn,novrfy/I" "$f"
+                fix_sed_inplace "$f" -E "s/^(O[[:space:]]*PrivacyOptions[[:space:]]*=.*)/\1,noexpn,novrfy/I"
             else
                 printf 'O PrivacyOptions=noexpn,novrfy\n' >> "$f"
             fi

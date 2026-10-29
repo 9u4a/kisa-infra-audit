@@ -35,7 +35,7 @@ run_fix() {
     # pam_wheel 줄을 전부 풀어 Debian 기본 예시의 "sufficient pam_wheel.so trust"(wheel 무암호 su)·"deny group=nosu"
     # 까지 활성화했다 - 인자 없는(또는 use_uid 만 있는) required 예시 줄 하나만 푼다.
     if grep -qE '^[[:space:]]*#[[:space:]]*auth[[:space:]]+required[[:space:]]+pam_wheel\.so([[:space:]]+use_uid)?[[:space:]]*$' "$pam_su"; then
-        sed -i -E '0,/^[[:space:]]*#[[:space:]]*auth[[:space:]]+required[[:space:]]+pam_wheel\.so([[:space:]]+use_uid)?[[:space:]]*$/s//auth required pam_wheel.so\1/' "$pam_su"
+        fix_sed_inplace "$pam_su" -E '0,/^[[:space:]]*#[[:space:]]*auth[[:space:]]+required[[:space:]]+pam_wheel\.so([[:space:]]+use_uid)?[[:space:]]*$/s//auth required pam_wheel.so\1/'
     else
         printf 'auth\t\trequired\tpam_wheel.so use_uid\n' >> "$pam_su"
     fi
