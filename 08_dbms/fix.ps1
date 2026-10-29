@@ -16,6 +16,7 @@ param(
     [Alias("i")][string]$Items = "",
     [switch]$Apply,
     [switch]$Yes,
+    [switch]$Force,
     [string]$Rollback = "",
     [Alias("o")][string]$OutBase = "",
     [Alias("h")][switch]$Help,
@@ -30,6 +31,7 @@ if ($Help) {
     Write-Host "  .\fix.ps1 -ResultJson <result.json>                        dry-run(미리보기만)"
     Write-Host "  .\fix.ps1 -ResultJson <result.json> -SqlUser sa -SqlHost .  SQL 인증(`$env:DB_PASSWORD 필요)"
     Write-Host "  .\fix.ps1 -ResultJson <result.json> -Items D-05,D-09 -Apply 지정 항목만 실제 적용"
+    Write-Host "  -Force  다른 호스트·카테고리·7일 넘은 result.json 으로도 적용(주의)"
     Write-Host "  .\fix.ps1 -Rollback <output\host_08_fix_TS 디렉터리>        백업에서 원복"
     exit 0
 }
@@ -96,6 +98,10 @@ try {
     $GuideByCode = @{}
     foreach ($it in $Guide.items) { $GuideByCode[$it.code] = $it }
 
+    # X-06: 이 컴퓨터·이 카테고리의 진단 결과인지 확인(실제 적용할 때만 - dry-run 은 무엇이든 미리보기 가능)
+    if ($Apply -and -not (Test-FixResultTarget -ResultJson $ResultJson -Category "DBMS" -Force:$Force)) {
+        exit 2
+    }
     $VulnCodes = @(Get-ResultVulnCodes -ResultJson $ResultJson)
     if ($Items) {
         $wanted = @($Items -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })

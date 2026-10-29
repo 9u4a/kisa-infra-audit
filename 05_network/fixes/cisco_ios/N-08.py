@@ -7,13 +7,7 @@ from parsers import cisco_ios as cio
 
 def generate(ctx):
     vty_blocks = ctx.line_block_text("vty")
-    import re
-
-    bad = [
-        b
-        for b in vty_blocks
-        if re.search(r"^\s*transport input (all|telnet)", b, re.M) or not re.search(r"^\s*transport input", b, re.M)
-    ]
+    bad = [b for b in vty_blocks if cio.vty_allows_telnet(b)]
     if not bad:
         return []
     cmds = []

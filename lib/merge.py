@@ -50,7 +50,7 @@ def load_results(paths: list[str]) -> list[dict]:
     loaded = []
     for p in paths:
         try:
-            with open(p, encoding="utf-8") as f:
+            with open(p, encoding="utf-8-sig") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
             print(f"경고: {p} 를 읽을 수 없어 건너뜀: {e}", file=sys.stderr)
@@ -257,7 +257,7 @@ def main() -> None:
         guide_path = os.path.join(repo_root, entry, "guide.json")
         if os.path.isfile(guide_path):
             try:
-                with open(guide_path, encoding="utf-8") as f:
+                with open(guide_path, encoding="utf-8-sig") as f:
                     g = json.load(f)
                 if g.get("category") == category or g.get("prefix") and any(
                     it["code"].startswith(g["prefix"] + "-") for it in results[0].get("items", [])

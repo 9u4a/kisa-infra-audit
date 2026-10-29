@@ -366,9 +366,11 @@ function Save-ResultJson {
     }
     # R-11: pwsh 7 의 ConvertTo-Json 은 < > & 를 이스케이프하지 않아, 증적 속 "</script>" 가 report.html(결과 JSON 을
     # <script> 블록에 그대로 이어붙임) 안에서 스크립트를 끝내고 뒤의 내용을 실행시킬 수 있었다. JSON 문법상 이 문자들은
-    # 문자열 안에만 나오므로 < 등으로 바꿔도 값은 같다(PS 5.1 은 원래 이렇게 출력).
+    # 문자열 안에만 나오므로 \u003c 등으로 바꿔도 값은 같다(PS 5.1 은 원래 이렇게 출력).
+    # X-01(1.3.4): 1.3.2 에서는 이 치환이 '<'→'<' 로 저장돼 아무것도 바꾸지 않았다(편집 도구가 이스케이프를 풀어 씀) -
+    # 바이트로 확인할 것: grep -c 'u003c' lib/Common.psm1
     $json = ($obj | ConvertTo-Json -Depth 6) -join "`n"
-    $json = $json.Replace('<', '<').Replace('>', '>').Replace('&', '&')
+    $json = $json.Replace('<', '\u003c').Replace('>', '\u003e').Replace('&', '\u0026')
     $json | Out-File -FilePath $OutFile -Encoding utf8
 }
 
@@ -455,6 +457,11 @@ function Get-SecEditExport {
     # 02_windows/07_pc run.ps1 이 이 플래그로 해당 항목의 GOOD/VULN 을 ERROR 로 바꾼다.
     $Global:SecEditFailed = ($sections.Count -eq 0)
     return $sections
+}
+
+function Clear-SecEditCache {
+    <# 보안 정책을 바꾼 뒤(fix 적용·원복) 다음 조회가 새로 내보내도록 캐시를 비운다 #>
+    $Script:SecEditCache = $null
 }
 
 function Get-SecPolicyValue {
@@ -779,6 +786,36 @@ function Get-ResultVulnCodes {
     param([Parameter(Mandatory)][string]$ResultJson)
     $r = Get-Content -Raw -Encoding UTF8 -Path $ResultJson | ConvertFrom-Json
     return @($r.items | Where-Object { $_.status -eq "VULN" } | ForEach-Object { $_.code })
+}
+
+function Test-FixResultTarget {
+    <# X-06(1.3.4): 조치 입력 result.json 이 이 컴퓨터·이 카테고리의 진단 결과인지 확인한다. 예전에는 아무 결과나 받아
+       다른 서버(또는 오래된) 결과로 -Apply -Yes 를 돌리면 auto 항목이 확인 없이 바뀌었다(원복에만 호스트 확인이 있었음).
+       불일치는 -Force 없이는 거부, 7일 넘은 결과는 -Force 가 아니면 대화형 확인을 받는다. 통과하면 $true. #>
+    param([Parameter(Mandatory)][string]$ResultJson, [Parameter(Mandatory)][string]$Category, [switch]$Force)
+    try { $r = Get-Content -Raw -Encoding UTF8 -Path $ResultJson | ConvertFrom-Json } catch {
+        Write-Host "result.json 을 읽을 수 없음: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+    $problems = @()
+    if ("$($r.host)" -ne "$($env:COMPUTERNAME)") { $problems += "호스트 불일치(결과: $($r.host), 현재: $($env:COMPUTERNAME))" }
+    if ("$($r.category)" -ne $Category) { $problems += "카테고리 불일치(결과: $($r.category), 기대: $Category)" }
+    if ($problems.Count -gt 0) {
+        if ($Force) { Write-Warning ("-Force 로 계속: " + ($problems -join " / ")); return $true }
+        Write-Host ("이 result.json 은 이 대상의 진단 결과가 아닙니다 - " + ($problems -join " / ") + ". 변경 없이 중단(의도한 경우 -Force).") -ForegroundColor Red
+        return $false
+    }
+    $gen = [datetime]::MinValue
+    if (-not [datetime]::TryParse("$($r.generated_at)", [ref]$gen)) {
+        $problems += "진단 시각(generated_at)을 해석할 수 없음: $($r.generated_at)"
+    } elseif (((Get-Date) - $gen).TotalDays -gt 7) {
+        $problems += "진단 결과가 7일 이상 지남($($r.generated_at)) - 그 사이 설정이 바뀌었을 수 있음"
+    }
+    if ($problems.Count -eq 0 -or $Force) {
+        if ($problems.Count -gt 0) { Write-Warning ("-Force 로 계속: " + ($problems -join " / ")) }
+        return $true
+    }
+    return (Read-FixConfirm -Prompt (($problems -join " / ") + " - 그래도 이 결과로 조치를 진행합니까? [y/N]"))
 }
 
 # ---- 운영 안전 가드 (운영 안전 기준 F1·F6, 1.2.2) ------------------------------------
@@ -1548,6 +1585,9 @@ function Set-FixSecPolicyValue {
         $exitCode = $LASTEXITCODE
     } finally {
         Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+        # X-02: 정책을 바꿨으니 진단 캐시를 비운다 - 예전에는 같은 세션의 재검증이 변경 전 내보내기를 다시 읽어
+        # 실제로 적용된 조치가 재검증 VULN → FAILED_NOT_ROLLED_BACK 으로 기록될 수 있었다.
+        Clear-SecEditCache
     }
     if ($exitCode -eq 0) {
         $Global:FixStatus = "APPLIED"
@@ -1581,6 +1621,7 @@ function Restore-FixSecPolicyBackup {
         Add-FixRollbackFailure "보안 정책(secedit) 스냅샷 재적용 실패: $($_.Exception.Message)"
     } finally {
         if ($tmpDir) { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+        Clear-SecEditCache
     }
 }
 
@@ -1696,4 +1737,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

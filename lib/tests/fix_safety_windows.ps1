@@ -74,6 +74,20 @@ $state0 = Get-WinStateSnapshot -Category $Category
 
 $fixOut = Join-Path $env:TEMP "fs_${Category}_fix"
 Remove-Item -Recurse -Force $fixOut -ErrorAction SilentlyContinue
+
+# X-06: 다른 호스트의 result.json 으로는 -Apply -Yes 라도 아무것도 바꾸지 않고 exit 2 여야 한다
+$foreign = Join-Path $env:TEMP "fs_${Category}_foreign.json"
+$fj = Get-Content -Raw -Encoding UTF8 $base.Path | ConvertFrom-Json
+$fj.host = "OTHER-HOST-X06"
+$fj | ConvertTo-Json -Depth 6 | Out-File -FilePath $foreign -Encoding utf8
+$foreignOut = Join-Path $env:TEMP "fs_${Category}_foreign_out"
+$fLog = "" | & powershell -NoProfile -NonInteractive -File $fixPs1 -ResultJson $foreign -OutBase $foreignOut -Apply -Yes 2>&1 | Out-String
+$fRc = $LASTEXITCODE
+if ($fRc -ne 2 -or (Test-Path $foreignOut)) { $fail += "X-06: 다른 호스트 result.json 으로 적용이 거부되지 않음(exit=$fRc)`n$fLog" }
+else { Write-Host "[$Category] X-06 다른 호스트 결과 거부 확인(exit 2, 출력 폴더 없음)" }
+Remove-Item -Force $foreign -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force $foreignOut -ErrorAction SilentlyContinue
+
 $applyLog = "" | & powershell -NoProfile -NonInteractive -File $fixPs1 -ResultJson $base.Path -OutBase $fixOut -Apply -Yes 2>&1 | Out-String
 $runDir = Get-ChildItem -Path $fixOut -Directory | Select-Object -First 1 -ExpandProperty FullName
 if (-not $runDir) { throw "조치 출력 폴더를 찾지 못함:`n$applyLog" }

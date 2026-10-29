@@ -85,6 +85,17 @@ def iface_name(block_text: str) -> str:
     return parts[1] if len(parts) > 1 else first
 
 
+def vty_allows_telnet(block_text: str) -> bool:
+    """line vty 블록이 telnet 을 허용하는지. transport input 이 없으면 기본값(all)=허용.
+    여러 프로토콜을 나열한 줄(`transport input ssh telnet`)도 토큰 단위로 본다(X-03, 예전 정규식은 첫 토큰만 봄).
+    같은 지시어가 여러 번이면 IOS 처럼 마지막 줄이 적용된다."""
+    lines = [ln.split() for ln in block_text.splitlines() if re.match(r"^\s*transport input\b", ln)]
+    if not lines:
+        return True
+    tokens = {t.lower() for t in lines[-1][2:]}
+    return bool(tokens & {"all", "telnet"})
+
+
 SNMP_DEFAULT_COMMUNITIES = {"public", "private"}
 
 

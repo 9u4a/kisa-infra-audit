@@ -44,6 +44,6 @@ line vty 5 15
  exec-timeout 5 0
  password EdgeVtyPlainLeak13
  no login
- transport input ssh
+ transport input ssh telnet
 !
 end

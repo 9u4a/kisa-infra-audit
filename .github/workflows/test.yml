@@ -84,6 +84,20 @@ jobs:
           print(f"OK: {len(defined)}개 함수 모두 공개")
           EOF
 
+      # X-01(1.3.4): pwsh 7 의 ConvertTo-Json 은 < > & 를 그대로 출력한다 - Save-ResultJson 이 \u003c 등으로 바꿔
+      # report.html 의 <script> 블록을 끝내지 못하게 하는지 pwsh 7 에서 직접 확인(1.3.2 의 치환은 아무것도 바꾸지 않았음).
+      - name: Save-ResultJson 스크립트 주입 방지(pwsh 7)
+        shell: pwsh
+        run: |
+          Import-Module ./lib/Common.psm1 -Force
+          $r = New-CheckResult -Code "W-01" -Status "GOOD" -Detail "a</script><b>&c" -Evidence "x"
+          $f = Join-Path ([System.IO.Path]::GetTempPath()) "r11.json"
+          Save-ResultJson -Results @($r) -OutFile $f -Category "02_windows" -OsFamily "t"
+          $raw = Get-Content -Raw -Encoding UTF8 $f
+          if ($raw -match '[<>&]') { Write-Host "FAIL: result.json 에 < > & 원문이 남음"; exit 1 }
+          if ((ConvertFrom-Json $raw).items[0].detail -ne "a</script><b>&c") { Write-Host "FAIL: 값이 바뀜"; exit 1 }
+          Write-Host "OK"
+
   network:
     # 05_network 는 오프라인 설정파일 분석이라 Docker/실제 장비가 필요 없다 - Cisco IOS
     # vuln/hardened 픽스처 2종으로 38항목 전체 판정 로직을 회귀 테스트한다(05_network/
@@ -93,6 +107,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 05_network/tests/run_tests.py
+      - run: python3 lib/tests/merge_test.py
 
   linux-integration:
     # Docker(Debian 12)로 01_unix 를 회귀 테스트한다 - vuln/hardened 두 픽스처로 ~20개 항목은

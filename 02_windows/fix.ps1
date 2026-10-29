@@ -25,6 +25,7 @@ param(
     [Alias("i")][string]$Items = "",
     [switch]$Apply,
     [switch]$Yes,
+    [switch]$Force,
     [string]$Rollback = "",
     [Alias("o")][string]$OutBase = "",
     [Alias("h")][switch]$Help
@@ -35,6 +36,7 @@ if ($Help) {
     Write-Host "  .\fix.ps1 -ResultJson <result.json>                       dry-run(미리보기만)"
     Write-Host "  .\fix.ps1 -ResultJson <result.json> -Items W-01,W-16 -Apply   지정 항목만 실제 적용"
     Write-Host "  .\fix.ps1 -ResultJson <result.json> -Apply -Yes           적용 전 변경 목록 확인(1회) 생략"
+    Write-Host "  -Force                                                   다른 호스트·카테고리·7일 넘은 result.json 으로도 적용(주의)"
     Write-Host "  .\fix.ps1 -Rollback <output\host_02_fix_TS 디렉터리>       백업에서 원복"
     exit 0
 }
@@ -82,6 +84,10 @@ try {
     $GuideByCode = @{}
     foreach ($it in $Guide.items) { $GuideByCode[$it.code] = $it }
 
+    # X-06: 이 컴퓨터·이 카테고리의 진단 결과인지 확인(실제 적용할 때만 - dry-run 은 무엇이든 미리보기 가능)
+    if ($Apply -and -not (Test-FixResultTarget -ResultJson $ResultJson -Category "Windows 서버" -Force:$Force)) {
+        exit 2
+    }
     $VulnCodes = @(Get-ResultVulnCodes -ResultJson $ResultJson)
     if ($Items) {
         $wanted = @($Items -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
@@ -162,9 +168,20 @@ try {
 
         $Global:CheckStatus = "ERROR"; $checkDetail = "check 스크립트 없음"
         if (Test-Path $checkFile) {
+            # X-09: 재검증도 run.ps1 과 같은 규칙으로 - 조회 실패로 내린 판정은 ERROR(→ 원복). 보안 정책 캐시는
+            # Set-FixSecPolicyValue 가 비우지만, 조치 스크립트가 다른 경로로 정책을 바꿨을 수 있어 여기서도 비운다(X-02).
+            Clear-SecEditCache
+            $Global:SecPolicyQueried = $false
+            $Global:RegistryQueryFailed = $false; $Global:RegistryQueryError = ""
             try {
                 $r = & $checkFile
                 if ($r) { $Global:CheckStatus = $r.status; $checkDetail = $r.detail }
+                if ($Global:SecPolicyQueried -and $Global:SecEditFailed -and $Global:CheckStatus -in @("GOOD", "VULN")) {
+                    $Global:CheckStatus = "ERROR"; $checkDetail = "보안 정책(secedit) 조회 실패 - 재검증 불가"
+                }
+                if ($Global:RegistryQueryFailed -and $Global:CheckStatus -in @("GOOD", "VULN")) {
+                    $Global:CheckStatus = "ERROR"; $checkDetail = "레지스트리 조회 실패 - 재검증 불가: $($Global:RegistryQueryError)"
+                }
             } catch {
                 $Global:CheckStatus = "ERROR"; $checkDetail = "check 실행 중 예외: $($_.Exception.Message)"
             }
