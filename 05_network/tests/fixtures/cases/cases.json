@@ -1,0 +1,130 @@
+[
+  {
+    "code": "N-07",
+    "engine": "cisco_ios",
+    "name": "good",
+    "expect": "GOOD",
+    "file": "N-07_good.txt",
+    "why": "con 5분·aux 3분(초 생략)·vty 10분 정각·9분59초 - 모두 10분 이하"
+  },
+  {
+    "code": "N-07",
+    "engine": "cisco_ios",
+    "name": "vuln_over10",
+    "expect": "VULN",
+    "file": "N-07_vuln_over10.txt",
+    "why": "vty 10분 30초 - 10분 초과(분만 보던 예전 check 는 GOOD 으로 오판)"
+  },
+  {
+    "code": "N-07",
+    "engine": "cisco_ios",
+    "name": "vuln_zero",
+    "expect": "VULN",
+    "file": "N-07_vuln_zero.txt",
+    "why": "con exec-timeout 0 0 = 시간 제한 없음(미설정과 동일, 예전 check 는 0<=10 으로 GOOD 오판)"
+  },
+  {
+    "code": "N-10",
+    "engine": "cisco_ios",
+    "name": "good",
+    "expect": "GOOD",
+    "file": "N-10_good.txt",
+    "why": "가이드 '바람직한 배너 예시' 문구, 시스템 정보 없음"
+  },
+  {
+    "code": "N-10",
+    "engine": "cisco_ios",
+    "name": "good_kor_hash",
+    "expect": "GOOD",
+    "file": "N-10_good_kor_hash.txt",
+    "why": "한 줄 # 구분자 한글 경고 배너"
+  },
+  {
+    "code": "N-10",
+    "engine": "cisco_ios",
+    "name": "vuln_sysinfo",
+    "expect": "VULN",
+    "file": "N-10_vuln_sysinfo.txt",
+    "why": "경고 문구는 있으나 호스트명·IOS 버전·IP 노출 - 가이드 취약 기준 '시스템 관련 정보 노출'"
+  },
+  {
+    "code": "N-10",
+    "engine": "cisco_ios",
+    "name": "manual_nowarn",
+    "expect": "MANUAL",
+    "file": "N-10_manual_nowarn.txt",
+    "why": "배너는 있으나 경고 문구가 아님 - 문구 적절성 판단 필요"
+  },
+  {
+    "code": "N-17",
+    "engine": "cisco_ios",
+    "name": "good",
+    "expect": "GOOD",
+    "file": "N-17_good.txt",
+    "why": "snmp-server 설정이 전혀 없음 = SNMP 비활성화"
+  },
+  {
+    "code": "N-22",
+    "engine": "cisco_ios",
+    "name": "good",
+    "expect": "GOOD",
+    "file": "N-22_good.txt",
+    "why": "가이드 Step 2 ACL(8개 대역) + Step 3 SP 연결 인터페이스 inbound 적용"
+  },
+  {
+    "code": "N-22",
+    "engine": "cisco_ios",
+    "name": "good_named",
+    "expect": "GOOD",
+    "file": "N-22_good_named.txt",
+    "why": "이름형 extended ACL 을 inbound 적용"
+  },
+  {
+    "code": "N-22",
+    "engine": "cisco_ios",
+    "name": "vuln_permit_only",
+    "expect": "VULN",
+    "file": "N-22_vuln_permit_only.txt",
+    "why": "inbound ACL 은 있으나 특수 용도 대역 차단이 없음 = 스푸핑 방지 필터링 미적용"
+  },
+  {
+    "code": "N-22",
+    "engine": "cisco_ios",
+    "name": "manual_shutdown_only",
+    "expect": "MANUAL",
+    "file": "N-22_manual_shutdown_only.txt",
+    "why": "ACL 은 정의됐지만 shutdown 인터페이스에만 적용 - 활성 경계 인터페이스 적용 여부 수동 확인"
+  },
+  {
+    "code": "N-24",
+    "engine": "cisco_ios",
+    "name": "manual_candidate",
+    "expect": "MANUAL",
+    "file": "N-24_manual_candidate.txt",
+    "why": "IP 없음·shutdown 없음 인터페이스 - 미사용 여부는 운영 판단"
+  },
+  {
+    "code": "N-31",
+    "engine": "cisco_ios",
+    "name": "good",
+    "expect": "GOOD",
+    "file": "N-31_good.txt",
+    "why": "모든 IP 인터페이스에 no ip directed-broadcast 명시"
+  },
+  {
+    "code": "N-31",
+    "engine": "cisco_ios",
+    "name": "vuln",
+    "expect": "VULN",
+    "file": "N-31_vuln.txt",
+    "why": "Gi0/1 에 ip directed-broadcast 명시(버전과 무관하게 허용 상태)"
+  },
+  {
+    "code": "N-31",
+    "engine": "cisco_ios",
+    "name": "vuln_acl",
+    "expect": "VULN",
+    "file": "N-31_vuln_acl.txt",
+    "why": "ACL 지정 directed-broadcast 허용도 차단하지 않은 것"
+  }
+]

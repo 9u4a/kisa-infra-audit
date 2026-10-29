@@ -1,0 +1,23 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+interface GigabitEthernet0/0
+ ip address 203.0.113.1 255.255.255.0
+ no ip directed-broadcast
+!
+interface GigabitEthernet0/1
+ ip address 10.0.0.1 255.255.255.0
+ ip directed-broadcast
+!
+line con 0
+ exec-timeout 5 0
+line vty 0 4
+ exec-timeout 5 0
+ transport input ssh
+!
+end

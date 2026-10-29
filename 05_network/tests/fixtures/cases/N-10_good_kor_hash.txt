@@ -1,0 +1,20 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+banner login #비인가자의 무단 접근을 금지합니다. 모든 접속은 기록됩니다.#
+!
+interface GigabitEthernet0/0
+ ip address 203.0.113.1 255.255.255.0
+!
+line con 0
+ exec-timeout 5 0
+line vty 0 4
+ exec-timeout 5 0
+ transport input ssh
+!
+end

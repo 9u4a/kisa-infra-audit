@@ -1,0 +1,29 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+access-list 120 deny ip 0.0.0.0 0.255.255.255 any
+access-list 120 deny ip 10.0.0.0 0.255.255.255 any
+access-list 120 deny ip 127.0.0.0 0.255.255.255 any
+access-list 120 deny ip 169.254.0.0 0.0.255.255 any
+access-list 120 deny ip 172.16.0.0 0.15.255.255 any
+access-list 120 deny ip 192.0.2.0 0.0.0.255 any
+access-list 120 deny ip 192.168.0.0 0.0.255.255 any
+access-list 120 deny ip 224.0.0.0 15.255.255.255 any
+access-list 120 permit ip any any
+!
+interface Serial0/0/0
+ ip address 198.51.100.2 255.255.255.252
+ ip access-group 120 in
+!
+line con 0
+ exec-timeout 5 0
+line vty 0 4
+ exec-timeout 5 0
+ transport input ssh
+!
+end

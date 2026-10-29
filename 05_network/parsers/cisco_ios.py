@@ -85,6 +85,67 @@ def iface_name(block_text: str) -> str:
     return parts[1] if len(parts) > 1 else first
 
 
+def exec_timeout_seconds(block_text: str) -> int | None:
+    """line 블록의 exec-timeout 을 초 단위로 반환(미설정이면 None). `exec-timeout <분> [<초>]` - 초는 생략 가능하고
+    `exec-timeout 0 0` 은 시간 제한 해제(무제한)를 뜻한다. 예전 check(N-07)는 분만 보고 초를 버려 `0 0`(무제한)과
+    `10 30`(10분 30초)을 양호로 판정했고, 초를 생략한 줄은 미설정으로 봤다(판정 양방향 검증 중 발견, N-R1).
+    같은 지시어가 여러 번이면 IOS 처럼 마지막 줄이 적용된다."""
+    found = re.findall(r"^\s*exec-timeout (\d+)(?:[ \t]+(\d+))?[ \t]*$", block_text, re.M)
+    if not found:
+        return None
+    mins, secs = found[-1]
+    return int(mins) * 60 + int(secs or 0)
+
+
+def banners(ctx) -> list[tuple[str, str]]:
+    """`banner <motd|login|exec|incoming> <구분자>...<구분자>` 를 (종류, 본문) 목록으로 반환한다.
+    show running-config 는 구분자를 `^C` 로 보여주지만 직접 입력한 설정은 임의의 한 글자(#, % 등)일 수 있다."""
+    out = []
+    lines = ctx.lines
+    i, n = 0, len(lines)
+    while i < n:
+        m = re.match(r"^banner (motd|login|exec|incoming)[ \t]+(\S.*)$", lines[i])
+        if not m:
+            i += 1
+            continue
+        kind, rest = m.group(1), m.group(2)
+        delim = "^C" if rest.startswith("^C") else rest[0]
+        after = rest[len(delim):]
+        if delim in after:
+            out.append((kind, after.split(delim, 1)[0]))
+            i += 1
+            continue
+        body = [after] if after.strip() else []
+        j = i + 1
+        while j < n and delim not in lines[j]:
+            body.append(lines[j])
+            j += 1
+        if j < n:
+            head = lines[j].split(delim, 1)[0]
+            if head.strip():
+                body.append(head)
+        out.append((kind, "\n".join(body)))
+        i = j + 1
+    return out
+
+
+BANNER_WARN = re.compile(r"authori[sz]|prohibit|monitor|warning|경고|무단|불법|비인가|인가된|금지", re.I)
+_BANNER_INFO = [
+    (re.compile(r"\$\((?:hostname|domain)\)", re.I), "$(hostname)/$(domain) 토큰"),
+    (re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"), "IP 주소"),
+    (re.compile(r"\bIOS\b|\bversion\s*\d", re.I), "OS/버전 정보"),
+    (re.compile(r"\b(?:cisco|catalyst|nexus|isr\d*|asr\d*)\b", re.I), "제조사/모델 정보"),
+]
+
+
+def banner_leaks(text: str, hostname: str | None) -> list[str]:
+    """배너 본문에 드러난 시스템 정보 종류(N-10 취약 기준 "시스템 관련 정보 노출"). check 와 fix 가 같이 쓴다."""
+    leaks = [label for pat, label in _BANNER_INFO if pat.search(text)]
+    if hostname and len(hostname) >= 3 and re.search(rf"(?<![\w-]){re.escape(hostname)}(?![\w-])", text, re.I):
+        leaks.append(f"호스트명({hostname})")
+    return leaks
+
+
 def vty_allows_telnet(block_text: str) -> bool:
     """line vty 블록이 telnet 을 허용하는지. transport input 이 없으면 기본값(all)=허용.
     여러 프로토콜을 나열한 줄(`transport input ssh telnet`)도 토큰 단위로 본다(X-03, 예전 정규식은 첫 토큰만 봄).

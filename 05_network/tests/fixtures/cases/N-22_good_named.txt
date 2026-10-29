@@ -1,0 +1,26 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+ip access-list extended ANTI-SPOOF
+ 10 deny ip 10.0.0.0 0.255.255.255 any
+ 20 deny ip 127.0.0.0 0.255.255.255 any
+ 30 deny ip 172.16.0.0 0.15.255.255 any
+ 40 deny ip 192.168.0.0 0.0.255.255 any
+ 50 permit ip any any
+!
+interface GigabitEthernet0/0
+ ip address 203.0.113.1 255.255.255.0
+ ip access-group ANTI-SPOOF in
+!
+line con 0
+ exec-timeout 5 0
+line vty 0 4
+ exec-timeout 5 0
+ transport input ssh
+!
+end
