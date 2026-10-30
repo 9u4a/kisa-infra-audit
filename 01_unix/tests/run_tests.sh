@@ -111,6 +111,12 @@ else
     echo "FAIL: fix-apply - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
 fi
 
+# ---- 항목별 양방향 케이스 (fixtures/cases, 1.4.0) ------------------------------------
+# 전역 vuln/hardened 픽스처로 만들 수 없는 상태(서비스 설치+활성/비활성, 서로 배타적인 설정)를 항목마다 새 systemd 컨테이너
+# (Dockerfile.cases)에서 만들어 판정을 확인하고, VULN 케이스는 조치 → 재검증 → 원복 → 상태 동일까지 본다(run_cases.sh).
+# lib/tests/coverage.py 가 세는 01_unix 양방향 검증의 절반 이상이 여기서 나온다 - 케이스를 빼면 coverage --strict 가 실패.
+sh 01_unix/tests/run_cases.sh || fail=1
+
 # ---- 진단(run.sh) 운영 안전 실기 검사 (lib/tests/run_safety.sh) ----------------------
 # 진단 전후 파일시스템·/etc 내용·프로세스·/tmp 가 같은지(S1), 비대화형으로 제한 시간 안에 끝나는지(S2),
 # 비밀값(/etc/passwd 비밀번호 필드·SNMP community)이 출력물 어디에도 없고 권한이 실행자 전용인지(S5),

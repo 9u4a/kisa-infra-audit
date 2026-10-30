@@ -29,7 +29,13 @@ postfix smtpd_recipient_restrictions: ${recipient:-미설정}"
 
     if [ -f /etc/mail/sendmail.mc ] || [ -f /etc/mail/sendmail.cf ]; then
         checked=1
-        promiscuous=$(grep -il 'promiscuous_relay' /etc/mail/sendmail.mc /etc/mail/sendmail.cf 2>/dev/null | grep -v '^#')
+        # U-C5(1.4.0): 주석(#, m4 의 dnl) 줄은 빼고 본다. 예전 grep -il … | grep -v '^#' 는 파일 이름 목록에서 # 을 찾아
+        # 주석 처리된 FEATURE(`promiscuous_relay') 도 VULN 이었다(조치가 주석 처리해도 재검증 VULN → 원복).
+        promiscuous=""
+        for f in /etc/mail/sendmail.mc /etc/mail/sendmail.cf; do
+            [ -f "$f" ] || continue
+            grep -vE '^[[:space:]]*(#|dnl([[:space:]]|$))' "$f" 2>/dev/null | grep -qi 'promiscuous_relay' && promiscuous="$promiscuous $f"
+        done
         access_file="/etc/mail/access"
         access_exists=0
         [ -f "$access_file" ] && access_exists=1

@@ -5,7 +5,7 @@ run_fix() {
     fix_xinetd_disable /etc/xinetd.d/telnet
     # check 가 /etc/inetd.conf 를 보게 되어(진단 검수 U-R6) 조치도 같은 항목을 주석 처리한다.
     fix_inetd_disable telnet
-    pkill -f 'in\.telnetd|telnetd' 2>/dev/null
+    fix_kill_procs 'in\.telnetd|telnetd'
     FIX_STATUS="APPLIED"
     FIX_DETAIL="Telnet 서비스를 정지/비활성화함"
     FIX_EVIDENCE="systemctl disable telnet.socket, xinetd disable=yes"

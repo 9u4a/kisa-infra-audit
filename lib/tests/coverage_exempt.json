@@ -1,5 +1,42 @@
 {
-  "01_unix": {},
+  "01_unix": {
+    "U-07": {
+      "reason": "manual-by-design",
+      "note": "가이드 판단기준 '불필요한 계정이 존재하지 않는 경우' - 계정의 업무상 필요 여부는 조직 판단, check 는 로그인 가능 계정 목록만 제공하고 항상 MANUAL(expected_vuln/hardened)"
+    },
+    "U-08": {
+      "reason": "manual-by-design",
+      "note": "가이드 판단기준 '관리자 그룹에 불필요한 계정이 등록되어 있지 않은 경우' - 구성원의 필요 여부는 조직 판단, check 는 root/wheel/sudo 그룹 구성원만 제공하고 항상 MANUAL"
+    },
+    "U-23": {
+      "reason": "manual-by-design",
+      "note": "가이드 판단기준 '주요 실행 파일'의 SUID/SGID - 배포판 기본 SUID 파일(passwd·su 등)이 정상 필요해 어떤 파일이 불필요한지는 운영 판단이라 발견 시 MANUAL(목록 제공, expected_*), SUID/SGID 파일이 하나도 없을 때만 GOOD"
+    },
+    "U-25": {
+      "reason": "manual-by-design",
+      "note": "가이드 취약 기준 'world writable 파일이 존재하나 설정 이유를 인지하지 못하는 경우' - 인지 여부는 판단 불가라 발견 시 MANUAL(expected_vuln), 없으면 GOOD(expected_hardened)"
+    },
+    "U-33": {
+      "reason": "manual-by-design",
+      "note": "가이드 판단기준 '불필요하거나 의심스러운 숨겨진 파일' - 의심 여부는 운영 판단, check 는 숨김 파일 목록만 제공하고 항상 MANUAL"
+    },
+    "U-45": {
+      "reason": "manual-by-design",
+      "note": "가이드 판단기준 '메일 서비스 버전이 최신 버전인 경우' - 최신 여부는 벤더 공지·CVE 대조가 필요, 설치 시 MANUAL(cases/U-45 postfix-installed), 미설치 시 GOOD(expected_*)"
+    },
+    "U-49": {
+      "reason": "manual-by-design",
+      "note": "가이드 판단기준 '주기적으로 패치를 관리하는 경우' - 패치 관리 이력·정책 판단, BIND 설치 시 MANUAL(cases/U-49 bind-installed), 미설치 시 GOOD(expected_*)"
+    },
+    "U-64": {
+      "reason": "manual-by-design",
+      "note": "가이드 판단기준 '패치 적용 정책을 수립하여 주기적으로 패치 관리' - 조직 정책 판단, check 는 패키지 업데이트 정보만 제공하고 항상 MANUAL"
+    },
+    "U-66": {
+      "reason": "manual-by-design",
+      "note": "가이드 양호 기준 '로그 기록 정책이 보안 정책에 따라 설정·수립' - 조직 정책 대조라 GOOD 판정 불가(MANUAL, cases/U-66 rsyslog-active-auth). 취약 방향(로깅 서비스 미실행→VULN)은 expected_* 와 cases/U-66 rsyslog-stopped 로 검증됨"
+    }
+  },
   "02_windows": {},
   "03_web": {},
   "05_network": {

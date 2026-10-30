@@ -1,0 +1,22 @@
+# 01_unix/tests/Dockerfile.cases — 항목별 양방향 케이스(fixtures/cases) 전용 이미지(1.4.0).
+# 전역 vuln/hardened 픽스처 이미지(Dockerfile)와 달리 systemd 를 PID 1 로 띄워 서비스 항목(U-39/41/43/54/58/65/66 등)의
+# systemctl is-active/is-enabled 경로와 조치(fix_service_disable 의 stop/disable·원복)를 실제로 검증한다.
+# --privileged 없이 실행한다: docker run --tmpfs /run --tmpfs /run/lock --cgroupns=host -v /sys/fs/cgroup:/sys/fs/cgroup:rw
+# 추가 패키지는 판정 대상 파일을 실제로 만들기 위한 최소한만(cron: U-37 crontab, iproute2: U-38 ss).
+# 서비스 데몬 자체는 설치하지 않고 케이스가 같은 이름의 유닛(ExecStart=sleep)을 만든다 - check 는 유닛 상태·프로세스만 본다.
+# 스냅숏 비교(조치 → 원복 동일성)를 흔들지 않도록 주기 작업 타이머·cron 은 끈다.
+FROM debian:12
+
+RUN apt-get update -qq && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        procps openssh-server systemd systemd-sysv cron iproute2 > /dev/null && \
+    rm -rf /var/lib/apt/lists/* && \
+    systemctl mask apt-daily.timer apt-daily-upgrade.timer dpkg-db-backup.timer e2scrub_all.timer \
+        fstrim.timer systemd-tmpfiles-clean.timer man-db.timer logrotate.timer >/dev/null 2>&1; \
+    systemctl disable cron.service >/dev/null 2>&1; \
+    systemctl mask getty@tty1.service console-getty.service >/dev/null 2>&1; true
+
+COPY . /infra
+WORKDIR /infra
+STOPSIGNAL SIGRTMIN+3
+CMD ["/lib/systemd/systemd"]

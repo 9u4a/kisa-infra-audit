@@ -55,7 +55,8 @@ $overrides}"
 _u01_linux_telnet() {
     U01_TEL=""; U01_TEL_EVD=""
     _use=""; _sd_unk=""
-    command -v pgrep >/dev/null 2>&1 && [ -n "$(pgrep -f 'in\.telnetd|telnetd' 2>/dev/null)" ] && _use="프로세스"
+    # U-C1(1.4.0): 명령줄 전체(pgrep -f)가 아니라 실행 파일 이름으로 찾는다(lib/common.sh proc_match_pids)
+    [ -n "$(proc_match_pids 'in\.telnetd|telnetd')" ] && _use="프로세스"
     if command -v systemctl >/dev/null 2>&1; then
         _rc=0; run_to 10 systemctl is-active --quiet telnet.socket 2>/dev/null || _rc=$?
         [ "$_rc" -eq 0 ] && _use="$_use telnet.socket(active)"

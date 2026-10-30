@@ -17,7 +17,8 @@ run_check() {
         run_to 10 systemctl is-active --quiet syslog 2>/dev/null && service_active=1
         run_to 10 systemctl is-active --quiet syslog-ng 2>/dev/null && service_active=1
     fi
-    pgrep -f 'rsyslogd|syslogd|syslog-ng' >/dev/null 2>&1 && service_active=1
+    # U-C1(1.4.0): 실행 파일 이름 기준. 예전 pgrep -f 는 "vi /etc/syslog-ng/syslog-ng.conf" 처럼 이름이 인자에 든 명령도 로깅 서비스로 셌다
+    [ -n "$(proc_match_pids 'rsyslogd|syslogd|syslog-ng')" ] && service_active=1
 
     if [ "$service_active" -eq 0 ]; then
         CHECK_STATUS="VULN"

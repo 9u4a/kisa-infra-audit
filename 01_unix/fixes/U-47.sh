@@ -14,9 +14,10 @@ run_fix() {
 
     for f in /etc/mail/sendmail.mc /etc/mail/sendmail.cf; do
         [ -f "$f" ] || continue
-        grep -il 'promiscuous_relay' "$f" 2>/dev/null | grep -v '^#' | grep -q . || continue
+        # U-C5(1.4.0): 진단과 같은 기준 - 주석(#, dnl)이 아닌 줄에 있을 때만, 그 줄만 주석 처리한다
+        grep -vE '^[[:space:]]*(#|dnl([[:space:]]|$))' "$f" 2>/dev/null | grep -qi 'promiscuous_relay' || continue
         fix_backup "$f"
-        fix_sed_inplace "$f" -E '/promiscuous_relay/ s/^/#/I'
+        fix_sed_inplace "$f" -E '/^[[:space:]]*(#|dnl([[:space:]]|$))/!{/promiscuous_relay/I s/^/#/}'
         applied="$applied $f(promiscuous_relay 비활성화)"
     done
 

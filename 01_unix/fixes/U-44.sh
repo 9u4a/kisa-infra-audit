@@ -5,7 +5,7 @@ run_fix() {
     fix_xinetd_disable /etc/xinetd.d/tftp /etc/xinetd.d/talk /etc/xinetd.d/ntalk
     # check 가 /etc/inetd.conf 를 보게 되어(진단 검수 U-R6) 조치도 같은 항목을 주석 처리한다.
     fix_inetd_disable tftp talk ntalk
-    pkill -f 'tftpd|talkd|ntalkd' 2>/dev/null
+    fix_kill_procs 'tftpd|talkd|ntalkd'
     FIX_STATUS="APPLIED"
     FIX_DETAIL="tftp/talk/ntalk 서비스를 정지/비활성화함"
     FIX_EVIDENCE="systemctl disable tftp talk ntalk, xinetd disable=yes"

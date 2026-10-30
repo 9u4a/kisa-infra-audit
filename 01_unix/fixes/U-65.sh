@@ -15,7 +15,8 @@ run_fix() {
     if command -v systemctl >/dev/null 2>&1; then
         for svc in chronyd chrony ntpd ntp; do
             systemctl list-unit-files "$svc.service" >/dev/null 2>&1 || continue
-            systemctl enable --now "$svc" 2>/dev/null && { applied="$applied ${svc}(시작/활성화)"; break; }
+            # U-C3(1.4.0): 조치 전 상태를 기록하고 켠다(lib/common.sh fix_service_enable) - 예전에는 원복해도 켜진 채로 남았다
+            fix_service_enable "$svc.service" && { applied="$applied ${svc}(시작/활성화)"; break; }
         done
     fi
 

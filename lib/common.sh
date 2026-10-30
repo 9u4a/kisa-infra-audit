@@ -450,6 +450,27 @@ check_owner_perm() {
     fi
 }
 
+# proc_match_pids <ERE> -- U-C1(1.4.0): 실행 파일 이름(argv[0] 의 basename, 커널 스레드 "[nfsd]" 는 괄호를 뗀 이름,
+# "sshd: user" 처럼 이름을 바꾼 프로세스는 ":" 앞)이 ERE 에 맞는 프로세스의 PID(한 줄에 하나). 명령줄 전체를 보는
+# pgrep -f/pkill -f 는 데몬 이름이 인자에 들어간 편집기·로그 조회·셸 명령까지 잡아(진단은 거짓 VULN, 조치는 엉뚱한
+# 프로세스 종료) 쓰지 않는다. ERE 는 awk 의 -v 대신 환경변수로 넘긴다(-v 는 "\." 같은 이스케이프를 미리 풀어 버림).
+proc_match_pids() {
+    ps -e -o pid= -o args= 2>/dev/null | PM_RE="$1" PM_SELF="$$" awk '
+        $1 != ENVIRON["PM_SELF"] {
+            a = $2; sub(/^\[/, "", a); sub(/\]$/, "", a); sub(/:$/, "", a)
+            n = split(a, p, "/"); if (p[n] ~ ENVIRON["PM_RE"]) print $1
+        }'
+}
+
+# fix_kill_procs <ERE> -- 조치용: proc_match_pids 와 같은 기준(실행 파일 이름)으로 찾은 프로세스만 종료한다.
+# 예전 조치의 pkill -f 는 명령줄에 서비스 이름이 든 다른 프로세스(설정 파일을 연 편집기 등)까지 종료했다(U-C1).
+fix_kill_procs() {
+    for _fkp in $(proc_match_pids "$1"); do
+        kill "$_fkp" 2>/dev/null
+    done
+    return 0
+}
+
 # ---- "서비스 비활성화" 공통 판정 헬퍼 ----------------------------------------
 # U-34/36/38/39/42/43/44/52 등 "OO 서비스가 비활성화되어 있으면 양호" 패턴 공용.
 # 프로세스 실행 여부 + systemd 유닛 활성/활성화 여부로 판정한다 (inetd/xinetd 대체 서비스 포함 안 함,
@@ -460,19 +481,20 @@ check_service_disabled() {
     _found=""
     _detect_ok=0
 
-    # pgrep 은 원래 Solaris 유래 명령이라(이후 Linux/BSD로 역포팅됨) Solaris/AIX/HP-UX 에도
-    # 보통 존재한다 - 있으면 그대로 쓴다. 혹시 없는 극히 드문 환경을 위해 ps -ef | grep -E
-    # 로 폴백한다(둘 다 없으면 "활성 아님"으로 단정하지 않고 ERROR로 정직하게 보고 - 아래 참고).
-    if command -v pgrep >/dev/null 2>&1; then
+    # U-C1(1.4.0): 프로세스는 "실행 파일 이름"(argv[0] 의 basename)으로만 찾는다(proc_match_pids). 예전 pgrep -f 는 명령줄
+    # 전체를 봐서, 데몬이 없어도 "vi /etc/snmp/snmpd.conf"·"tail -f ...snmpd.log" 같은 다른 프로세스 때문에 VULN 이었다.
+    # ps 가 없으면 pgrep(프로세스 이름 기준, -f 없음)으로 폴백하고, 둘 다 없으면 "활성 아님"으로 단정하지 않고
+    # ERROR 로 정직하게 보고한다(아래 참고).
+    if command -v ps >/dev/null 2>&1; then
         _detect_ok=1
-        _p=$(pgrep -f "$_proc_pattern" 2>/dev/null)
+        _p=$(proc_match_pids "$_proc_pattern" | tr '\n' ' ')
         [ -n "$_p" ] && _found="$_found
-프로세스 실행 중(pgrep -f '$_proc_pattern'): $_p"
-    elif command -v ps >/dev/null 2>&1; then
+프로세스 실행 중(실행 파일 이름 ~ '$_proc_pattern'): $_p"
+    elif command -v pgrep >/dev/null 2>&1; then
         _detect_ok=1
-        _p=$(ps -ef 2>/dev/null | grep -E "$_proc_pattern" | grep -v grep)
+        _p=$(pgrep "$_proc_pattern" 2>/dev/null | tr '\n' ' ')
         [ -n "$_p" ] && _found="$_found
-프로세스 실행 중(ps -ef | grep -E '$_proc_pattern'): $_p"
+프로세스 실행 중(pgrep '$_proc_pattern'): $_p"
     fi
 
     _sd_timeout=""
@@ -2438,6 +2460,9 @@ EOF
             _was_enabled=$(sed -n '1p' "$_sf"); _was_active=$(sed -n '2p' "$_sf")
             [ "$_was_enabled" = "enabled" ] && { systemctl enable "$_unit" >/dev/null 2>&1 || _rb_fail "서비스 enable 원복 실패: $_unit"; }
             [ "$_was_active" = "active" ] && { systemctl start "$_unit" >/dev/null 2>&1 || _rb_fail "서비스 기동 원복 실패: $_unit"; }
+            # U-C3(1.4.0): 조치가 켠 서비스(fix_service_enable - U-65/U-66)는 원래 꺼져 있었으면 다시 끈다
+            [ "$_was_enabled" = "disabled" ] && { systemctl disable "$_unit" >/dev/null 2>&1 || _rb_fail "서비스 disable 원복 실패: $_unit"; }
+            [ -n "$_was_enabled" ] && case "$_was_active" in inactive|failed) systemctl stop "$_unit" >/dev/null 2>&1 || _rb_fail "서비스 정지 원복 실패: $_unit" ;; esac
         done
     fi
 }
@@ -2465,20 +2490,36 @@ fix_service_disable() {
     _ok=0
     if command -v systemctl >/dev/null 2>&1; then
         for _u in "$@"; do
+            # U-C4(1.4.0): list-unit-files 의 인자는 유닛 "파일 이름" 패턴이라 "snmpd" 는 snmpd.service 에 맞지 않는다(항상 실패 →
+            # 건너뜀). 예전에는 그래서 서비스 조치(U-39/41/43/54/58 등)가 아무것도 끄지 못하고 재검증 VULN → 원복으로 끝났다
+            # (systemd 가 없는 CI 에서는 드러나지 않음 - fixtures/cases 의 systemd 컨테이너로 발견). 종류가 없으면 .service 를 붙인다.
+            case "$_u" in *.service|*.socket|*.target|*.timer|*.path|*.mount) ;; *) _u="$_u.service" ;; esac
             systemctl list-unit-files "$_u" >/dev/null 2>&1 || continue
             # 원복용으로 원래 상태(enabled/active)를 기록한다 - 예전에는 기록하지 않아 원복해도 서비스가 다시
             # 켜지지 않았다. 같은 항목에서 이미 기록했으면 첫 기록(조치 전 상태)을 유지한다.
-            _sd="$FIX_BACKUP_DIR/$FIX_CODE/_services"
-            if [ ! -f "$_sd/$_u" ]; then
-                mkdir -p "$_sd" 2>/dev/null || fix_abort_item "서비스 상태 백업 디렉터리 생성 실패: $_sd"
-                { systemctl is-enabled "$_u" 2>/dev/null | head -n1; systemctl is-active "$_u" 2>/dev/null | head -n1; } > "$_sd/$_u" \
-                    || fix_abort_item "서비스 상태 백업 실패: $_u"
-            fi
+            fix_service_record "$_u"
             systemctl stop "$_u" 2>/dev/null
             systemctl disable "$_u" 2>/dev/null && _ok=1
         done
     fi
     [ "$_ok" -eq 1 ] && return 0 || return 1
+}
+
+# fix_service_record <유닛> — 원복용으로 조치 전 상태(is-enabled / is-active 첫 줄)를 <백업>/<코드>/_services/<유닛> 에 남긴다.
+# 같은 항목에서 이미 기록했으면 첫 기록(조치 전 상태)을 유지한다. 기록 실패는 변경 전 중단(F1).
+fix_service_record() {
+    _sd="$FIX_BACKUP_DIR/$FIX_CODE/_services"
+    [ -f "$_sd/$1" ] && return 0
+    mkdir -p "$_sd" 2>/dev/null || fix_abort_item "서비스 상태 백업 디렉터리 생성 실패: $_sd"
+    { systemctl is-enabled "$1" 2>/dev/null | head -n1; systemctl is-active "$1" 2>/dev/null | head -n1; } > "$_sd/$1" \
+        || fix_abort_item "서비스 상태 백업 실패: $1"
+}
+
+# fix_service_enable <유닛> — U-C3(1.4.0): 서비스를 켜는 조치(U-65 시각 동기화·U-66 로깅)용. 상태를 기록한 뒤
+# enable --now 한다. 예전 조치는 기록 없이 켜서 --rollback 해도 서비스가 켜진 채로 남았다. 성공하면 0.
+fix_service_enable() {
+    fix_service_record "$1"
+    systemctl enable --now "$1" >/dev/null 2>&1
 }
 
 # fix_xinetd_disable <xinetd.d 파일...> — "disable = no" 로 명시된 서비스를 "disable = yes" 로
