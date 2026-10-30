@@ -2,6 +2,8 @@
 # 판단 기준(가이드 원문): 양호 = 비활성화, 또는 활성화 시 (1) public 실행 권한 없음
 #                        (2) 서비스 계정에 sysadmin 미부여 를 모두 만족
 #                        취약 = 활성화 & 위 조건 불충족
+# 1.4.0(커버리지 C-D23/C-D24): xp_cmdshell·xp_reg* 는 sys 스키마 시스템 객체(음수 object_id)라 master.sys.objects 에 없고
+# master.sys.all_objects(system_objects) 에만 있다 - 예전 JOIN sys.objects 는 public 에 권한을 줘도 0건이라 VULN 을 낼 수 없었다(CI 실측).
 
 # value 는 설정만 해두고 RECONFIGURE 하지 않은 값일 수 있다 - 실제 적용값인 value_in_use 로 판정한다(진단 검수 D-R11).
 $out = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT value_in_use FROM sys.configurations WHERE name = 'xp_cmdshell';"
@@ -16,7 +18,7 @@ if ($value -eq "0") {
 
 # "USE master;" 는 sqlcmd가 "Changed database context..." 메시지를 결과에 섞어 항상 결과가
 # 있는 것처럼 오판되게 만든다(D-11에서 실기 테스트로 확인한 버그) - 3-part naming 으로 회피.
-$pubOut = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT dp.name FROM master.sys.database_permissions p JOIN master.sys.objects o ON p.major_id = o.object_id JOIN master.sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE o.name = 'xp_cmdshell' AND dp.name = 'public' AND p.state = 'G';"
+$pubOut = Invoke-MssqlQuery -Sql "SET NOCOUNT ON; SELECT dp.name FROM master.sys.database_permissions p JOIN master.sys.all_objects o ON p.major_id = o.object_id JOIN master.sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE o.name = 'xp_cmdshell' AND dp.name = 'public' AND p.state = 'G';"
 $evidence = "xp_cmdshell value=$value`npublic 실행권한: $($pubOut -join ', ')"
 if ($pubOut) {
     return New-CheckResult -Code "D-23" -Status "VULN" -Detail "xp_cmdshell이 활성화되어 있고 public 에게 실행 권한이 부여되어 있음" -Evidence $evidence

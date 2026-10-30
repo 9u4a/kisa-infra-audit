@@ -21,7 +21,9 @@ foreach ($site in $sites) {
         $poolName = (Get-Website -Name $site).applicationPool
         if ($pools.ContainsKey($poolName)) { continue }
         $pools[$poolName] = $true
-        $identityType = (Get-ItemProperty "IIS:\AppPools\$poolName" -Name processModel.identityType -ErrorAction Stop).Value
+        # C-WEB09(1.4.0): identityType 은 문자열로 돌아와 .Value 가 늘 비어 LocalSystem 풀도 "대상 없음(NA)"이었다(CI 실측) - 두 형태 모두 처리
+        $x = Get-ItemProperty "IIS:\AppPools\$poolName" -Name processModel.identityType -ErrorAction Stop
+        $identityType = if ($null -ne $x -and $x.PSObject.Properties.Name -contains "Value") { $x.Value } else { $x }
         if ("$identityType" -eq "LocalSystem") {
             Set-FixAppPoolIdentity -PoolName $poolName -IdentityType "ApplicationPoolIdentity"
             if ($Global:FixStatus -eq "APPLIED") { $applied += $poolName } else { $failed += "${poolName}: $($Global:FixDetail)" }

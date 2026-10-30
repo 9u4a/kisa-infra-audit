@@ -39,6 +39,13 @@
   },
   "02_windows": {},
   "03_web": {
+    "WEB-02": {
+      "reason": "manual-by-design",
+      "engines": [
+        "iis"
+      ],
+      "note": "IIS 는 관리자 비밀번호를 설정 파일에 저장하지 않아(IIS Manager Users·Windows 계정) 강도를 판정할 수 없음 - check 는 항상 MANUAL(expected_iis_*)"
+    },
     "WEB-06": {
       "reason": "manual-by-design",
       "engines": [
@@ -67,6 +74,20 @@
         "tomcat"
       ],
       "note": "판단 기준이 \"불필요한\" 가상 디렉터리 - Alias/alias/Context path 가 있으면 MANUAL(expected_apache*_*, cases nginx WEB-17_alias-location·tomcat WEB-17_context-path), 없으면 GOOD(cases apache WEB-17_no-alias, expected_nginx/tomcat_*). VULN 은 자동 판정하지 않음"
+    },
+    "WEB-24": {
+      "reason": "manual-by-design",
+      "engines": [
+        "iis"
+      ],
+      "note": "업로드 경로는 애플리케이션마다 달라 표준 설정 키가 없음(가이드도 절차만 안내) - check 는 항상 MANUAL(expected_iis_*)"
+    },
+    "WEB-25": {
+      "reason": "manual-by-design",
+      "engines": [
+        "iis"
+      ],
+      "note": "가이드 양호 기준이 '패치 적용 정책 수립·주기적 관리' - 조직 정책 판단, check 는 버전 증적만 제공하고 항상 MANUAL(expected_iis_*)"
     }
   },
   "05_network": {
@@ -104,6 +125,7 @@
     "D-02": {
       "reason": "manual-by-design",
       "engines": [
+        "mssql",
         "mysql",
         "postgres",
         "oracle"
@@ -113,6 +135,7 @@
     "D-03": {
       "reason": "manual-by-design",
       "engines": [
+        "mssql",
         "mysql",
         "postgres",
         "oracle"
@@ -122,6 +145,7 @@
     "D-04": {
       "reason": "manual-by-design",
       "engines": [
+        "mssql",
         "mysql",
         "postgres",
         "oracle"
@@ -131,11 +155,26 @@
     "D-06": {
       "reason": "manual-by-design",
       "engines": [
+        "mssql",
         "mysql",
         "postgres",
         "oracle"
       ],
       "note": "공용 계정 여부는 실제 사용 형태를 알아야 판단 - check 는 로그인 가능 계정 목록만 제공하고 항상 MANUAL / MySQL·PostgreSQL·Oracle: 공용 계정 여부는 실제 사용 형태를 알아야 판단(guide automation=manual) - 로그인 가능 계정 목록만 제공, 항상 MANUAL"
+    },
+    "D-08": {
+      "reason": "env-unavailable",
+      "engines": [
+        "mssql"
+      ],
+      "note": "L-09(신규 제안): SHA-256 미만 해시는 SQL Server 2012 미만(2008 R2 이하)에서만 발생 - 러너 LocalDB(2019+)와 지원 OS 에서 재현 불가. 양호 방향(2012 이상 → GOOD)만 expected_mssql_* 로 검증"
+    },
+    "D-10": {
+      "reason": "manual-by-design",
+      "engines": [
+        "mssql"
+      ],
+      "note": "양호 기준 '지정된 IP 에서만 접근 가능' - 허용 IP 범위 적합성은 운영 판단(방화벽 켜짐 → MANUAL). 취약 방향(모든 방화벽 프로필 꺼짐 → VULN)은 cases/firewall-all-off 로 검증(LocalDB 로컬 실행이라 러너에서 실측)"
     },
     "D-12": {
       "reason": "env-unavailable",
@@ -143,6 +182,13 @@
         "oracle"
       ],
       "note": "L-05: 가이드상 Oracle 12.2 이상은 리스너 비밀번호 미지원(해당 없음) - CI 이미지(gvenzl 26ai)에서는 항상 NA(expected_oracle_default). 12.1 이하 listener.ora PASSWORDS_ 분기는 실기 재현 불가"
+    },
+    "D-13": {
+      "reason": "manual-by-design",
+      "engines": [
+        "mssql"
+      ],
+      "note": "가이드 automation=manual: 등록된 ODBC 데이터 소스의 '불필요' 여부는 업무 판단 - DSN 있음 → MANUAL(cases/odbc-system-dsn), 없음 → GOOD(expected_mssql_*)"
     },
     "D-20": {
       "reason": "manual-by-design",
@@ -155,6 +201,7 @@
     "D-25": {
       "reason": "manual-by-design",
       "engines": [
+        "mssql",
         "mysql",
         "postgres",
         "oracle"
@@ -164,6 +211,7 @@
     "D-26": {
       "reason": "manual-by-design",
       "engines": [
+        "mssql",
         "postgres",
         "oracle"
       ],

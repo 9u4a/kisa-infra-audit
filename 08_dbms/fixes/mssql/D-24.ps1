@@ -1,9 +1,11 @@
 ﻿# D-24 (상) Registry Procedure 권한 제한 [MSSQL] — 조치 [fix: auto]
 # checks/mssql/D-24.ps1 이 찾아낸 (프로시저, principal) 조합에서 실행 권한을 회수한다.
+# 1.4.0(커버리지 C-D23/C-D24): xp_cmdshell·xp_reg* 는 sys 스키마 시스템 객체(음수 object_id)라 master.sys.objects 에 없고
+# master.sys.all_objects(system_objects) 에만 있다 - 예전 JOIN sys.objects 는 public 에 권한을 줘도 0건이라 VULN 을 낼 수 없었다(CI 실측).
 
 $procList = @('xp_regread', 'xp_regwrite', 'xp_regdeletekey', 'xp_regdeletevalue', 'xp_regenumvalues', 'xp_regremovemultistring', 'xp_regaddmultistring')
 $procsInClause = ($procList | ForEach-Object { "'$_'" }) -join ','
-$sql = "SET NOCOUNT ON; SELECT o.name, dp.name FROM master.sys.database_permissions p JOIN master.sys.objects o ON p.major_id = o.object_id JOIN master.sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE o.name IN ($procsInClause) AND dp.name IN ('public','guest') AND p.state = 'G';"
+$sql = "SET NOCOUNT ON; SELECT o.name, dp.name FROM master.sys.database_permissions p JOIN master.sys.all_objects o ON p.major_id = o.object_id JOIN master.sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE o.name IN ($procsInClause) AND dp.name IN ('public','guest') AND p.state = 'G';"
 $out = Invoke-MssqlQuery -Sql $sql
 if (-not $Global:DbQueryOk) {
     $err = if (Test-Path $Global:DbErrFile) { Get-Content -Raw $Global:DbErrFile } else { "" }

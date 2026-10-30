@@ -1126,7 +1126,15 @@ function Backup-FixPathAndRemove {
     } catch {
         throw "[백업 실패] 삭제 전 백업 실패 - 삭제하지 않음($Path): $($_.Exception.Message)"
     }
-    Remove-Item -LiteralPath $Path -Recurse -Force
+    # C-WEB07(1.4.0): 예전에는 삭제 실패(권한 부족·사용 중 파일)가 조용히 넘어가 일부만 지워진 채 APPLIED 로 보고됐다(CI: msadc).
+    # 실패하면 지워진 부분을 백업에서 되살리고 예외로 알린다(호출부 fix.ps1 이 ERROR → 항목 원복으로 처리).
+    try { Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop }
+    catch {
+        $why = $_.Exception.Message
+        if ($item.PSIsContainer -and (Test-Path -LiteralPath $Path)) { Copy-Item -Path (Join-Path $dest '*') -Destination $Path -Recurse -Force -ErrorAction SilentlyContinue }
+        elseif (-not (Test-Path -LiteralPath $Path)) { Copy-Item -LiteralPath $dest -Destination $Path -Recurse -Force -ErrorAction SilentlyContinue }
+        throw "삭제 실패 - 지워진 부분을 백업에서 되살림($Path): $why"
+    }
 }
 
 function Restore-FixPathRemoveBackup {
@@ -1137,7 +1145,12 @@ function Restore-FixPathRemoveBackup {
     $parent = Split-Path -Parent $orig
     try {
         if ($parent -and -not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Force -Path $parent -ErrorAction Stop | Out-Null }
-        Copy-Item -LiteralPath $src -Destination $orig -Recurse -Force -ErrorAction Stop
+        # 원래 폴더가 (일부 삭제 실패 등으로) 남아 있으면 그 안에 "폴더째" 복사돼 orig\<이름>\ 으로 중첩됐다(C-WEB07, CI 실측) - 내용만 복사
+        if ((Test-Path -LiteralPath $orig -PathType Container) -and (Test-Path -LiteralPath $src -PathType Container)) {
+            Copy-Item -Path (Join-Path $src '*') -Destination $orig -Recurse -Force -ErrorAction Stop
+        } else {
+            Copy-Item -LiteralPath $src -Destination $orig -Recurse -Force -ErrorAction Stop
+        }
     } catch { Add-FixRollbackFailure "삭제된 경로 복원 실패 ${orig}: $($_.Exception.Message)" }
 }
 
@@ -1147,7 +1160,9 @@ function Backup-FixAppPoolIdentity {
     $dir = Get-FixItemBackupDir -Sub "apppool"
     $file = Join-Path $dir "$PoolName.json"
     if (Test-Path -LiteralPath $file) { return $file }
-    try { $current = (Get-ItemProperty "IIS:\AppPools\$PoolName" -Name processModel.identityType -ErrorAction Stop).Value }
+    # C-WEB09(1.4.0): processModel.identityType 은 ConfigurationAttribute 가 아니라 문자열로 돌아와 .Value 가 늘 비었다 -
+    # 백업이 빈 값이 되어 원복이 아무것도 하지 않았다(CI 실측). 두 형태 모두 처리
+    try { $x = Get-ItemProperty "IIS:\AppPools\$PoolName" -Name processModel.identityType -ErrorAction Stop; $current = if ($null -ne $x -and $x.PSObject.Properties.Name -contains "Value") { $x.Value } else { $x } }
     catch { throw "[백업 실패] 애플리케이션 풀 '$PoolName' 현재 identity 를 읽을 수 없음: $($_.Exception.Message)" }
     return (Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ PoolName = $PoolName; IdentityType = "$current" }))
 }
@@ -1156,7 +1171,9 @@ function Restore-FixAppPoolIdentityBackup {
     param([Parameter(Mandatory)][string]$File)
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     if (-not $o.IdentityType) { return }
-    try { Set-ItemProperty "IIS:\AppPools\$($o.PoolName)" -Name processModel.identityType -Value $o.IdentityType -ErrorAction Stop }
+    # C-WEB09(1.4.0): fix.ps1 -Rollback 프로세스는 WebAdministration 을 불러오지 않아 IIS: 드라이브가 없었다(CI 실측 - 백업이 늘 빈 값이라
+    # 그동안 이 경로가 실행된 적이 없었음)
+    try { Import-Module WebAdministration -ErrorAction Stop; Set-ItemProperty "IIS:\AppPools\$($o.PoolName)" -Name processModel.identityType -Value $o.IdentityType -ErrorAction Stop }
     catch { Add-FixRollbackFailure "앱 풀 identity 원복 실패 $($o.PoolName): $($_.Exception.Message)" }
 }
 

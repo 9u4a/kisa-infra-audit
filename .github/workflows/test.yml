@@ -194,6 +194,13 @@ jobs:
         shell: powershell
         run: |
           Install-WindowsFeature Web-Server, Web-Mgmt-Tools, Web-Scripting-Tools, Web-DAV-Publishing, Web-Includes, Web-Http-Redirect, Web-Filtering, Web-ISAPI-Ext, Web-ISAPI-Filter, Web-CGI | Format-Table -AutoSize
+      # WEB-10(ARR proxy) VULN/GOOD cases need the real ARR module (proxy stays disabled = default; the case turns it on and restores)
+      - name: IIS ARR + URL Rewrite (WEB-10 cases)
+        if: always()
+        shell: powershell
+        run: |
+          choco install urlrewrite iis-arr -y --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: IIS 진단 회귀(03_web)
         if: always()
         shell: powershell

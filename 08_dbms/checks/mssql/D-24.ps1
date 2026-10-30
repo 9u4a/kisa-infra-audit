@@ -1,12 +1,14 @@
 ﻿# D-24 (상) Registry Procedure 권한 제한 [MSSQL]
 # 판단 기준(가이드 원문): 양호 = 레지스트리 관련 확장 저장 프로시저가 DBA 외 guest/public 에게
 #                        부여되지 않은 경우 / 취약 = 부여된 경우
+# 1.4.0(커버리지 C-D23/C-D24): xp_cmdshell·xp_reg* 는 sys 스키마 시스템 객체(음수 object_id)라 master.sys.objects 에 없고
+# master.sys.all_objects(system_objects) 에만 있다 - 예전 JOIN sys.objects 는 public 에 권한을 줘도 0건이라 VULN 을 낼 수 없었다(CI 실측).
 
 $procList = @('xp_regread','xp_regwrite','xp_regdeletekey','xp_regdeletevalue','xp_regenumvalues','xp_regremovemultistring','xp_regaddmultistring')
 $procsInClause = ($procList | ForEach-Object { "'$_'" }) -join ','
 # "USE master;" 는 sqlcmd가 "Changed database context..." 메시지를 결과에 섞어 항상 결과가
 # 있는 것처럼 오판되게 만든다(D-11에서 실기 테스트로 확인한 버그) - 3-part naming 으로 회피.
-$sql = "SET NOCOUNT ON; SELECT o.name, dp.name FROM master.sys.database_permissions p JOIN master.sys.objects o ON p.major_id = o.object_id JOIN master.sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE o.name IN ($procsInClause) AND dp.name IN ('public','guest') AND p.state = 'G';"
+$sql = "SET NOCOUNT ON; SELECT o.name, dp.name FROM master.sys.database_permissions p JOIN master.sys.all_objects o ON p.major_id = o.object_id JOIN master.sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE o.name IN ($procsInClause) AND dp.name IN ('public','guest') AND p.state = 'G';"
 $out = Invoke-MssqlQuery -Sql $sql
 if (-not $Global:DbQueryOk) {
     $err = if (Test-Path $Global:DbErrFile) { Get-Content -Raw $Global:DbErrFile } else { "" }

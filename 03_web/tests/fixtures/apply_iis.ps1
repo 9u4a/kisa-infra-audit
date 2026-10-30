@@ -66,4 +66,12 @@ if ($FixCases) {
     $siteRsh = (Get-WebConfigurationProperty -PSPath "IIS:\Sites\$site" -Filter $rf -Name "removeServerHeader").Value
     Write-Host "  WEB-16 재현: 전역 false, 사이트 유효 값 $siteRsh (사이트 재정의 false 가 기록됐는지 - 조치가 전역만 바꾸면 사이트가 남아야 함)"
 }
-Write-Host "IIS 픽스처 적용: $Mode$(if ($FixCases) { ' + 조치 재현 케이스(F-R3)' })"
+# 준비 직후 실제 상태를 다시 읽는다 - 준비가 조용히 실패하면(값이 안 바뀜) 판정 비교 전에 멈춘다(1.4.0)
+$dirB = (Get-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" -Location $site -Filter "system.webServer/directoryBrowse" -Name "enabled").Value
+$dav = (Get-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" -Location $site -Filter "system.webServer/webdav/authoring" -Name "enabled").Value
+$hasLink = [bool]((Test-Path $link) -and ((Get-Item -LiteralPath $link -Force).Attributes -band [IO.FileAttributes]::ReparsePoint))
+$wantFlag = $vuln -and -not $FixCases
+if ([bool]$dirB -ne $wantFlag -or [bool]$dav -ne $wantFlag -or $hasLink -ne $vuln) {
+    throw "IIS 픽스처($Mode) 준비가 반영되지 않음: directoryBrowse=$dirB webdav=$dav junction=$hasLink"
+}
+Write-Host "IIS 픽스처 적용: $Mode$(if ($FixCases) { ' + 조치 재현 케이스(F-R3)' }) (확인: directoryBrowse=$dirB webdav=$dav junction=$hasLink)"
