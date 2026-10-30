@@ -28,6 +28,20 @@ run_fix() {
         fi
     esac
 
+    # Nginx: client_max_body_size 미설정은 기본값 1m 이 적용돼 진단도 GOOD 이다. 0(무제한)만 10m 으로 바꾼다
+    # (예전에는 Nginx 분기가 없어 진단 VULN 인데 조치가 NA 로 끝났다 - 커버리지 검수 WEB-C5).
+    case " $WEB_ENGINES " in *" nginx "*)
+        conf=$(nginx_conf_path)
+        files="$conf $(nginx_extra_confs)"
+        for f in $files; do
+            [ -f "$f" ] || continue
+            grep -qE '^[^#]*client_max_body_size[[:space:]]+0+[[:space:]]*;' "$f" 2>/dev/null || continue
+            fix_backup "$f"
+            fix_sed_inplace "$f" -E 's/^([^#]*client_max_body_size[[:space:]]+)0+([[:space:]]*;)/\110m\2/'
+            applied="$applied nginx($f: 0->10m)"
+        done
+    esac
+
     case " $WEB_ENGINES " in *" tomcat "*)
         # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
         tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"

@@ -15,7 +15,7 @@ run_fix() {
     files=""
     for f in "$TC_FILE" "$(dirname "$TC_FILE")/context.xml"; do
         [ -r "$f" ] || continue
-        [ "$(strip_xml_comments "$f" | grep -c '<Resource')" -gt 0 ] && files="$files $f"
+        [ "$(strip_xml_comments "$f" | grep -cE '<Resource([[:space:]/>]|$)')" -gt 0 ] && files="$files $f"
     done
     if [ -z "$files" ]; then
         FIX_STATUS="NA"; FIX_DETAIL="DB 연결 리소스가 설정된 파일이 없음"; FIX_EVIDENCE=""

@@ -38,7 +38,37 @@
     }
   },
   "02_windows": {},
-  "03_web": {},
+  "03_web": {
+    "WEB-06": {
+      "reason": "manual-by-design",
+      "engines": [
+        "apache",
+        "apache-debian",
+        "nginx"
+      ],
+      "note": "가이드 Apache/Nginx 조치 예시가 단일 지시자가 아니라 AllowOverride AuthConfig + .htaccess 사용자 인증(Apache), location 별 auth_basic(Nginx) 조합이라 \"상위 디렉터리 접근 기능 제거\" 여부를 설정만으로 판정할 수 없음 - check 가 항상 MANUAL(expected_{apache,apache-debian,nginx}_*). Tomcat(allowLinking)은 양방향 검증"
+    },
+    "WEB-10": {
+      "reason": "manual-by-design",
+      "engines": [
+        "apache",
+        "apache-debian",
+        "nginx",
+        "tomcat"
+      ],
+      "note": "판단 기준이 \"불필요한\" Proxy 설정 - 업무상 필요 여부는 운영 판단이라 설정이 있으면 MANUAL(expected_*_vuln), 설정이 전혀 없을 때만 GOOD(expected_*_hardened). VULN 은 자동 판정하지 않음"
+    },
+    "WEB-17": {
+      "reason": "manual-by-design",
+      "engines": [
+        "apache",
+        "apache-debian",
+        "nginx",
+        "tomcat"
+      ],
+      "note": "판단 기준이 \"불필요한\" 가상 디렉터리 - Alias/alias/Context path 가 있으면 MANUAL(expected_apache*_*, cases nginx WEB-17_alias-location·tomcat WEB-17_context-path), 없으면 GOOD(cases apache WEB-17_no-alias, expected_nginx/tomcat_*). VULN 은 자동 판정하지 않음"
+    }
+  },
   "05_network": {
     "N-02": {
       "reason": "manual-by-design",

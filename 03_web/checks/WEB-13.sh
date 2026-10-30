@@ -6,6 +6,7 @@
 # UserDatabase(JNDI) 리소스처럼 실제 DB 접속정보가 없는 리소스에도 파일 권한 점검이 함께
 # 트리거될 수 있다(과탐지 방향이며 실제 취약점을 놓치는 방향은 아님).
 # DB 연결 정보(JNDI DataSource)는 conf/context.xml 에 두는 경우가 많아 함께 본다(진단 검수 WEB-R11).
+# <Resources>(정적 리소스 설정)·<ResourceLink> 를 <Resource> 로 세지 않는다(1.4.0, 커버리지 검수 WEB-C3).
 
 run_check() {
     detect_web_engines
@@ -23,7 +24,7 @@ run_check() {
                     CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 를 읽을 수 없음(권한 부족)"; CHECK_EVIDENCE=""
                     return
                 fi
-                [ "$(strip_xml_comments "$f" | grep -c '<Resource')" -gt 0 ] && files="$files $f"
+                [ "$(strip_xml_comments "$f" | grep -cE '<Resource([[:space:]/>]|$)')" -gt 0 ] && files="$files $f"
             done
             if [ -z "$files" ]; then
                 CHECK_STATUS="NA"; CHECK_DETAIL="DB 연결 리소스(Resource)가 설정되어 있지 않음"; CHECK_EVIDENCE="server.xml·context.xml 에 <Resource> 없음"

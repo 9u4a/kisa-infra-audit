@@ -9,7 +9,7 @@
   "WEB-08": "GOOD",
   "WEB-09": "MANUAL",
   "WEB-10": "GOOD",
-  "WEB-11": "MANUAL",
+  "WEB-11": "VULN",
   "WEB-12": "GOOD",
   "WEB-13": "VULN",
   "WEB-14": "VULN",

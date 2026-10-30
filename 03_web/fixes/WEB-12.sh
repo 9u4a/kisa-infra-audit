@@ -48,15 +48,16 @@ run_fix() {
     case " $WEB_ENGINES " in *" tomcat "*)
         # 진단과 같은 경로 규칙(tomcat_home/conf, 없으면 /etc/tomcat* - 1.3.3, F-R5)
         tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
-        f="$tcdir/server.xml"
-        if [ -f "$f" ]; then
+        # server.xml + conf/context.xml(진단과 같은 대상 - 커버리지 검수 WEB-C4)
+        for f in "$tcdir/server.xml" "$tcdir/context.xml"; do
+            [ -f "$f" ] || continue
             hit=$(strip_xml_comments "$f" | grep -inE 'allowLinking[[:space:]]*=[[:space:]]*"?true')
             if [ -n "$hit" ]; then
                 fix_backup "$f"
                 fix_sed_inplace "$f" -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I'
                 applied="$applied tomcat($f)"
             fi
-        fi
+        done
     esac
 
     if [ -n "$applied" ]; then

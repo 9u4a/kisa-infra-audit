@@ -11,6 +11,8 @@
 # 것이다(05_network/01_unix와 동일한 방식) - 흥미롭게도 httpd:2.4는 기본값 자체가 WEB-04
 # 기준 취약(vuln=기본값 그대로, hardened=명시적으로 끔)인 반면 nginx/tomcat은 기본값이
 # 이미 양호(vuln=명시적으로 켬, hardened=기본값 그대로)라 세 엔진의 기본 태세가 다르다.
+# 1.4.0: 전역 픽스처의 기대값은 "그 상태에 대한 가이드 판정"이다(실행 결과 고정 아님 - Tomcat WEB-11 은 기본 appBase
+# 그대로라 VULN). 전역 픽스처로 한 방향만 검증되는 항목은 마지막의 run_cases.sh(항목별 케이스)가 반대 방향을 채운다.
 set -eu
 export MSYS_NO_PATHCONV=1   # Windows git-bash에서 docker 인자 경로 자동변환 방지(실 Linux에선 무해)
 
@@ -143,5 +145,9 @@ for engine in apache nginx tomcat apache-debian; do
     python3 lib/tests/run_safety_check.py "$rs_dir" "web/$engine" || fail=1
     rm -rf "$rs_dir"
 done
+
+# ---- 항목별 양방향 케이스(fixtures/cases/cases.json, 1.4.0) - 위에서 빌드한 이미지를 그대로 쓴다 ---------------
+# 케이스마다 새 컨테이너: 상태 변경 확인 → 진단 기대값 → (VULN + 조치 스크립트) 조치·재진단·문법 검사·원복 동일성
+sh 03_web/tests/run_cases.sh || fail=1
 
 exit $fail
