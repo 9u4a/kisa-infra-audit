@@ -30,12 +30,16 @@ if (-not $zones) {
 $applied = @()
 # 원복 경로가 없는 자원 - 원복 시 "원복 불가"로 정직하게 보고되도록 변경 직전에 표시(lib/Common.psm1)
 if (@($zones).Count -gt 0) { Register-FixNoRollback -Reason "DNS 영역 영역 전송 설정(SecureSecondaries, WMI) - 변경 전 값은 changes.log 상세 참고" }
+# F-W25(1.4.0): SecureSecondaries 는 속성 대입 + Put() 으로 바뀌지 않는다(예외도 없이 그대로) - 예전에는 그래도 APPLIED 로 보고했다
+# (양방향 케이스의 조치 검증: 조치 후 재진단 VULN). MicrosoftDNS_Zone.ResetSecondaries 로 바꾸고(보조 서버·알림 설정은 유지),
+# 다시 읽어 실제로 3 이 된 영역만 적용으로 센다.
+$failedZones = @()
 foreach ($z in $zones) {
     try {
-        $z.SecureSecondaries = 3
-        [void]$z.Put()
-        $applied += $z.Name
-    } catch { }
+        [void]$z.ResetSecondaries([string[]]@($z.SecondaryServers), [uint32]3, [string[]]@($z.NotifyServers), [uint32]$z.Notify)
+        $now = Get-WmiObject -Namespace "root\MicrosoftDNS" -Class "MicrosoftDNS_Zone" -Filter "Name='$($z.Name)'" -ErrorAction Stop
+        if ($now.SecureSecondaries -eq 3) { $applied += $z.Name } else { $failedZones += "$($z.Name)(SecureSecondaries=$($now.SecureSecondaries))" }
+    } catch { $failedZones += "$($z.Name)($($_.Exception.Message))" }
 }
 
 if ($applied.Count -gt 0) {
@@ -44,6 +48,6 @@ if ($applied.Count -gt 0) {
     $Global:FixEvidence = ""
 } else {
     $Global:FixStatus = "ERROR"
-    $Global:FixDetail = "영역 SecureSecondaries 설정 실패"
+    $Global:FixDetail = "영역 SecureSecondaries 설정 실패: $($failedZones -join ', ')"
     $Global:FixEvidence = ""
 }

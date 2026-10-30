@@ -53,7 +53,7 @@ foreach ($it in (Get-Content -Raw -Encoding UTF8 (Join-Path $Repo "$Category\gui
 
 # 원복 불가로 보고된 조치가 바꾸는 상태 영역(실제 상태 비교에서 그 영역 차이는 참고로만). 여기 없는 코드가 원복 불가로
 # 보고되면 영역을 알 수 없으므로 전체 비교를 참고로 낮추고 그 사실을 표시한다(새 Register-FixNoRollback 추가 시 여기도 갱신).
-$NoRbAreas = @{ "W-17" = @("shares"); "PC-04" = @("shares"); "W-40" = @("audit"); "WEB-13" = @("iis"); "WEB-19" = @("iis"); "W-25" = @(); "W-34" = @() }
+$NoRbAreas = @{ "W-17" = @("shares"); "PC-04" = @("shares"); "W-40" = @("audit"); "WEB-13" = @("iis"); "WEB-19" = @("iis"); "W-25" = @(); "W-34" = @(); "W-39" = @(); "PC-13" = @() }
 $NoRbLines = @{ "W-42" = @('\\Services\\EventLog\\') }
 # 항상 참고로만 보는 영역: iis(원복이 같은 값을 명시적으로 다시 써 파일 해시가 달라질 수 있음 - 의미 비교는 진단 판정으로),
 # 임시 폴더: 실행 계정 TEMP(U|)에 조치가 남긴 파일은 실패(운영 서버 찌꺼기 - secedit /db 의 .jfm 을 CI 에서 실측),
@@ -67,6 +67,17 @@ $KnownAutoNotApplied = @{
     # KNOWN_ISSUES L-06: 러너(Windows Server)의 Defender 실시간 감시는 Set-MpPreference 로 켜지지 않는다(정책/이미지 설정) -
     # 조치는 재검증 실패 → 원복(FAILED_ROLLED_BACK) 경로만 확인된다
     "PC-14" = "러너에서 Defender 실시간 감시를 켤 수 없음(KNOWN_ISSUES L-06)"
+}
+
+# RemoteRegistry 는 유휴 시 스스로 멈추는 서비스다 - 기준 진단(VULN: 구동 중)과 조치 사이에 멈추면 조치는 바꿀 것이 없어(NA) 백업도
+# 없고, 원복 후 판정이 GOOD 이 되어 "원복 후 판정이 조치 전과 다름"으로 실패했다(CI run 41009395247, 07_pc PC-05 - 조치·원복 결함
+# 아님). 02_windows/tests/fixtures/apply.ps1 과 같이 유휴 중지를 끄고 구동해 기준 상태를 결정적으로 만든다(스냅샷은 그 뒤에 뜬다).
+if ($Category -in @("02_windows", "07_pc")) {
+    $rrp = "HKLM:\SYSTEM\CurrentControlSet\Services\RemoteRegistry\Parameters"
+    if (-not (Test-Path $rrp)) { New-Item -Path $rrp | Out-Null }   # -Force 는 기존 키(ServiceDll)를 덮어쓴다
+    Set-ItemProperty -Path $rrp -Name DisableIdleStop -Type DWord -Value 1
+    if ((Get-Service -Name RemoteRegistry).StartType -eq "Disabled") { Set-Service -Name RemoteRegistry -StartupType Manual }
+    Start-Service -Name RemoteRegistry
 }
 
 $base = Invoke-Diag "base"

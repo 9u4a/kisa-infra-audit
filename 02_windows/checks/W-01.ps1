@@ -8,7 +8,14 @@
 if (Test-IsDomainController) {
     return New-CheckResult -Code "W-01" -Status "MANUAL" -Detail "도메인 컨트롤러: 빌트인 Administrator 는 도메인 계정이므로 AD(Active Directory 사용자 및 컴퓨터)에서 이름 변경 여부를 확인 필요(운영 부하 방지를 위해 계정 열거 생략)"
 }
-$admin = Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True and SID like 'S-1-5-%-500'" -ErrorAction SilentlyContinue
+# F-W01(1.4.0): 관리자 이름을 바꾼 직후(=이 항목의 권고 조치)에는 Win32_UserAccount(WMI) 조회가 한동안 빈 결과로 끝나 ERROR 였다
+# (양방향 케이스, CI run 41011236012/41041494009). SAM 을 직접 읽는 Get-LocalUser 를 먼저 쓰고, 모듈이 없는 OS(2012 R2)만 WMI.
+$admin = $null
+if (Get-Command Get-LocalUser -ErrorAction SilentlyContinue) {
+    $lu = Get-LocalUser -ErrorAction SilentlyContinue | Where-Object { $_.SID.Value -like 'S-1-5-*-500' } | Select-Object -First 1
+    if ($lu) { $admin = [PSCustomObject]@{ Name = $lu.Name; SID = $lu.SID.Value } }
+}
+if (-not $admin) { $admin = Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True and SID like 'S-1-5-%-500'" -ErrorAction SilentlyContinue }
 if (-not $admin) {
     return New-CheckResult -Code "W-01" -Status "ERROR" -Detail "빌트인 Administrator 계정(RID 500)을 조회하지 못함"
 }

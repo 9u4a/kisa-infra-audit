@@ -37,7 +37,68 @@
       "note": "가이드 양호 기준 '로그 기록 정책이 보안 정책에 따라 설정·수립' - 조직 정책 대조라 GOOD 판정 불가(MANUAL, cases/U-66 rsyslog-active-auth). 취약 방향(로깅 서비스 미실행→VULN)은 expected_* 와 cases/U-66 rsyslog-stopped 로 검증됨"
     }
   },
-  "02_windows": {},
+  "02_windows": {
+    "W-01": {
+      "reason": "manual-by-design",
+      "note": "비밀번호 강도는 평문 없이 판정 불가(로그온 시도는 계정 잠금 위험 S3) - 이름이 기본값이면 MANUAL, 변경됐으면 GOOD(cases/default-name·renamed)"
+    },
+    "W-03": {
+      "reason": "manual-by-design",
+      "note": "불필요 계정 여부는 조직 인사·운영 정보가 필요 - 항상 MANUAL(expected_*)"
+    },
+    "W-06": {
+      "reason": "manual-by-design",
+      "note": "관리자가 2명 이상일 때 '불필요' 여부는 조직 판단 - MANUAL(cases/two-admins), 1명 이하 GOOD(cases/one-admin)"
+    },
+    "W-19": {
+      "reason": "manual-by-design",
+      "note": "IIS 가 '필요에 의해' 구동 중인지는 업무 판단 - 구동 중 MANUAL(cases/iis-running), 중지 GOOD(cases/iis-stopped)"
+    },
+    "W-26": {
+      "reason": "na-for-engine",
+      "note": "가이드 대상이 Windows NT/2000/2003 - 2008 이상은 양호 조건에 해당해 NA(expected_*)"
+    },
+    "W-27": {
+      "reason": "manual-by-design",
+      "note": "최신 빌드 여부·패치 절차 수립은 MS 배포 현황·운영 정책 대조 필요 - 항상 MANUAL"
+    },
+    "W-34": {
+      "reason": "env-unavailable",
+      "note": "L-10(신규 제안): Telnet 서버는 Windows Server 2016 이상에 없음(지원 OS 중 2012 R2 만 해당) - 러너(Server 2025)에서 구동 상태를 만들 수 없음. 미설치 → GOOD 만 expected_* 로 검증"
+    },
+    "W-35": {
+      "reason": "manual-by-design",
+      "note": "시스템 DSN 의 '현재 사용' 여부는 응용프로그램 운영 현황이 필요 - DSN 있음 MANUAL(cases/system-dsn), 없음 NA(cases/no-dsn)"
+    },
+    "W-37": {
+      "reason": "manual-by-design",
+      "note": "예약 작업의 '의심스러움'은 기계적으로 판단 불가 - 사용자 작업이 있으면 MANUAL(expected_*)"
+    },
+    "W-38": {
+      "reason": "manual-by-design",
+      "note": "패치 절차 수립·이행은 운영 정책 - 항상 MANUAL"
+    },
+    "W-45": {
+      "reason": "env-unavailable",
+      "note": "L-11(신규 제안): 백신 미설치 상태는 러너에서 만들 수 없음(Defender 제거·서비스 중지에 재부팅 필요). 설치 → GOOD 만 expected_* 로 검증"
+    },
+    "W-47": {
+      "reason": "manual-by-design",
+      "note": "화면 보호기는 사용자별(HKCU) 설정이라 실행 계정 기준 미충족을 취약으로 단정하지 않음 - MANUAL(cases/no-password), 충족 GOOD(cases/secure-10min)"
+    },
+    "W-60": {
+      "reason": "env-unavailable",
+      "note": "L-01(도메인 환경): 도메인 구성원 전용 정책 - 러너는 워크그룹이라 NA 만 검증(expected_*)"
+    },
+    "W-62": {
+      "reason": "manual-by-design",
+      "note": "시작 프로그램 정기 검사 여부는 운영 절차 - 항상 MANUAL(expected_*)"
+    },
+    "W-63": {
+      "reason": "env-unavailable",
+      "note": "L-01: 도메인 컨트롤러 전용(Kerberos 정책) - DC 승격은 재부팅이 필요해 러너에서 불가, 비DC → NA 만 검증(expected_*)"
+    }
+  },
   "03_web": {
     "WEB-02": {
       "reason": "manual-by-design",
@@ -120,7 +181,32 @@
       "note": "가이드 취약 기준 '사용하지 않는 인터페이스가 비활성화되지 않은 경우' - IP 없는 활성 인터페이스도 L2 포트 등으로 사용 중일 수 있어 미사용 여부는 운영 판단(MANUAL, cases/N-24_manual_candidate). 양호 방향은 expected_vuln/hardened 로 검증됨"
     }
   },
-  "07_pc": {},
+  "07_pc": {
+    "PC-09": {
+      "reason": "manual-by-design",
+      "note": "레거시 IE 전용 정책 - Edge 등 최신 브라우저에는 동일 단일 설정이 없어 항상 MANUAL"
+    },
+    "PC-10": {
+      "reason": "manual-by-design",
+      "note": "패치 관리 절차 수립·이행은 운영 정책 - 항상 MANUAL"
+    },
+    "PC-11": {
+      "reason": "manual-by-design",
+      "note": "EOL 여부는 MS 수명 주기 대조·관리 절차는 운영 정책 - 항상 MANUAL"
+    },
+    "PC-14": {
+      "reason": "env-unavailable",
+      "note": "L-06: 러너(Windows Server)의 Defender 실시간 감시를 켤 수 없음 - 꺼짐 → VULN 만 expected_* 로 검증"
+    },
+    "PC-16": {
+      "reason": "manual-by-design",
+      "note": "화면보호기는 사용자별(HKCU) 설정이라 실행 계정 기준 미충족을 취약으로 단정하지 않음 - MANUAL(expected_*)"
+    },
+    "PC-17": {
+      "reason": "manual-by-design",
+      "note": "가이드 양호 기준에 '내부 관리 절차 수립·이행' 포함 - 명시적 전체 차단 정책이 없으면 MANUAL(expected_*)"
+    }
+  },
   "08_dbms": {
     "D-02": {
       "reason": "manual-by-design",

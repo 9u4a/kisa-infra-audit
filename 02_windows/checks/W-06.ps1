@@ -6,7 +6,9 @@
 # W-R15: 구성원 1명이 그룹(예: Domain Admins)이면 실제 관리자는 여러 명일 수 있어 GOOD 으로 단정하지 않는다.
 
 try {
-    $members = Get-LocalGroupMembersBySid -Sid 'S-1-5-32-544'
+    # F-W14(1.4.0): @() 로 감싼다 - 구성원이 1명이면 단일 PSCustomObject 가 되어 Windows PowerShell 5.1 에서 .Count 가 $null
+    # (W-14 는 1명 등록돼 있어도 VULN 이었다, 양방향 케이스로 확인)
+    $members = @(Get-LocalGroupMembersBySid -Sid 'S-1-5-32-544')
 } catch {
     return New-CheckResult -Code "W-06" -Status "ERROR" -Detail "Administrators 그룹 구성원 조회 실패: $($_.Exception.Message)"
 }

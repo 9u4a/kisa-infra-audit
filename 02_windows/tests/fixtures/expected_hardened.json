@@ -1,4 +1,4 @@
-{
+﻿{
   "W-01": "GOOD",
   "W-02": "GOOD",
   "W-03": "MANUAL",
@@ -16,7 +16,7 @@
   "W-15": "GOOD",
   "W-16": "GOOD",
   "W-17": "VULN",
-  "W-18": "VULN",
+  "W-18": "GOOD",
   "W-19": "MANUAL",
   "W-20": "VULN",
   "W-21": "GOOD",

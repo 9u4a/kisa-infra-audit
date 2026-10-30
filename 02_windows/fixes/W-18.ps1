@@ -6,7 +6,8 @@ $applied = @()
 $errors = @()
 
 foreach ($name in $targets) {
-    $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
+    # 표시 이름 일치(예: "Browser" → 커널 드라이버 bowser)는 제외 - checks/W-18 과 같은 기준(F-W18)
+    $svc = Get-Service -Name $name -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $name }
     if ($svc -and $svc.Status -eq "Running") {
         Disable-FixService -Name $name
         if ($Global:FixStatus -eq "APPLIED") { $applied += $name } else { $errors += $name }

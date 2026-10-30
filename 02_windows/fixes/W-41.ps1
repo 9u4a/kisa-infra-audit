@@ -9,6 +9,9 @@ Set-FixRegistryValue -Path "HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Para
 
 $svc = Get-Service -Name "W32Time" -ErrorAction SilentlyContinue
 if ($svc -and $svc.Status -ne "Running") {
+    # F-W41(1.4.0): 시작 유형·구동 상태를 바꾸기 전에 백업한다 - 예전에는 백업 없이 바꿔 -Rollback 후에도 서비스가 자동 시작·구동 중으로
+    # 남았다(원복 후 판정 GOOD, 양방향 케이스의 조치 검증으로 확인)
+    Backup-FixServiceState -Name "W32Time" | Out-Null
     try {
         Set-Service -Name "W32Time" -StartupType Automatic -ErrorAction Stop
         Start-Service -Name "W32Time" -ErrorAction Stop

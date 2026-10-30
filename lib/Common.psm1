@@ -281,7 +281,11 @@ function Get-ServiceChecked {
        Services\<이름> 키가 있으면 조회 실패로 본다 #>
     param([Parameter(Mandatory)][string]$Name)
     try {
-        return (Get-Service -Name $Name -ErrorAction Stop)
+        $s = Get-Service -Name $Name -ErrorAction Stop
+        # F-W18(1.4.0): ServiceController 는 표시 이름으로도 찾는다 - "Browser" 가 표시 이름이 Browser 인 커널 드라이버 bowser 로
+        # 잡혀(항상 Running) W-18 이 늘 VULN 이었다(양방향 케이스로 확인). 서비스 이름이 정확히 같은 것만 인정한다.
+        if ($s -and $s.Name -ne $Name) { return $null }
+        return $s
     } catch {
         $msg = $_.Exception.Message
         if ($_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound -and
@@ -1038,6 +1042,8 @@ function Restore-FixServiceBackup {
     try {
         Set-Service -Name $o.Name -StartupType $o.StartType -ErrorAction Stop
         if ($o.Status -eq "Running") { Start-Service -Name $o.Name -ErrorAction Stop }
+        # F-W41(1.4.0): 조치가 시작한 서비스(원래 중지)는 다시 중지한다 - 예전에는 시작 유형만 되돌려 구동 상태가 남았다
+        elseif ($o.Status -eq "Stopped" -and (Get-Service -Name $o.Name).Status -ne "Stopped") { Stop-Service -Name $o.Name -Force -ErrorAction Stop }
     } catch { Add-FixRollbackFailure "서비스 원복 실패 $($o.Name): $($_.Exception.Message)" }
 }
 
@@ -1062,6 +1068,30 @@ function Disable-FixService {
         $Global:FixDetail = "$Name 서비스 비활성화 실패: $($_.Exception.Message)"
         $Global:FixEvidence = ""
     }
+}
+
+# ---- 기본(관리용) 공유 즉시 중지 (W-17 / PC-04) --------------------------------------
+function Remove-FixDefaultShares {
+    <# F-W17(1.4.0): 실행 중인 기본 공유(C$/ADMIN$ 등)를 지운다. 예전 조치는 Remove-SmbShare 실패를 -ErrorAction SilentlyContinue 로
+       삼키고 "즉시 제거"라고 보고했는데, Windows Server 2025 는 실행 중 기본 공유 삭제를 "The request is not supported" 로 거부한다
+       (양방향 케이스 조치 검증에서 재진단 VULN). 삭제가 거부된 공유가 있으면 Server(LanmanServer) 서비스를 재시작해 레지스트리
+       (AutoShareServer/AutoShareWks=0, 호출 전에 설정)대로 기본 공유 없이 다시 올린다 - 재시작 동안 SMB 연결이 끊긴다(confirm 등급).
+       재시작에 딸려 멈춘 종속 서비스는 원래 실행 중이던 것만 다시 시작한다. 반환: @{ Removed; Restarted; Remaining } #>
+    $isDefault = { param($n) $n -match '^[A-Za-z]\$$' -or $n -eq 'ADMIN$' }
+    $before = @(Get-SmbShare -ErrorAction Stop | Where-Object { & $isDefault $_.Name } | ForEach-Object { $_.Name })
+    $refused = @()
+    foreach ($n in $before) {
+        try { Remove-SmbShare -Name $n -Force -ErrorAction Stop } catch { $refused += $n }
+    }
+    $restarted = $false
+    if ($refused.Count -gt 0) {
+        $deps = @(Get-Service -Name LanmanServer -DependentServices | Where-Object { $_.Status -eq "Running" } | ForEach-Object { $_.Name })
+        Restart-Service -Name LanmanServer -Force -ErrorAction Stop
+        foreach ($d in $deps) { Start-Service -Name $d -ErrorAction SilentlyContinue }
+        $restarted = $true
+    }
+    $remaining = @(Get-SmbShare -ErrorAction Stop | Where-Object { & $isDefault $_.Name } | ForEach-Object { $_.Name })
+    return @{ Removed = @($before | Where-Object { $remaining -notcontains $_ }); Restarted = $restarted; Remaining = $remaining }
 }
 
 # ---- 로컬 계정 활성/비활성 상태 백업/원복 ------------------------------------------
@@ -1754,4 +1784,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

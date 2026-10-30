@@ -96,6 +96,27 @@ function Get-WinStateSnapshot {
 # 확인) - 시작 유형·서비스/작업 추가·삭제는 항상, 실행 상태는 진단·조치 대상 서비스 목록만 실패로 본다(나머지는 참고 표시).
 $Script:WinStateWatchSvc = '^(RemoteRegistry|W3SVC|WAS|FTPSVC|MSFTPSVC|SNMP|TlntSvr|TermService|WinRM|LanmanServer|MSSQL.*|SQLAgent.*|Spooler|Fax|SSDPSRV|upnphost|WerSvc|TapiSrv|SharedAccess|MpsSvc|WinDefend|Messenger|Schedule|DNS|SMTPSVC|NetTcpPortSharing)$'
 
+# 러너 OS·이미지가 스스로 만드는 항목 - 특정 값/규칙만(넓은 패턴 금지). 근거: CI run 40823796574(feat/coverage-1.4) fix-safety 원복
+# 비교에서 조치와 무관하게 나타남 - LSA 보호(PPL) 자동 활성화 표시(Lsa\IsPplAutoEnabled, Lsa\RunAsPPL)와 Windows 보안 앱(SecHealthUI)
+# 방화벽 규칙 2개. 진단·조치가 쓰지 않는 값이고, 아무 것도 바꾸지 않은 구간에서도 나타나는지는 case_runner 의 무변경 대조로 확인한다.
+$Script:WinStateOsNoise = @(
+    '\\Control\\Lsa\|IsPplAutoEnabled\|',
+    '\\Control\\Lsa\|RunAsPPL\|',
+    '^(rule|port|addr)\|Microsoft\.SecHealthUI_8wekyb3d8bbwe-In-Allow-ServerCapability\|',
+    '^(rule|port|addr)\|Microsoft\.SecHealthUI_8wekyb3d8bbwe-Out-Allow-AllCapabilities\|',
+    # CI run 40981289087(windows-cases 02_windows): 방화벽·앱과 무관한 항목(W-42/W-43) 진행 중 나타난 스토어 앱 규칙,
+    # 같은 실행에서 RDP 세션 임시 폴더 매핑(PerSessionTempDirs\<세션>)이 생겼다 사라짐
+    '^(rule|port|addr)\|Microsoft\.Windows\.NarratorQuickStart_8wekyb3d8bbwe-Out-Allow-AllCapabilities\|',
+    '^(rule|port|addr)\|Microsoft\.WindowsFeedbackHub_8wekyb3d8bbwe-In-Allow-ServerCapability\|',
+    '^(rule|port|addr)\|Microsoft\.WindowsFeedbackHub_8wekyb3d8bbwe-Out-Allow-AllCapabilities\|',
+    '\\Control\\Terminal Server\\PerSessionTempDirs\\[^|]+\|(TEMP|TMP)\|'
+)
+
+# 시작 유형을 OS 가 스스로 바꾸는 서비스(시작 유형 변화만 참고로). BITS: 지연 자동 시작 후 OS 가 수동으로 되돌린다 - CI run 40979700732
+# (windows-cases 07_pc, PC-01 의 보안 정책 조치 원복 구간에서 서비스와 무관하게 Auto→Manual).
+# TrustedInstaller: Windows 모듈 설치 관리자가 서비싱 중 Manual↔Auto 를 오간다 - CI run 40981289087(PC-04/PC-05 구간, 양방향 관측).
+$Script:WinStateOsNoiseStartMode = @('BITS', 'TrustedInstaller')
+
 function Compare-WinStateSnapshot {
     <# 반환: @{ Fail = @(문자열); Notes = @(문자열) }. -SoftAreas 에 든 영역의 차이는 Notes 로만(원복 불가로 보고된 조치 영역 등).
        -Label 은 메시지 접두어(예: "S1", "원복") #>
@@ -106,6 +127,12 @@ function Compare-WinStateSnapshot {
         if ($k -eq "_errors") { continue }
         $b = @($Before[$k] -split "`n" | Where-Object { $_ }); $a = @($After[$k] -split "`n" | Where-Object { $_ })
         $diff = @(Compare-Object $b $a)
+        # 러너 OS·이미지 활동으로 진단·조치와 무관하게 새로 나타나는 특정 항목(참고로만)
+        $osNoise = @($diff | Where-Object { $l = $_.InputObject; @($Script:WinStateOsNoise | Where-Object { $l -match $_ }).Count -gt 0 })
+        if ($osNoise.Count -gt 0) {
+            $notes += "(참고, 러너 OS 활동) '$k': " + (($osNoise | Select-Object -First 5 | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }) -join ' / ')
+            $diff = @($diff | Where-Object { $osNoise -notcontains $_ })
+        }
         # -SoftLinePatterns 에 맞는 줄(예: 원복 불가로 보고된 이벤트 로그 크기 키)은 참고로만
         if ($SoftLinePatterns.Count -gt 0) {
             $softLines = @($diff | Where-Object { $l = $_.InputObject; @($SoftLinePatterns | Where-Object { $l -match $_ }).Count -gt 0 })
@@ -133,7 +160,7 @@ function Compare-WinStateSnapshot {
             foreach ($name in $ma.Keys) {
                 $f = $ma[$name]; $o = $mb[$name]
                 if (-not $o) { $hard += "새 서비스 $($f -join '|')"; continue }
-                if ($o[1] -ne $f[1]) { $hard += "$name 시작 유형 $($o[1])→$($f[1])" }
+                if ($o[1] -ne $f[1]) { if ($Script:WinStateOsNoiseStartMode -contains $name) { $soft += "$name 시작 유형 $($o[1])→$($f[1])(OS)" } else { $hard += "$name 시작 유형 $($o[1])→$($f[1])" } }
                 elseif ($o[2] -ne $f[2]) {
                     # RemoteRegistry 는 Server 에서 유휴 시 스스로 멈춘다(시작 유형 그대로 Running→Stopped, main CI 40682689320 실측)
                     $idleStop = ($name -eq "RemoteRegistry" -and $o[2] -eq "Running" -and $f[2] -eq "Stopped")

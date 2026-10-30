@@ -160,14 +160,7 @@ jobs:
           $bootstrap = '${{ github.event.inputs.bootstrap_windows }}' -eq 'true'
           if ($bootstrap) { .\07_pc\tests\run_tests.ps1 -Bootstrap } else { .\07_pc\tests\run_tests.ps1 }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: bootstrap 산출물 업로드
-        if: ${{ github.event.inputs.bootstrap_windows == 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: bootstrap-expected-json
-          path: |
-            02_windows/tests/fixtures/expected_*.json
-            07_pc/tests/fixtures/expected_*.json
+      # 1.4.0: 02_windows/07_pc 의 -Bootstrap 은 기대값과의 차이만 출력한다(파일을 쓰지 않음 - 도구 출력을 정답으로 굳히지 않기 위해).
 
   windows-server:
     # windows-latest 러너(Windows Server, 매 job 새로 만들어지는 휘발성 VM)를 "운영 Windows Server" 대용으로
