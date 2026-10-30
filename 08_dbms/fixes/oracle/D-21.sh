@@ -22,10 +22,10 @@ run_fix() {
         IFS=$old_ifs
         [ -z "$line" ] && { IFS='
 '; continue; }
-        grantee=$(printf '%s' "$line" | awk -F'|' '{gsub(/ /,"",$1); print $1}')
-        owner=$(printf '%s' "$line" | awk -F'|' '{gsub(/ /,"",$2); print $2}')
-        tbl=$(printf '%s' "$line" | awk -F'|' '{gsub(/ /,"",$3); print $3}')
-        priv=$(printf '%s' "$line" | awk -F'|' '{gsub(/ /,"",$4); print $4}')
+        grantee=$(printf '%s' "$line" | awk -F'|' '{gsub(/[ \t\r]/,"",$1); print $1}')
+        owner=$(printf '%s' "$line" | awk -F'|' '{gsub(/[ \t\r]/,"",$2); print $2}')
+        tbl=$(printf '%s' "$line" | awk -F'|' '{gsub(/[ \t\r]/,"",$3); print $3}')
+        priv=$(printf '%s' "$line" | awk -F'|' '{gsub(/[ \t\r]/,"",$4); print $4}')
         [ -z "$grantee" ] || [ -z "$owner" ] || [ -z "$tbl" ] || [ -z "$priv" ] && { IFS='
 '; continue; }
         fix_db_queue_rollback "oracle" "GRANT $priv ON $owner.$tbl TO $grantee WITH GRANT OPTION;"

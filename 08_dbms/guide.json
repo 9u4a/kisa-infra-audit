@@ -36,7 +36,7 @@
         "oracle",
         "mssql"
       ],
-      "deviation": null
+      "deviation": "Oracle 대상(1.4.0): 가이드가 나열한 기본 계정 중 OPEN 인 것을 모두 취약으로 보던 구현을, Oracle 이 제공하는 DBA_USERS_WITH_DEFPWD(초기 비밀번호를 그대로 쓰는 계정)와 잠금 상태로 판정하도록 바꿈 - SYSTEM 은 필수 관리 계정이라 항상 OPEN 이어서 비밀번호를 바꾼 정상 서버도 영구히 취약이었고 조치(SYSTEM 제외 잠금)로는 해소할 수 없었다(Docker gvenzl 26ai 실기). 판단 기준 원문('초기 비밀번호를 변경하거나 잠금')은 그대로이고 메커니즘만 버전 독립적인 메타데이터로 바꾼 것."
     },
     {
       "code": "D-02",

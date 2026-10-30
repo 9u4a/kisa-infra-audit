@@ -11,7 +11,13 @@ run_fix() {
         FIX_STATUS="ERROR"; FIX_DETAIL="변경 전 SPFILE 백업(CREATE PFILE)에 실패해 변경하지 않음 - 재기동 실패 시 복구할 수 없기 때문(SYSDBA/OS 인증으로 실행 필요)"; FIX_EVIDENCE=""
         return
     fi
-    fix_db_queue_rollback "oracle" "ALTER SYSTEM SET audit_trail = ${orig:-NONE} SCOPE=SPFILE;"
+    # SPFILE 에 값이 없던(기본값) 경우는 RESET 으로 되돌린다 - SET NONE 으로 원복하면 SPFILE 에 원래 없던 항목이 남았다(1.4.0 D-C5)
+    spec=$(oracle_query "SELECT isspecified FROM v\$spparameter WHERE name = 'audit_trail' AND rownum = 1;" | tr -d ' \r' | awk 'NF' | head -n 1)
+    if [ "$spec" = "FALSE" ]; then
+        fix_db_queue_rollback "oracle" "ALTER SYSTEM RESET audit_trail SCOPE=SPFILE;"
+    else
+        fix_db_queue_rollback "oracle" "ALTER SYSTEM SET audit_trail = ${orig:-NONE} SCOPE=SPFILE;"
+    fi
     out=$(oracle_query "ALTER SYSTEM SET audit_trail = DB SCOPE=SPFILE;" 2>&1)
 
     oracle_restart_or_recover

@@ -5,14 +5,22 @@
 # 01_unix/03_web과 달리 DB 서버와 run.sh를 실행하는 쪽이 분리되어 있어(원격 접속 모델)
 # 매 (엔진,모드) 조합마다: ①전용 docker 네트워크 생성 ②DB 서버 컨테이너 기동 ③클라이언트
 # 컨테이너에서 fixtures/setup.sh 적용 후 run.sh 실행 ④docker cp로 결과 추출 ⑤컨테이너/네트워크
-# 정리, 순서로 진행한다. Oracle은 이미지가 무거워 여기 포함하지 않았다(CI의 별도 주간
-# job 후보 - 08_dbms/CLAUDE.md "테스트 커버리지" 참고). D-11(시스템 테이블 접근 제한)만
+# 정리, 순서로 진행한다. Oracle은 이미지가 무거워 기본 실행에 넣지 않고 `run_tests.sh oracle`(CI oracle job, 주간/수동)
+# 로만 돈다(아래 케이스 단계, 로컬 모드). D-11(시스템 테이블 접근 제한)만
 # 명시적으로 vuln/hardened를 가르고 나머지 25항목은 각 이미지의 기본값을 반영한다(run.sh는
 # 매번 26항목 전체를 돌려 다른 항목의 회귀도 함께 잡아낸다). "원격 클라이언트 컨테이너에서
 # run.sh 실행" 토폴로지라 로컬 파일·프로세스 기반 항목(MySQL D-07/D-14, PostgreSQL D-10/D-14)은
 # 원격 모드 MANUAL 로 나와야 한다(진단 검수 D-R1 - 예전에는 클라이언트 컨테이너의 /etc/my.cnf 로
 # D-14 를 판정했다). vuln 모드에서는 권한 없는 계정(lowpriv)으로 한 번 더 진단해 권한 부족 항목이
 # GOOD/VULN 대신 ERROR 인지 확인한다(D-R2).
+#
+# 1.4.0: 항목별 판정 양방향 케이스(fixtures/cases/cases.json + db_cases.sh, db_case_runner.py)를 DB 서버 컨테이너 안(로컬 모드)
+# 에서 돌린다 - 설정 파일·프로세스 기반 항목(D-07/D-10/D-14 등)도 서버 안에서 취약/양호 양쪽으로 진단하고, 조치 파일이 있는
+# 취약 케이스는 적용 → 재진단 → 원복 → 상태 동일까지 확인한다. 재기동이 필요한 조치(mysql D-07, postgres D-03/D-26)를 위해
+# 서버는 감독 루프(fixtures/db_supervisor.sh)를 PID 1 로 띄운다.
+#   sh 08_dbms/tests/run_tests.sh              MySQL·PostgreSQL 전체(원격 픽스처·운영 안전·조치·케이스) - CI linux-integration
+#   sh 08_dbms/tests/run_tests.sh oracle       Oracle(gvenzl/oracle-free, Dockerfile.oracle) 케이스·기본 상태 - CI oracle(주간/수동)
+#   sh 08_dbms/tests/run_tests.sh mysql        한 엔진만(개발용)
 set -eu
 export MSYS_NO_PATHCONV=1
 
@@ -25,8 +33,17 @@ mkdir -p "$TMPW"
 trap 'rm -f "$TMPW"/dbsafety_* "$TMPW"/fix_*.out 2>/dev/null; rmdir "$TMPW" 2>/dev/null' EXIT
 trap 'exit 130' INT TERM
 
+ENGINES=${*:-mysql postgres}
+for _e in $ENGINES; do
+    case "$_e" in mysql|postgres|oracle) ;; *) echo "usage: run_tests.sh [mysql] [postgres] [oracle]" >&2; exit 2 ;; esac
+done
+# 원격 픽스처·운영 안전·조치 단계는 MySQL/PostgreSQL 만 다룬다(Oracle 은 아래 케이스 단계에서 로컬 모드로)
+SQL_ENGINES=""
+for _e in $ENGINES; do [ "$_e" = "oracle" ] || SQL_ENGINES="$SQL_ENGINES $_e"; done
+T_START=$(date +%s)
+
 fail=0
-for engine in mysql postgres; do
+for engine in $SQL_ENGINES; do
     image="kisa-dbms-${engine}-test"
     echo "[빌드] $engine 클라이언트 이미지..."
     docker build -q -f "08_dbms/tests/Dockerfile.$engine" -t "$image" . >/dev/null
@@ -141,7 +158,7 @@ done
 #    재시도하면 Oracle FAILED_LOGIN_ATTEMPTS 등으로 운영 계정이 잠김 - lib/common.sh db_preflight).
 # ② 이때 DB 조회 항목은 "사전 점검 실패" 사유의 ERROR 로 남아야 한다(거짓 GOOD/VULN 금지).
 # ③ 비밀번호 없이 실행해도 프롬프트에서 멈추지 않고 끝나야 한다(psql -w, _db_run).
-for engine in mysql postgres; do
+for engine in $SQL_ENGINES; do
     image="kisa-dbms-${engine}-test"
     net="kisa-dbms-net-$$-$engine-safety"
     docker network create "$net" >/dev/null
@@ -234,7 +251,7 @@ done
 # 원격 DB 진단은 OS 권한과 무관하므로(DB 계정 권한으로 판정) 일반 OS 계정 실행 결과는 관리자 실행 결과와 항목별로 같아야
 # 한다 - run_safety_check.py 의 "일반 사용자 실행에 GOOD/NA 가 남음"(OS 파일·프로세스를 읽는 카테고리용 규칙)만 이 비교로 대신한다.
 DB_SECRETS='TestRoot123!|LowPriv123!'
-for engine in mysql postgres; do
+for engine in $SQL_ENGINES; do
     image="kisa-dbms-${engine}-test"
     net="kisa-db-safety-net-$$-$engine"
     srv="kisa-db-safety-srv-$$-$engine"
@@ -435,7 +452,7 @@ fix_expect() {  # fix_expect <출력 파일> <라벨> <KEY=값>...
     fi
 }
 
-for engine in mysql postgres; do
+for engine in $SQL_ENGINES; do
     image="kisa-dbms-${engine}-test"
     net="kisa-db-fix-net-$$-$engine"
     srv="kisa-db-fix-srv-$$-$engine"
@@ -529,5 +546,56 @@ for engine in mysql postgres; do
     docker rm -f "$srv" >/dev/null 2>&1 || true
     docker network rm "$net" >/dev/null 2>&1 || true
 done
+
+
+# ---- 항목별 판정 양방향 케이스(로컬 모드) + 조치 적용·원복 검증 (1.4.0) ----------------------------------------------
+# DB 서버 컨테이너 하나를 엔진별로 띄우고, 진단·조치를 그 컨테이너 안에서 실행한다(로컬 모드 - db_is_remote 가 아님).
+# 케이스 목록·기대값은 fixtures/cases/cases.json(엔진별), 상태 만들기·확인·되돌리기는 fixtures/cases/db_cases.sh.
+#  - mysql: --mysql-native-password=ON 으로 기동 - 8.4 부터 기본 비활성이라 D-08 취약 상태(SHA-1 계정)를 만들 수 없다.
+#  - oracle: gvenzl 이미지는 자체 진입점이 PID 1 이라 SHUTDOWN/STARTUP(D-19/D-26 조치)에도 컨테이너가 유지된다.
+for engine in $ENGINES; do
+    image="kisa-dbms-${engine}-test"
+    srv="kisa-db-case-$$-$engine"
+    t0=$(date +%s)
+    echo "[*] $engine 항목별 케이스(로컬 모드)..."
+    docker build -q -f "08_dbms/tests/Dockerfile.$engine" -t "$image" . >/dev/null
+    case "$engine" in
+        mysql) docker run -d --name "$srv" -e MYSQL_ROOT_PASSWORD=TestRoot123! --entrypoint sh "$image" \
+                   /infra/08_dbms/tests/fixtures/db_supervisor.sh mysql --mysql-native-password=ON >/dev/null ;;
+        postgres) docker run -d --name "$srv" -e POSTGRES_PASSWORD=TestRoot123! --entrypoint sh "$image" \
+                   /infra/08_dbms/tests/fixtures/db_supervisor.sh postgres >/dev/null ;;
+        oracle) docker run -d --name "$srv" -e ORACLE_PASSWORD=TestRoot123 "$image" >/dev/null ;;
+    esac
+    wait_s=180; [ "$engine" = "oracle" ] && wait_s=900
+    if ! docker exec -u 0 "$srv" sh /infra/08_dbms/tests/fixtures/cases/db_cases.sh "$engine" ready "$wait_s"; then
+        echo "FAIL: $engine/cases - DB 서버가 ${wait_s}초 내에 준비되지 않음"; docker logs --tail 20 "$srv" 2>&1; fail=1
+    else
+        if [ "$engine" = "oracle" ]; then
+            # 이미지 기본 상태의 전 항목 판정(로컬 모드, SYSTEM@FREEPDB1) = expected_oracle_default.json
+            def="$TMPW/oracle_default.json"
+            docker exec "$srv" sh -c 'DB_PASSWORD=TestRoot123 sh 08_dbms/run.sh -e oracle --host localhost --db FREEPDB1 --user system -o /tmp/def >/dev/null 2>&1; cat /tmp/def/*/result.json' > "$def" 2>/dev/null || true
+            python3 - "$def" 08_dbms/tests/fixtures/expected_oracle_default.json "oracle/default" <<'PYEOF' || fail=1
+import json, sys
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+try:
+    actual = {it["code"]: it["status"] for it in json.load(open(sys.argv[1], encoding="utf-8"))["items"]}
+except (OSError, ValueError, KeyError) as e:
+    print(f"FAIL: {sys.argv[3]} - result.json 을 읽지 못함({e})"); sys.exit(1)
+expected = json.load(open(sys.argv[2], encoding="utf-8"))
+bad = [f"{c}: 기대={e} 실제={actual.get(c)}" for c, e in expected.items() if actual.get(c) != e]
+print(("FAIL" if bad else "PASS") + f": {sys.argv[3]}" + (f" - {len(bad)}건 불일치" if bad else ""))
+for b in bad:
+    print("  - " + b)
+sys.exit(1 if bad else 0)
+PYEOF
+            rm -f "$def"
+        fi
+        python3 08_dbms/tests/db_case_runner.py "$engine" "$srv" || fail=1
+    fi
+    docker rm -f "$srv" >/dev/null 2>&1 || true
+    echo "  ($engine 케이스 단계 $(( $(date +%s) - t0 ))초)"
+done
+echo "총 소요: $(( $(date +%s) - T_START ))초"
 
 exit $fail

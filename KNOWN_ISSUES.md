@@ -177,7 +177,7 @@
 | L-02 | **한글 Windows**: 러너가 영문(en-US)이라 로캘 의존 출력(W-40 auditpol, W-34 tlntadmn, PC-08 bcdedit)은 한글판에서 실측하지 못했다. |
 | L-03 | **Solaris/AIX/HP-UX**: 문서 기준 구현이며 실기 검증 불가(결과마다 "미검증" 문구가 붙음). |
 | L-04 | **RHEL 계열·Debian Apache·RHEL Tomcat**: CI 픽스처는 Debian 12(01_unix)와 공식 httpd/nginx/tomcat 이미지만 쓴다. 배포판 패키지 레이아웃(WEB-R1, WEB-R4)은 검증 범위 밖이었다. |
-| L-05 | **Oracle**: CI 상시 job 에 없다(로컬 gvenzl 컨테이너로만 검증). |
+| L-05 | **Oracle**: 1.4.0 부터 CI `oracle` job(주간 스케줄·수동 실행, gvenzl/oracle-free 26ai 다이제스트 고정)에서 22항목 양방향 케이스·조치·원복을 돈다 - 매 push 에는 돌지 않는다(이미지 약 2.8GB). 남은 한계: ① D-12(리스너 비밀번호)는 12.2 이상에서 NA(가이드 명시)라 취약/양호 분기(12.1 이하 listener.ora)를 실기로 만들 수 없다(coverage 면제 env-unavailable) ② D-07 취약(Oracle 을 root 로 구동)은 Oracle 이 root 기동을 거부해 root 소유 `ora_pmon_*` 모의 프로세스로 check 의 /proc 판정 경로만 검증한다. |
 | L-06 | **PC-14 Defender**: 러너에서 켤 수 없어 조치는 "실패 후 원복" 경로만 확인했다. |
 | L-07 | **05_network**: 실제 장비가 아닌 텍스트 픽스처 기반 판정 로직 테스트다. |
 | L-08 | **CI 일시 장애**: PowerShell Gallery 다운로드 실패로 static-analysis 가 실패할 수 있다(재실행으로 해결, 코드 문제 아님). |

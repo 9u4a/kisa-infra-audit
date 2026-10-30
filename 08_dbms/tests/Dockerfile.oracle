@@ -1,0 +1,13 @@
+# 08_dbms/tests/Dockerfile.oracle — gvenzl/oracle-free(비공식 Oracle Database Free, 26ai) 를 DB 서버 겸 진단 실행 쪽으로
+# 쓴다(로컬 모드 - sqlnet.ora·listener.ora·프로세스 기반 항목을 서버 안에서 직접 진단). 이미지가 커서(약 2.8GB)
+# CI 에서는 매 push 가 아니라 주간 스케줄/수동 실행 job(oracle)에서만 돈다(run_tests.sh oracle).
+# 태그(23-slim)는 계속 움직이므로 다이제스트로 고정한다 - 갱신할 때는 로컬에서 run_tests.sh oracle 을 통과시킨 뒤 바꿀 것.
+# util-linux(script): confirm 등급 조치(fix.sh 가 /dev/tty 에서 y/N 을 읽음)를 가상 터미널로 시험하기 위함.
+# procps-ng·diffutils: 테스트 보조(프로세스 확인·상태 비교). slim 이미지에는 셋 다 없다.
+FROM gvenzl/oracle-free:23-slim@sha256:6d61d267a3b978c24c5ac1790e62e927416a0aec446bd86e4b3a1527562757bd
+USER root
+RUN microdnf install -y util-linux procps-ng diffutils && microdnf clean all
+COPY . /infra
+RUN chown -R oracle:oinstall /infra
+WORKDIR /infra
+USER oracle

@@ -1,4 +1,5 @@
 # D-26 (상) 감사 기록 설정 [PostgreSQL] — 조치 [fix: confirm]
+# 원복: 일부 — postgresql.auto.conf·log_statement 는 되돌리지만(reload 포함) logging_collector 반영에는 재기동이 필요함
 # checks/postgres/D-26.sh: 취약 = logging_collector=off. logging_collector 는 정적 파라미터라 재기동이 필요하다
 # - confirm 등급에서 재기동까지 수행한다(DB 클라이언트 연결만 영향, 이 스크립트의 OS 세션에는 영향 없음).
 # 운영 안전(1.3.0): postgresql.auto.conf 를 파일로도 백업하고, 재기동 후 기동을 확인해 뜨지 않으면 되돌리고
@@ -19,6 +20,9 @@ run_fix() {
     fi
     old_stmt=$(psql_query "SHOW log_statement;" | tr -d ' \r')
     fix_backup "$auto_conf"
+    # 1.4.0(D-C4): log_statement 는 reload 로 반영되는 값이라 원복 SQL 만 실행하면 다음 reload 전까지 'mod' 가 계속 적용됐다
+    # (Docker 실기: 원복 후에도 SHOW log_statement = mod). 원복 큐는 역순 실행이라 reload 를 맨 먼저 넣어 맨 마지막에 돈다.
+    fix_db_queue_rollback "postgres" "SELECT pg_reload_conf();"
     fix_db_queue_rollback "postgres" "ALTER SYSTEM SET logging_collector = off;"
     fix_db_queue_rollback "postgres" "ALTER SYSTEM SET log_statement = '${old_stmt:-none}';"
     if ! psql_query "ALTER SYSTEM SET logging_collector = on;" >/dev/null || \

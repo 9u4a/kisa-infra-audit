@@ -3,9 +3,12 @@
 # 12c R2 미만에서만 listener.ora 에 무작위 비밀번호를 설정하고 lsnrctl reload 로 즉시 반영한다
 # (reload 는 기존 DB 세션 연결에는 영향 없음 - 리스너 프로세스만 설정을 다시 읽음).
 run_fix() {
-    ver=$(oracle_query "SELECT version FROM v\$instance;")
-    _major=$(printf '%s' "$ver" | grep -oE '^[0-9]+')
-    if [ -n "$_major" ] && [ "$_major" -ge 12 ] 2>/dev/null; then
+    # 1.4.0(D-C2): 예전에는 12 이상이면 NA 라, check 가 취약으로 보는 12c Release 1(12.1)에서 조치가 "해당 없음"으로
+    # 끝났다(check 는 12.1 을 지원 버전으로 봄 - 진단 검수 D-R11). check 와 같은 기준(12.2 이상만 NA)으로 맞췄다.
+    ver=$(oracle_query "SELECT version FROM v\$instance;" | tr -d ' \t\r' | awk 'NF' | head -n 1)
+    _major=$(printf '%s' "$ver" | awk -F. '{print $1+0}')
+    _minor=$(printf '%s' "$ver" | awk -F. '{print $2+0}')
+    if [ -n "$ver" ] && { [ "$_major" -gt 12 ] || { [ "$_major" -eq 12 ] && [ "$_minor" -ge 2 ]; }; }; then
         FIX_STATUS="NA"; FIX_DETAIL="Oracle 12c Release 2 이상은 Listener 비밀번호 설정을 지원하지 않음(해당 없음)"; FIX_EVIDENCE=""
         return
     fi

@@ -13,8 +13,19 @@ run_fix() {
         FIX_STATUS="ERROR"; FIX_DETAIL="변경 전 SPFILE 백업(CREATE PFILE)에 실패해 변경하지 않음 - 재기동 실패 시 복구할 수 없기 때문(SYSDBA/OS 인증으로 실행 필요)"; FIX_EVIDENCE=""
         return
     fi
+    # 원복 SQL 은 SPFILE 의 원래 상태 기준(1.4.0 D-C5): 값이 지정돼 있지 않던(기본값) 파라미터는 RESET 으로 되돌린다 - 예전에는
+    # 실행 값을 SET 해 SPFILE 에 원래 없던 항목이 남았다. v$spparameter 조회에 실패하면 예전 방식(실행 값 SET)으로 둔다.
+    spec=$(oracle_query "SELECT name || '=' || isspecified FROM v\$spparameter WHERE name IN ('os_roles','remote_os_authent','remote_os_roles') AND (sid = '*' OR sid IS NULL);" | tr -d ' \r' | grep '=')
     for kv in $orig; do
-        fix_db_queue_rollback "oracle" "ALTER SYSTEM SET ${kv%%=*} = ${kv#*=} SCOPE=SPFILE;"
+        _p=${kv%%=*}
+        case "
+$spec
+" in
+            *"
+$_p=FALSE
+"*) fix_db_queue_rollback "oracle" "ALTER SYSTEM RESET $_p SCOPE=SPFILE;" ;;
+            *) fix_db_queue_rollback "oracle" "ALTER SYSTEM SET $_p = ${kv#*=} SCOPE=SPFILE;" ;;
+        esac
     done
 
     o1=$(oracle_query "ALTER SYSTEM SET os_roles = FALSE SCOPE=SPFILE;" 2>&1)

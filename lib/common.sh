@@ -1430,7 +1430,9 @@ oracle_query() {
         { printf 'whenever sqlerror exit sql.sqlcode\n'
           printf 'whenever oserror exit failure\n'
           oracle_connect_line
-          printf 'set heading off feedback off pagesize 0 verify off linesize 500 trimspool on\n'
+          # tab off: sqlplus 기본값(SET TAB ON)은 열 패딩 공백을 TAB 으로 바꿔 출력한다. 조치가 "|" 로 나눈 열에서 공백만
+          # 지우던 탓에 "SYS<TAB>.DBA_USERS" 같은 이름으로 REVOKE 가 실패했다(1.4.0 D-C7, fixes/oracle/D-11·D-17 실기).
+          printf 'set heading off feedback off pagesize 0 verify off linesize 500 trimspool on tab off\n'
           printf 'set colsep |\n'
           printf '%s\n' "$1"
           printf 'exit\n'
@@ -2406,7 +2408,9 @@ fix_rollback_item() {
     while IFS= read -r _bak; do
         [ -z "$_bak" ] && continue
         case "$_bak" in
-            */dbsql/*|*/_services/*)
+            */dbsql/*|*/_services/*|"$_dir"/_oracle/*)
+                # _oracle/ 은 oracle_pfile_backup 이 남긴 변경 전 SPFILE 사본(증적)이라 되돌릴 원래 경로가 없다 - 예전에는
+                # "/_oracle/..." 로 복사하려다 실패해 D-19/D-26 Oracle 원복이 항상 "일부 실패"로 끝났다(1.4.0 D-C6).
                 : # 따로 처리
                 ;;
             *.WAS_ABSENT)

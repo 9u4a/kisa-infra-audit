@@ -100,5 +100,74 @@
     }
   },
   "07_pc": {},
-  "08_dbms": {}
+  "08_dbms": {
+    "D-02": {
+      "reason": "manual-by-design",
+      "engines": [
+        "mysql",
+        "postgres",
+        "oracle"
+      ],
+      "note": "불필요 계정 여부는 조직 운영 판단 - check 는 로그인 목록만 제공하고 항상 MANUAL(expected_mssql_*) / MySQL·PostgreSQL·Oracle: 불필요 계정 여부는 조직 운영 판단(guide automation=manual) - check 는 계정 목록만 제공하고 항상 MANUAL(expected_mysql_*·expected_postgres_*·expected_oracle_default)"
+    },
+    "D-03": {
+      "reason": "manual-by-design",
+      "engines": [
+        "mysql",
+        "postgres",
+        "oracle"
+      ],
+      "note": "양호 기준이 '기관 정책에 맞게 사용 기간·복잡도 적용' - CHECK_POLICY 가 모두 켜져 있어도 값의 정책 적합성은 MANUAL(expected_mssql_hardened). 취약 방향은 expected_mssql_vuln(sa CHECK_POLICY=OFF)·cases/login-no-policy 로 검증 / MySQL·PostgreSQL·Oracle: 양호 기준이 '기관 정책에 맞게' - 정책 시행 메커니즘이 켜져 있으면 값의 적합성은 MANUAL(cases/validate-password-installed·passwordcheck-loaded·password-life-time-set). 취약 방향(메커니즘 전무 → VULN)은 cases/no-password-policy·no-passwordcheck 로 검증"
+    },
+    "D-04": {
+      "reason": "manual-by-design",
+      "engines": [
+        "mysql",
+        "postgres",
+        "oracle"
+      ],
+      "note": "관리자 권한이 '필요한' 계정인지는 업무 판단 - check 는 sysadmin 구성원 목록만 제공하고 항상 MANUAL / MySQL·PostgreSQL·Oracle: 관리자 권한이 '필요한' 계정인지는 업무 판단(guide automation=manual) - 권한 보유 계정 목록만 제공, 항상 MANUAL"
+    },
+    "D-06": {
+      "reason": "manual-by-design",
+      "engines": [
+        "mysql",
+        "postgres",
+        "oracle"
+      ],
+      "note": "공용 계정 여부는 실제 사용 형태를 알아야 판단 - check 는 로그인 가능 계정 목록만 제공하고 항상 MANUAL / MySQL·PostgreSQL·Oracle: 공용 계정 여부는 실제 사용 형태를 알아야 판단(guide automation=manual) - 로그인 가능 계정 목록만 제공, 항상 MANUAL"
+    },
+    "D-12": {
+      "reason": "env-unavailable",
+      "engines": [
+        "oracle"
+      ],
+      "note": "L-05: 가이드상 Oracle 12.2 이상은 리스너 비밀번호 미지원(해당 없음) - CI 이미지(gvenzl 26ai)에서는 항상 NA(expected_oracle_default). 12.1 이하 listener.ora PASSWORDS_ 분기는 실기 재현 불가"
+    },
+    "D-20": {
+      "reason": "manual-by-design",
+      "engines": [
+        "postgres",
+        "oracle"
+      ],
+      "note": "PostgreSQL·Oracle: guide automation=manual - 관리자 외 Object Owner 가 인가된 애플리케이션 스키마인지는 업무 판단이라 소유자가 있으면 MANUAL(cases/non-admin-owner), 없으면 GOOD(expected_postgres_*·expected_oracle_default)"
+    },
+    "D-25": {
+      "reason": "manual-by-design",
+      "engines": [
+        "mysql",
+        "postgres",
+        "oracle"
+      ],
+      "note": "보안 패치 적용 여부는 벤더 공지와 대조해야 함 - check 는 버전만 제공하고 항상 MANUAL / MySQL·PostgreSQL·Oracle: 패치 적용 여부는 벤더 공지 대조 필요(guide automation=manual) - 버전만 제공, 항상 MANUAL"
+    },
+    "D-26": {
+      "reason": "manual-by-design",
+      "engines": [
+        "postgres",
+        "oracle"
+      ],
+      "note": "양호 기준 '감사 로그 저장 정책 수립·적용' - 감사가 켜져 있어도 범위의 기관 정책 적합성은 MANUAL(cases/audit-enabled). 취약 방향(감사 없음·비활성)은 expected_mssql_*·cases/audit-disabled 로 검증 / PostgreSQL·Oracle: 양호 기준이 '감사 로그 저장 정책 수립·적용' - 로그/감사가 켜져 있으면 범위의 정책 적합성은 MANUAL(cases/collector-on·unified-policy-enabled). 취약 방향(logging_collector=off, audit_trail=NONE·통합 감사 정책 없음 → VULN)은 cases/collector-off·audit-none 으로 검증"
+    }
+  }
 }

@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 18 * * 6"   # 매주 일요일 03:00 KST - oracle job(무거운 이미지)을 주 1회 돌리기 위함(다른 job 도 함께 돈다)
   workflow_dispatch:
     inputs:
       bootstrap_windows:
@@ -251,3 +253,40 @@ jobs:
           path: |
             03_web/tests/fixtures/expected_iis_*.json
             08_dbms/tests/fixtures/expected_mssql_*.json
+
+  windows-cases:
+    # 02_windows / 07_pc 항목별 양방향 판정 케이스(1.4.0, 02_windows/tests/case_runner.ps1): 항목마다 가이드 '취약' 상태 → VULN,
+    # '양호' 상태 → GOOD 을 실제로 만들어 run.ps1 -i <코드> 로 확인하고, 조치(auto/confirm)는 취약 상태에서 직접 적용 → GOOD →
+    # fix.ps1 -Rollback → 취약 상태로 돌아왔는지(실제 값·상태 스냅샷)까지 본다. 상태를 실제로 바꾸므로 휘발성 러너에서만 실행한다.
+    # IIS·FTP·DNS·SNMP 케이스용 기능은 첫 단계에서 설치한다(케이스마다 서비스 상태를 명시적으로 만들고 되돌린다).
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        category: [02_windows, 07_pc]
+    steps:
+      - uses: actions/checkout@v4
+      # run: blocks below are ASCII only (Windows PowerShell 5.1 reads the generated script without BOM)
+      - name: features for 02_windows cases (IIS, FTP, DNS, SNMP)
+        if: matrix.category == '02_windows'
+        shell: powershell
+        run: |
+          Install-WindowsFeature Web-Server, Web-Ftp-Server, Web-Scripting-Tools, Web-Mgmt-Console, DNS, SNMP-Service -IncludeManagementTools | Format-Table -AutoSize
+          Get-Service W3SVC, FTPSVC, DNS, SNMP -ErrorAction SilentlyContinue | Format-Table Name, Status, StartType -AutoSize
+          # first request starts the IIS worker process, which grants its app pool SID user rights (secpolicy) - do it before the baseline snapshot
+          try { (Invoke-WebRequest http://localhost/ -UseBasicParsing -TimeoutSec 60).StatusCode } catch { $_.Exception.Message }
+      - name: cases (${{ matrix.category }})
+        shell: powershell
+        run: |
+          .\02_windows\tests\case_runner.ps1 -Category ${{ matrix.category }}
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  oracle:
+    # 08_dbms Oracle(gvenzl/oracle-free 26ai, 08_dbms/tests/Dockerfile.oracle 에서 다이제스트 고정) 항목별 양방향 케이스·조치·원복.
+    # 이미지가 약 2.8GB 라 매 push/PR 가 아니라 주간 스케줄과 수동 실행에서만 돈다(KNOWN_ISSUES L-05).
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh 08_dbms/tests/run_tests.sh oracle
