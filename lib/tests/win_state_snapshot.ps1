@@ -145,7 +145,8 @@ function Compare-WinStateSnapshot {
         $lines = @($diff | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" })
         if ($k -eq "temp") {
             $new = @($diff | Where-Object SideIndicator -eq "=>" | ForEach-Object InputObject)
-            $hardNew = @($new | Where-Object { $_ -like "U|*" -or ($_ -like "W|*" -and ($_ -split '\\').Count -eq 1) })
+            # 셸(explorer)이 알림 영역 아이콘 캐시로 만드는 NotifyIconGeneratedAumid_*.png 는 OS 활동 - 참고로만(run 41314011676)
+            $hardNew = @($new | Where-Object { ($_ -like "U|*" -or ($_ -like "W|*" -and ($_ -split '\\').Count -eq 1)) -and $_ -notmatch '\\NotifyIconGeneratedAumid_\d+\.png$' })
             $softNew = @($new | Where-Object { $hardNew -notcontains $_ })
             if ($SoftAreas -contains $k) { $softNew += $hardNew; $hardNew = @() }
             if ($hardNew.Count -gt 0) { $fail += "${Label}: 임시 폴더에 남은 파일: $(($hardNew | Select-Object -First 15) -join ', ')" }
