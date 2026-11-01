@@ -81,6 +81,9 @@ def collect(cat: str) -> dict[tuple[str, str], set[str]]:
     cases = os.path.join(fx, "cases", "cases.json")
     if os.path.isfile(cases):
         for c in load_json(cases):
+            if len(engines) > 1 and c.get("engine") not in engines:
+                # 다중 엔진 카테고리 러너는 engine 이 없거나 모르는 케이스를 실행하지 않는다 - 세면 거짓 커버리지
+                raise SystemExit(f"FAIL: {cases}: engine 이 없거나 알 수 없는 케이스 {c}")
             eng = c.get("engine") or engines[0]
             seen.setdefault((eng, c["code"]), set()).add(c["expect"])
     return seen

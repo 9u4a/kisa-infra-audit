@@ -90,8 +90,17 @@ echo "DETAIL=$(tr -d '\n' < "$R" | grep -oE '"detail"[[:space:]]*:[[:space:]]*"(
 grade=$(. lib/common.sh >/dev/null 2>&1; guide_field 03_web/guide.json "$CODE" fix)
 mode=$(sed -n 's/^# FIX:[[:space:]]*\([A-Z]*\).*/\1/p' "$CASE" | head -n 1)
 why=$(sed -n 's/^# FIX:[[:space:]]*[A-Z]*[[:space:]]*//p' "$CASE" | head -n 1)
-if [ "$EXPECT" != VULN ] || [ ! -f "03_web/fixes/$CODE.sh" ] || [ "$grade" = manual ] || [ -z "$grade" ]; then
+if [ "$EXPECT" != VULN ] || [ "$grade" = manual ]; then
     echo "FIX_MODE=n/a"; exit 0
+fi
+# auto/confirm 등급인데 조치 스크립트가 없으면 케이스가 사유를 밝혀야 한다(조치 검증이 조용히 빠지지 않게 - 1.4.0 리뷰)
+if [ -z "$grade" ] || [ ! -f "03_web/fixes/$CODE.sh" ]; then
+    if [ "$mode" = SKIP ] && [ -n "$why" ]; then
+        echo "FIX_MODE=SKIP"; echo "FIX_WHY=$why"
+    else
+        echo "FIX_MODE=NOFIXFILE"; echo "FIX_WHY=fix 등급 '${grade:-없음}' 인데 03_web/fixes/$CODE.sh 없음 - 케이스에 '# FIX: SKIP <사유>' 필요"
+    fi
+    exit 0
 fi
 mode=${mode:-GOOD}
 echo "FIX_MODE=$mode"

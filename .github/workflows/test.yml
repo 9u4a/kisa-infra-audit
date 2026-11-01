@@ -43,6 +43,13 @@ jobs:
             exit 1
           fi
 
+      - name: 판정 양방향 검증 커버리지(1.4.0)
+        # 각 (카테고리, 엔진, 항목)이 GOOD·VULN 기대값을 모두 갖거나 사유 있는 면제(coverage_exempt.json)인지 확인한다.
+        # 케이스가 실제로 실행되는지는 각 러너가 확인한다(선언만 세는 게이트).
+        run: |
+          set -o pipefail
+          { echo '```'; python3 lib/tests/coverage.py --strict --list-missing; rc=$?; echo '```'; exit $rc; } | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: PSScriptAnalyzer (전체 *.ps1 / *.psm1)
         shell: pwsh
         run: |

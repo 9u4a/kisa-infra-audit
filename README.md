@@ -202,7 +202,7 @@ windows-latest 기반 vuln·hardened 픽스처 회귀 테스트, 조치 실적�
 python3 05_network/tests/run_tests.py  # Docker 불필요
 sh 01_unix/tests/run_tests.sh       # Docker 필요
 sh 03_web/tests/run_tests.sh        # Docker 필요
-sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL만, Oracle은 아직 없음)
+sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL; Oracle 은 CI oracle job - 08_dbms/tests 참고)
 ```
 `02_windows/tests/run_tests.ps1`, `07_pc/tests/run_tests.ps1`은 **실제 레지스트리를 바꾸고
 되돌리지 않으므로 로컬 개발자 PC에서 실행하지 마세요** — windows-latest CI 러너(매 job마다
@@ -234,6 +234,7 @@ sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL만, Oracle
 | 1.3.1 ✅ | Windows Server(CI 러너) 실기 검증: IIS 진단·조치 실적용·원복, MSSQL(LocalDB), 방화벽 안전장치 |
 | 1.3.2 ✅ | 진단(run) 전체 검수: 실행 검수 하네스 + 전 파일 코드 대조(약 130건 수정, [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)) |
 | 1.3.3 ✅ | 조치 후속 과제 F-R1~F-R9 해결, 실검증 테스트 교차검증(거짓 PASS 경로 16건 수정 - 원복 누락·무기한 대기 등 실제 결함 추가 발견) |
+| 1.4.0 ✅ | 전 항목 양방향 판정 검증(취약·양호 상태를 각각 세팅해 확인, 누락 0 - `lib/tests/coverage.py`), 현 상태 교차검증 결함 X-01~X-09 및 새로 드러난 판정·조치 결함 약 45건 수정 |
 | 1.x | 기존 지원 환경 내 버그 수정 및 자동화 정밀도 개선, CI 커버리지 확대(IIS/MSSQL/Oracle/rhel 등) |
 
 ## 라이선스 · 출처

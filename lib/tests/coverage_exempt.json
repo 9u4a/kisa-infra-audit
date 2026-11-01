@@ -64,7 +64,7 @@
     },
     "W-34": {
       "reason": "env-unavailable",
-      "note": "L-10(신규 제안): Telnet 서버는 Windows Server 2016 이상에 없음(지원 OS 중 2012 R2 만 해당) - 러너(Server 2025)에서 구동 상태를 만들 수 없음. 미설치 → GOOD 만 expected_* 로 검증"
+      "note": "L-10: Telnet 서버는 Windows Server 2016 이상에 없음(지원 OS 중 2012 R2 만 해당) - 러너(Server 2025)에서 구동 상태를 만들 수 없음. 미설치 → GOOD 만 expected_* 로 검증"
     },
     "W-35": {
       "reason": "manual-by-design",
@@ -80,7 +80,7 @@
     },
     "W-45": {
       "reason": "env-unavailable",
-      "note": "L-11(신규 제안): 백신 미설치 상태는 러너에서 만들 수 없음(Defender 제거·서비스 중지에 재부팅 필요). 설치 → GOOD 만 expected_* 로 검증"
+      "note": "L-11: 백신 미설치 상태는 러너에서 만들 수 없음(Defender 제거·서비스 중지에 재부팅 필요). 설치 → GOOD 만 expected_* 로 검증"
     },
     "W-47": {
       "reason": "manual-by-design",
@@ -253,7 +253,7 @@
       "engines": [
         "mssql"
       ],
-      "note": "L-09(신규 제안): SHA-256 미만 해시는 SQL Server 2012 미만(2008 R2 이하)에서만 발생 - 러너 LocalDB(2019+)와 지원 OS 에서 재현 불가. 양호 방향(2012 이상 → GOOD)만 expected_mssql_* 로 검증"
+      "note": "L-09: SHA-256 미만 해시는 SQL Server 2012 미만(2008 R2 이하)에서만 발생 - 러너 LocalDB(2019+)와 지원 OS 에서 재현 불가. 양호 방향(2012 이상 → GOOD)만 expected_mssql_* 로 검증"
     },
     "D-10": {
       "reason": "manual-by-design",

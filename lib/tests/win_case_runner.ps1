@@ -79,6 +79,7 @@ function Invoke-CaseSuite {
             $s = Invoke-CaseChild -Prelude $Prelude -Script $k.Setup
             if (-not $s.Ok) { $fail += "${label}: 준비 실패 - $($s.Out)"; continue }
             $p1 = Invoke-CaseChild -Prelude $Prelude -Script $k.Probe
+            if ([string]::IsNullOrEmpty($k.Want)) { $fail += "${label}: 케이스 구현에 Want(준비 후 기대 상태)가 없음"; continue }
             if (-not $p1.Ok -or $p1.Out -notmatch $k.Want) { $fail += "${label}: 준비 후 상태가 의도와 다름(준비가 반영되지 않음) - 기대 /$($k.Want)/ 실제 '$($p1.Out)'"; continue }
             $mid = Invoke-CaseDiag -RunPs1 $runPs1 -ExtraArgs $DiagArgs -Code $c.code -Tag "${tag}_mid"
             Write-Host "  상태: $($p0.Out) → $($p1.Out) / 판정: $($pre.Status) → $($mid.Status) ($($mid.Detail))"
@@ -126,7 +127,8 @@ Write-Output ('DIRECTFIX|' + $Global:FixStatus + '|' + $Global:FixDetail)
                     else { Write-Host "  원복: 판정 $($back.Status), 상태 동일" }
                 }
             } elseif ($c.expect -eq "VULN" -and (Test-Path $fixFile) -and $guide[$c.code].fix -ne "manual" -and -not $k.Fix) {
-                Write-Host "  참고: 조치 스크립트가 있으나 이 케이스는 조치 검증 대상 아님 - $($k.Note)"
+                if ([string]::IsNullOrWhiteSpace($k.Note)) { $fail += "${label}: 조치 스크립트가 있는데 Fix 검증도, 제외 사유(Note)도 없음" }
+                else { Write-Host "  참고: 조치 스크립트가 있으나 이 케이스는 조치 검증 대상 아님 - $($k.Note)" }
             }
         } finally {
             if ($cleanupNeeded) {

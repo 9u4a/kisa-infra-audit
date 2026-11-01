@@ -66,6 +66,7 @@ while read -r code name base fx expect; do
         why=" 실행되지 않음(결과 없음: $(head -c 200 "$OUT/$code.$name.err" 2>/dev/null | tr '\n' ' '))"
     else
         [ "$(kv CASE_FN)" = ok ] || why="$why 준비함수($(kv CASE_FN))"
+        [ "$(kv SETUP_RC)" = 0 ] || why="$why 준비실패(SETUP_RC=$(kv SETUP_RC))"
         [ "$(kv CHANGED)" = yes ] || why="$why 준비가 상태를 바꾸지 않음(CHANGED=$(kv CHANGED))"
         [ "$(kv STATUS)" = "$expect" ] || why="$why 판정(기대=$expect 실제=$(kv STATUS): $(kv DETAIL))"
         if [ "$fx" != "-" ]; then

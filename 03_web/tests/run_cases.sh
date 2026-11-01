@@ -96,7 +96,9 @@ while [ "$i" -lt "$n" ]; do
     fm=$(kv FIX_MODE)
     fixinfo=""
     case "$fm" in
-        ''|n/a) ;;
+        n/a) ;;
+        '') why="$why 조치단계결과없음(FIX_MODE 미출력 - 케이스 스크립트가 중간에 끝남)" ;;
+        NOFIXFILE) why="$why 조치스크립트없음($(kv FIX_WHY))" ;;
         SKIP) fixinfo=" [조치 생략: $(kv FIX_WHY)]"
               [ -n "$(kv FIX_WHY)" ] || why="$why 조치SKIP사유없음" ;;
         GOOD|MANUAL)
@@ -108,6 +110,7 @@ while [ "$i" -lt "$n" ]; do
             [ "$(kv ROLLBACK)" = same ] || why="$why 원복후상태다름"
             fixinfo=" [조치 $(kv FIX_RESULT)→$(kv FIX_RECHECK), 원복 $(kv ROLLBACK)]" ;;
         NONE)
+            [ -n "$(kv FIX_RESULT)" ] || why="$why 조치기록없음(fix.sh 가 이 항목을 처리하지 않음, FIX_RC=$(kv FIX_RC))"
             [ "$(kv FIX_RESULT)" != APPLIED ] || why="$why 조치가적용됨(기대: 미적용)"
             [ "$(kv FIX_STATE)" = same ] || why="$why 미적용조치가설정을바꿈"
             [ "$(kv FIX_RECHECK)" = VULN ] || why="$why 미적용후재진단=$(kv FIX_RECHECK)"

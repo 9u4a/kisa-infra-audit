@@ -40,7 +40,7 @@
 | R-08 | 중 | S7 | 부분 결과 trap 이 INT/TERM 만 잡음. SSH 끊김(HUP)에는 result.partial.json 이 남지 않음. | 해결(1.3.2): HUP 도 부분 결과 저장 |
 | R-09 | 하 | S1 | `-i ../../x` 같은 항목 코드를 검증하지 않아 임의 경로의 .sh 를 root 로 source 할 수 있음. `-o` 로 남이 만든 기존 디렉터리를 그대로 받아들임. | 해결(1.3.2): `code_is_known` 으로 -i 코드 검증(-o 기존 폴더 문제는 열림) |
 | R-10 | 중 | S6 | (PowerShell) 항목이 1개일 때 `Save-ResultJson` 의 items 가 배열이 아니라 객체로 저장됨. 보고서 빈 화면, merge.py TypeError. | 해결(1.3.2): `Save-ResultJson` items 를 `@()` 로 항상 배열(-i W-01 실측 확인) |
-| R-11 | 중 | S5 | (pwsh 7) ConvertTo-Json 이 `<` 를 이스케이프하지 않아 증적의 `</script>` 가 report.html 에서 실행될 수 있음. PS 5.1 은 해당 없음. | 해결(1.3.2): result.json 의 `< > &` 를 `<` 등으로 이스케이프(PS 5.1/7 공통) |
+| R-11 | 중 | S5 | (pwsh 7) ConvertTo-Json 이 `<` 를 이스케이프하지 않아 증적의 `</script>` 가 report.html 에서 실행될 수 있음. PS 5.1 은 해당 없음. | 재해결(1.4.0): 1.3.2 의 치환이 `'<'→'<'` 로 저장돼 아무것도 바꾸지 않았다(교차검증 X-01). `\u003c` 등으로 고치고 CI 에서 pwsh 7 로 `</script>` 증적을 저장해 확인한다 |
 | R-12 | 하 | S5 | `New-PrivateDirectory` 가 ACL 제한에 실패해도 경고만 하고 진행. | 해결(1.3.2): ACL 제한·chmod 실패 시 예외로 중단, run.ps1(02/03/07)은 exit 2 |
 
 ### 1-2. 01_unix
@@ -169,6 +169,89 @@
 - IIS 조치 원복이 열거형 속성(`httpErrors@errorMode` 등)을 되돌리지 못하면서 "원복 완료"로 보고(WEB-22) → 값 정규화 + 원복 후 재조회 확인.
 - Windows secedit 조치·원복이 %TEMP% 에 `.jfm` 찌꺼기를 남김 → 전용 임시 폴더째 삭제.
 
+### 1-8. 현 상태 교차검증과 전 항목 양방향 판정 검증 — 2026-10-29~30 (1.4.0)
+
+독립 에이전트가 KNOWN_ISSUES 를 보기 전에 코드만으로 v1.3.3 을 평가했고, 실제 결함 9건(X-01~X-09)을 찾았다. 아울러
+v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64, PC 2/18, DBMS 1/26 만 GOOD·VULN 양방향) check 가
+항상 같은 값을 돌려주도록 망가져도 테스트가 잡지 못했다. 1.4.0 에서 **모든 (카테고리, 엔진, 항목)을 취약 상태와 양호
+상태로 각각 세팅해 판정을 확인**하도록 바꿨다.
+- 커버리지 판정기 `lib/tests/coverage.py --strict`: 421개(카테고리×엔진×항목) 중 양방향 264, 사유 있는 면제 157, 누락 0.
+  - 면제 사유는 `manual-by-design`(정책·인적 판단), `na-for-engine`(가이드 대상 아님), `env-unavailable`(아래 L-xx)
+    세 가지로 제한된다(`lib/tests/coverage_exempt.json`).
+- 항목별 케이스(`tests/fixtures/cases/`)는 상태를 세팅한 뒤 다시 읽어 확인한다. 선언된 케이스가 하나라도 실행되지 않으면
+  FAIL 이다. VULN 케이스는 조치 적용 → 재진단 GOOD → 원복 → 상태 동일까지 확인한다.
+- 기대값은 가이드 판단기준에서 정한다. 도구 출력으로 기대값을 만들던 `-Bootstrap` 은 차이 출력 전용으로 바꿨다(X-08).
+- 음성 대조: 케이스 준비 단계 무력화, check 강제 GOOD, secedit 캐시 무효화 제거 — 모두 FAIL 하는 것을 확인했다.
+
+**교차검증 결함(X)**
+
+| ID | 심각도 | 내용 | 상태 |
+|---|---|---|---|
+| X-01 | 중 | R-11 수정이 실제로는 아무것도 바꾸지 않았다(위 R-11 참고). | 해결(1.4.0) |
+| X-02 | 상 | 보안정책(secedit) 캐시를 비우지 않아, 조치 후 재검증이 이전 값을 읽었다. 실제로 적용됐는데 원복되거나, 연속 조치에서 오판했다(02/07). | 해결: `Clear-SecEditCache`, 연속 조치 회귀 케이스 |
+| X-03 | 중 | N-08 이 `transport input ssh telnet` 을 놓쳐 거짓 양호였다. 조치도 같은 정규식을 썼다. | 해결: 토큰 단위 `vty_allows_telnet` |
+| X-04 | 상 | fix.sh 가 조치를 같은 셸에서 실행했다. 조치 도중 셸이 죽으면 원복·기록 없이 반쯤 바뀐 상태로 남았다. | 해결: `run_fix_isolated` |
+| X-05 | 중 | merge.py 가 BOM 이 있는 Windows result.json 을 건너뛰었다. | 해결: utf-8-sig, `lib/tests/merge_test.py` |
+| X-06 | 상 | fix 가 result.json 의 호스트·카테고리를 확인하지 않아, 다른 서버의 결과로도 조치했다. | 해결: 불일치 시 exit 2(`--force`), 7일 경과 시 확인 |
+| X-07 | 중 | U-01 이 문법 검사를 생략하고 APPLIED 로 남는 경로가 있었다. 01_unix 조치 21곳이 `sed -i` 로 심볼릭 링크를 깼다. | 해결: SKIPPED/ERROR, `fix_sed_inplace`, CI 금지 검사 |
+| X-08 | 상 | Windows·IIS·MSSQL 기대값을 도구 자신의 출력에서 만들어, 오판이 정답으로 고정됐다. | 해결: 위 양방향 검증 |
+| X-09 | 중 | fix.ps1 재검증에 run.ps1 의 조회 실패 → ERROR 변환이 없었다. | 해결(02/07) |
+
+**양방향 검증이 새로 잡아낸 판정·조치 결함**(모두 수정, 재현 케이스 추가)
+
+| 영역 | ID | 내용 |
+|---|---|---|
+| 05_network | N-R1 | N-07 이 `exec-timeout` 의 초를 버려 `0 0`(무제한)을 양호로, 초를 생략한 줄을 미설정으로 판정 |
+| | N-R2 | N-10 이 배너가 있으면 항상 MANUAL — 경고 문구·시스템 정보 노출로 판정 |
+| | N-R3 | N-22 가 ACL 의 인터페이스 적용 여부를 보지 않아 양호 판정 불가 |
+| | N-R4 | N-31 명시적 `ip directed-broadcast` 가 MANUAL 로 남음 → 취약(조치 추가) |
+| 01_unix | U-C1 | `pgrep/pkill -f` 가 명령줄 전체를 봐 무관한 프로세스로 거짓 취약, 조치가 무관한 프로세스를 종료 |
+| | U-C2 | U-42 가 프로세스를 먼저 종료하고 상태를 기록해 원복 시 서비스가 기동되지 않음 |
+| | U-C3 | U-65/66 이 enable 상태를 기록하지 않아 원복 후에도 켜진 채로 남음 |
+| | U-C4 | `fix_service_disable` 이 유닛 종류 없는 이름에 항상 실패 — 서비스 조치 다수가 아무것도 못 끄고 원복 |
+| | U-C5 | U-47 이 주석 처리된 설정을 취약으로 판정 |
+| 03_web | WEB-C1 | WEB-05 CGI 를 켜면 항상 MANUAL → 실행 디렉터리 제한 여부로 판정 |
+| | WEB-C2 | WEB-11 Tomcat 항상 MANUAL → appBase 위치로 판정 |
+| | WEB-C3 | WEB-13 `<Resources>`·`<ResourceLink>` 를 DB 리소스로 셈 |
+| | WEB-C4 | WEB-06/12 조치가 context.xml `allowLinking` 을 남겨 항상 원복 |
+| | WEB-C5 | WEB-08 Nginx `client_max_body_size 0` 조치 분기 없음 |
+| | WEB-C6 | WEB-02 Tomcat CredentialHandler 해시를 양호로 인정하지 않음 |
+| | C-WEB07 | IIS 경로 삭제 실패를 무시하고 APPLIED, 원복이 폴더를 중첩 복사 |
+| | C-WEB09 | IIS 앱 풀 identityType 을 항상 빈 값으로 읽어 조치·원복이 무동작 |
+| 08_dbms | D-C1 | Oracle D-01 이 정상 서버도 영구 취약 → `DBA_USERS_WITH_DEFPWD` 기준(deviation) |
+| | D-C2 | Oracle D-12 조치 NA 기준이 check 와 어긋남 |
+| | D-C3 | MySQL D-07 조치 후 재기동이 항상 실패(datadir 소유자) |
+| | D-C4 | PostgreSQL D-26 원복 후 설정 재적재 없음 |
+| | D-C5·C6 | Oracle D-19/26 원복이 미지정 파라미터를 SET, PFILE 사본 복사 실패로 항상 "일부 실패" |
+| | D-C7 | `oracle_query` 탭 패딩으로 조치 SQL 이 깨짐 |
+| | D-C8 | Oracle REVOKE 실패를 무시하고 APPLIED |
+| | C-D01 | MSSQL D-01 취약 판정 경로가 없었음 → 서버 안 PWDCOMPARE(일치 여부만, 해시 미저장) |
+| | C-D23·D24 | MSSQL 확장 프로시저를 `sys.objects` 에서 찾아 0건 — D-24 취약 불가, D-23 항상 MANUAL → `sys.all_objects` |
+| 02_windows·07_pc | F-W18 | `Get-ServiceChecked` 가 표시 이름까지 찾아 "Browser" 를 커널 드라이버 bowser 로 오인 — W-18 이 항상 취약 |
+| | F-W14 | 구성원 1명일 때 `.Count` 가 `$null` 이라 항상 취약 |
+| | F-W21 | FTP 가 구동 중이면 SSL 필수 설정과 무관하게 취약 |
+| | F-W24 | 존재하지 않는 속성(denyByDefault)을 읽어 IP 제한을 설정해도 항상 취약 |
+| | F-W01 | 관리자 이름 변경 직후 WMI 조회가 비어 ERROR |
+| | F-W20 | NetBIOS 조치가 엉뚱한 레지스트리 위치에 써서 효과 없음 |
+| | F-W25 | DNS 영역 전송 조치가 실제로 바뀌지 않는데 APPLIED |
+| | F-W41 | 서비스 상태를 백업하지 않아 원복 후에도 W32Time 이 구동 상태 |
+| | F-W42 | `Limit-EventLog` 가 Server 2025 에서 크기를 바꾸지 못함 → EventLogConfiguration API |
+| | F-W17·PC-04 | Server 2025 가 기본 공유 삭제를 거부하는데 "즉시 제거"로 보고 → Server 서비스 재시작, 실패는 ERROR |
+| | F-W39·PC-13 | 서명 업데이트는 원복 불가인데 고지 없음 → `Register-FixNoRollback` |
+
+**케이스 하네스 교차검증(거짓 PASS 경로)** — 독립 리뷰어가 새 하네스를 코드로 검토했다. 선언된 케이스가 조용히 빠지거나
+판정 비교를 건너뛰는 경로는 없었다. 아래는 조치 검증·준비 확인이 암묵적으로 생략되던 경로다.
+
+| ID | 심각도 | 내용 | 상태 |
+|---|---|---|---|
+| H-01 | 중 | coverage 게이트가 CI 에 없었다 | 해결: static-analysis 에서 `--strict` |
+| H-02 | 중 | 03_web: fix 등급이 auto/confirm 인데 조치 스크립트가 없으면 조치 검증 없이 PASS(WEB-05 VULN 4건). FIX_MODE 미출력도 PASS. `FIX: NONE` 은 fix.sh 가 아예 돌지 않아도 PASS | 해결: 사유(`# FIX: SKIP`) 없으면 FAIL, FIX_MODE 없음 FAIL, NONE 은 changes.log 기록 필수 |
+| H-03 | 하 | 01_unix: 준비 함수 종료 코드(SETUP_RC)를 보지 않았다 | 해결 |
+| H-04 | 하 | IIS/MSSQL: 준비 후 기대 상태(Want)가 비면 확인을 통과, 조치 스크립트가 있는데 Fix 도 제외 사유도 없는 케이스를 허용 | 해결: 둘 다 FAIL |
+| H-05 | 하 | engine 이 빠진 케이스는 다중 엔진 러너가 실행하지 않는데 coverage 는 첫 엔진으로 셌다(현재 해당 케이스 없음) | 해결: coverage.py 가 FAIL |
+| H-06 | 하 | Oracle 케이스는 주간·수동 실행만 돈다 — PR/push 에서 Oracle 판정 회귀가 바로 드러나지 않는다 | 한계(L-05) |
+| H-07 | 하 | 원복 동일성 비교 범위: 03_web 은 엔진 설정 트리만, MSSQL 은 Probe 한 줄, 02/07 레지스트리는 check 가 읽는 키만 본다. MySQL 스냅샷에 mysqld 실행 uid 가 없다 | 한계: 현재 조치가 바꾸는 대상은 비교 범위 안에 있다. 범위 밖을 건드리는 조치를 새로 만들면 비교 범위도 넓혀야 한다 |
+
 ## 2. 검증 환경의 한계 (실기로 확인하지 못한 범위)
 
 | ID | 내용 |
@@ -181,3 +264,6 @@
 | L-06 | **PC-14 Defender**: 러너에서 켤 수 없어 조치는 "실패 후 원복" 경로만 확인했다. |
 | L-07 | **05_network**: 실제 장비가 아닌 텍스트 픽스처 기반 판정 로직 테스트다. |
 | L-08 | **CI 일시 장애**: PowerShell Gallery 다운로드 실패로 static-analysis 가 실패할 수 있다(재실행으로 해결, 코드 문제 아님). |
+| L-09 | **MSSQL D-08**: SHA-256 미만 비밀번호 해시는 SQL Server 2012 미만에서만 생긴다. 러너 LocalDB(2019 이상)에서 만들 수 없어 양호 방향만 검증한다. |
+| L-10 | **W-34 Telnet 서버**: Windows Server 2016 이상에는 Telnet 서버가 없다(지원 OS 중 2012 R2 만 해당). 러너(Server 2025)에서 구동 상태를 만들 수 없어 미설치 → GOOD 만 검증한다. |
+| L-11 | **W-45 백신 미설치**: Defender 제거·서비스 중지에 재부팅이 필요해 러너에서 미설치 상태를 만들 수 없다. 설치 → GOOD 만 검증한다. |

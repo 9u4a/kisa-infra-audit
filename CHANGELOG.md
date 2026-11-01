@@ -6,6 +6,55 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-30
+### 전 항목 양방향 판정 검증 + 현 상태 교차검증 결함(X-01~X-09)
+독립 에이전트가 v1.3.3 을 코드만으로 평가해 실제 결함 9건을 찾았고, 모두 고쳤다. 아울러 모든 (카테고리, 엔진, 항목)을
+취약 상태와 양호 상태로 각각 세팅해 판정이 맞는지 확인하도록 테스트를 바꿨다. 이 과정에서 판정·조치 결함 약 45건을
+새로 찾아 고쳤다. 항목별 내용은 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) 1-8.
+
+### Added — 테스트
+- `lib/tests/coverage.py --strict`(CI static-analysis): 양방향 검증 누락이 있으면 FAIL.
+  - 결과: 421개 중 양방향 264, 사유 있는 면제 157, 누락 0.
+  - 면제는 `lib/tests/coverage_exempt.json` 에 사유와 함께 기록한다(manual-by-design / na-for-engine / env-unavailable).
+- 항목별 케이스 하네스: 세팅 → 상태 재확인 → 진단 → 기대값 비교. VULN 케이스는 조치 → 재진단 → 원복 → 상태 동일까지 확인한다.
+  - 01_unix: 55건, systemd 케이스 컨테이너, `--privileged` 없음.
+  - 03_web: 69건(Apache/Debian Apache/Nginx/Tomcat). IIS 는 19건.
+  - 05_network: 설정 조각 케이스와 조치 후 재진단 시뮬레이터.
+  - 08_dbms: MySQL 11 / PostgreSQL 12 / Oracle 33건(DB 서버 안 로컬 모드). MSSQL 은 11건.
+  - 02_windows 146건, 07_pc 32건: 새 CI job `windows-cases`.
+- CI `oracle` job: 주간 스케줄과 수동 실행.
+- 모든 job 이 주 1회 정기 실행된다.
+- `lib/tests/merge_test.py`.
+
+### Changed
+- 기대값을 도구 출력에서 만들던 `-Bootstrap` 은 이제 차이 출력 전용이다(X-08).
+- fix 진입점이 입력 result.json 의 호스트·카테고리를 확인한다. 다르면 exit 2(`--force`/`-Force` 로 무시), 7일이 지났으면 확인을 받는다(X-06).
+- sh fix 는 항목마다 서브셸에서 실행한다(`run_fix_isolated`, X-04).
+- `sed -i` 대신 `fix_sed_inplace` 를 쓴다(X-07). CI 가 이를 검사한다.
+
+### Fixed
+- 교차검증 결함
+  - X-01: R-11 재해결.
+  - X-02: secedit 캐시.
+  - X-03: N-08 `transport input ssh telnet`.
+  - X-05: merge.py 가 BOM 을 읽지 못함.
+  - X-07: U-01 문법 검사 생략.
+  - X-09: fix.ps1 재검증의 ERROR 변환.
+- 양방향 검증으로 찾은 결함: N-R1~R4, U-C1~C5, WEB-C1~C6, C-WEB07/09, D-C1~C8, C-D01/D23/D24, F-W01/14/17/18/20/21/24/25/39/41/42, PC-04/13.
+- 그동안 틀린 판정을 정답으로 고정하고 있던 픽스처 기대값을 바로잡았다.
+  - 02_windows `expected_hardened.json` W-18.
+  - MSSQL 픽스처.
+- guide.json
+  - 03_web envs 를 가이드 "대상" 원문과 맞췄다.
+  - Oracle D-01 deviation 을 기록했다.
+
+- 케이스 하네스 교차검증(H-01~H-05): 조치 검증·준비 확인이 암묵적으로 생략되던 경로를 FAIL 로 바꿨다.
+
+### Known limitations
+- L-09: MSSQL D-08 의 2012 미만 해시.
+- L-10: W-34 Telnet 서버(2016 이상에는 없음).
+- L-11: W-45 백신 미설치 상태를 재현할 수 없음.
+
 ## [1.3.3] - 2026-10-28
 ### 조치 후속 과제(F-R1~F-R9) 해결 + 실검증 테스트 교차검증
 1.3.2 에서 진단이 엄격해지며 드러난 조치 쪽 과제를 모두 고쳤다. 아울러 독립 리뷰어가 run/fix 안전 테스트 자체를 검토해
