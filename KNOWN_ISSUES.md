@@ -259,7 +259,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | L-01 | **도메인 컨트롤러**: DC 전용 분기(W-01~03 계정 열거 생략, W-16 SYSVOL 제외, W-32 manual)는 코드 검토만 했다. CI 러너는 재부팅이 필요한 DC 승격을 할 수 없다. |
 | L-02 | **한글 Windows**: 러너가 영문(en-US)이라 로캘 의존 출력(W-40 auditpol, W-34 tlntadmn, PC-08 bcdedit)은 한글판에서 실측하지 못했다. |
 | L-03 | **Solaris/AIX/HP-UX**: 문서 기준 구현이며 실기 검증 불가(결과마다 "미검증" 문구가 붙음). |
-| L-04 | **RHEL 계열·Debian Apache·RHEL Tomcat**: CI 픽스처는 Debian 12(01_unix)와 공식 httpd/nginx/tomcat 이미지만 쓴다. 배포판 패키지 레이아웃(WEB-R1, WEB-R4)은 검증 범위 밖이었다. |
+| L-04 | **RHEL 계열·RHEL Apache/Tomcat 패키지**: CI 픽스처는 Debian 12(01_unix)와 공식 httpd/nginx/tomcat 이미지, Debian apache2 패키지(1.4.0 `apache-debian`)만 쓴다. RHEL 계열 OS 와 그 패키지 레이아웃(httpd·tomcat, WEB-R1/WEB-R4)은 검증 범위 밖이다. |
 | L-05 | **Oracle**: 1.4.0 부터 CI `oracle` job(주간 스케줄·수동 실행, gvenzl/oracle-free 26ai 다이제스트 고정)에서 22항목 양방향 케이스·조치·원복을 돈다 - 매 push 에는 돌지 않는다(이미지 약 2.8GB). 남은 한계: ① D-12(리스너 비밀번호)는 12.2 이상에서 NA(가이드 명시)라 취약/양호 분기(12.1 이하 listener.ora)를 실기로 만들 수 없다(coverage 면제 env-unavailable) ② D-07 취약(Oracle 을 root 로 구동)은 Oracle 이 root 기동을 거부해 root 소유 `ora_pmon_*` 모의 프로세스로 check 의 /proc 판정 경로만 검증한다. |
 | L-06 | **PC-14 Defender**: 러너에서 켤 수 없어 조치는 "실패 후 원복" 경로만 확인했다. |
 | L-07 | **05_network**: 실제 장비가 아닌 텍스트 픽스처 기반 판정 로직 테스트다. |
@@ -267,3 +267,73 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | L-09 | **MSSQL D-08**: SHA-256 미만 비밀번호 해시는 SQL Server 2012 미만에서만 생긴다. 러너 LocalDB(2019 이상)에서 만들 수 없어 양호 방향만 검증한다. |
 | L-10 | **W-34 Telnet 서버**: Windows Server 2016 이상에는 Telnet 서버가 없다(지원 OS 중 2012 R2 만 해당). 러너(Server 2025)에서 구동 상태를 만들 수 없어 미설치 → GOOD 만 검증한다. |
 | L-11 | **W-45 백신 미설치**: Defender 제거·서비스 중지에 재부팅이 필요해 러너에서 미설치 상태를 만들 수 없다. 설치 → GOOD 만 검증한다. |
+
+## 3. 검토 필요 사항 (1.4.0 기준, 2026-11-02)
+
+검증된 실행 환경은 README "검증된 실행 환경" 절을 참고한다. 이 절은 그 밖의 부분에서 사람이 판단하거나 확인해야 하는 것을 모은다.
+
+### 3-1. 결정 대기 (유지보수자 판단 필요)
+
+| ID | 대상 | 현재 상태 | 선택지 | 권장 |
+|---|---|---|---|---|
+| Q-01 | WEB-05 CGI 실행 디렉터리 제한 (Apache/Nginx/Tomcat) | 1.4.0 부터 VULN 판정이 나온다(WEB-C1). guide.json `fix=confirm` 인데 `03_web/fixes/WEB-05.sh` 가 없어 조치 대상에서 조용히 빠진다. 케이스는 `# FIX: SKIP` 사유로 통과시켰다 | ① `fix` 를 manual 로 바꾸고 `deviation` 에 사유 기록(CGI 를 지정 디렉터리로 옮기려면 콘텐츠·URL 이전 필요) ② 조치 스크립트 작성(예: `ScriptAlias` 밖 `ExecCGI` 제거) | ① |
+| Q-02 | WEB-17 가상 디렉터리 삭제 | 가이드 기준이 "불필요한" 가상 디렉터리라 Alias/Context 가 있으면 MANUAL, 없으면 GOOD. VULN 은 자동 판정하지 않는다(coverage 면제 manual-by-design). guide.json `fix=auto` 인데 조치 스크립트가 없다(VULN 이 나오지 않아 실행 경로 없음) | ① 면제 유지 + `fix` 를 manual 로 정정, deviation 기록 ② 샘플·문서 경로(`/manual`, `/docs`, `/examples` 등) 같은 알려진 불필요 경로만 VULN 으로 판정 | ② 검토 후 결정. 최소한 `fix` 등급 정정은 필요 |
+| Q-03 | WEB-10 불필요한 프록시 (Apache/Nginx/Tomcat, IIS 는 ARR 로 양방향 판정·조치) | ProxyPass/proxy_pass 가 있으면 MANUAL, 없으면 GOOD. VULN 은 자동 판정하지 않는다 | ① 면제 유지 ② `ProxyRequests On` 같은 정방향 오픈 프록시는 업무 필요와 무관하게 위험하니 VULN 으로 판정 | ② |
+| Q-04 | WEB-05·WEB-11·WEB-02 판정 범위 확장 | 1.4.0 에서 판정 근거를 넓혔다. WEB-05 는 실행 디렉터리 제한 여부(WEB-C1), WEB-11 Tomcat 은 appBase 위치(WEB-C2), WEB-02 는 Tomcat CredentialHandler 해시를 양호로 인정(WEB-C6). 그런데 guide.json `deviation` 에는 기록하지 않았다 | `deviation` 에 해석 근거 기록(루트 원칙 1) | 기록 |
+| Q-05 | 주간 스케줄 범위 | cron(일 03:00 KST)이 oracle job 만이 아니라 전 job 을 돈다 | ① 유지(주간 회귀 겸용) ② oracle 만 돌도록 다른 job 에 `if` 추가 | ① 비용 문제가 없다면 유지 |
+| Q-06 | Docker 이미지 태그 고정 | Oracle 만 다이제스트를 고정했다. `debian:12`·`httpd:2.4`·`nginx:latest`·`tomcat:10`·`mysql:8`·`postgres:16` 은 태그가 움직여 CI 결과가 엔진 버전 변화에 영향받는다 | ① 유지(새 버전 회귀를 빨리 발견) ② 다이제스트 고정 + 주기적 갱신 | ① 유지. 실패 시 이미지 버전부터 확인 |
+
+### 3-2. 검증 환경 밖 — 실사용 전 확인 권장
+
+코드에는 분기가 있지만 CI 실기 검증을 하지 않은 범위다. 이 환경에서 처음 돌릴 때는 dry-run 과 결과 검토를 먼저 할 것.
+
+| 영역 | 검증한 것 | 검증하지 않은 것 · 위험 | 참고 |
+|---|---|---|---|
+| 01_unix OS | Debian 12 | RHEL/Rocky/Alma(README 는 "Linux rhel/debian" 지원으로 표기), SUSE. PAM 파일 구조(`system-auth`/`password-auth`), `authselect`, 패키지 관리자, SELinux 관련 경로가 다르다. 대부분의 check 가 `rhel\|debian\|suse` 공용 분기라 판정 로직은 공유하지만, 조치(PAM·서비스)는 rhel 경로를 실기로 돌려 보지 않았다 | L-04. rockylinux 컨테이너 케이스 job 추가는 CI 커버리지 확대(허용 범위)로 가능 |
+| 01_unix 상용 Unix | — | Solaris/AIX/HP-UX 7항목은 문서 기준 구현이다(결과에 "미검증" 표기) | L-03 |
+| 02_windows OS | Server 2025 Datacenter, en-US, 워크그룹 | Server 2016/2019/2022(2012 R2 포함) 의 레지스트리 기본값·기능 차이, 한글 로캘 출력(auditpol·bcdedit 등), 도메인 컨트롤러 분기(W-01~03 열거 생략, W-16, W-32, W-60, W-63) | L-01, L-02, L-10 |
+| 07_pc | 서버 OS 위에서 PC 항목 실행 | Windows 10/11 클라이언트 SKU 실기 미검증. 에디션별 정책 차이와 Defender 실시간 감시(PC-14), 클라이언트 전용 기본값이 서버와 다를 수 있다 | L-06 |
+| 03_web | 공식 이미지 Apache/Nginx/Tomcat, Debian apache2, IIS 10.0 | RHEL httpd·tomcat 패키지 레이아웃, Tomcat 9.x/11.x, Nginx stable 계열, IIS 의 다른 OS 버전 | L-04 |
+| 08_dbms MSSQL | LocalDB 2025 | 정식 인스턴스(Express/Standard/Enterprise). 서비스 계정, 네트워크 프로토콜·포트, SQL Agent, 감사 대상 파일 위치가 LocalDB 와 다르다. SQL Server 2019/2022, 2012 미만 해시(D-08) | L-09 |
+| 08_dbms Oracle | 26ai Free 단일 인스턴스 | 19c 등 이전 버전, 12.1 이하 리스너 비밀번호(D-12), RAC/ASM. root 구동(D-07 VULN)은 모의 프로세스로만 검증 | L-05 |
+| 08_dbms MySQL/PostgreSQL | MySQL 8.4, PostgreSQL 16 | MySQL 8.0/5.7, MariaDB, PostgreSQL 다른 메이저 버전의 시스템 테이블·기본값 차이 | — |
+| 05_network | IOS 15.2 형식 텍스트 픽스처 | 실장비 `show running-config` 출력. IOS-XE·다른 IOS 버전의 문법·기본값 생략 차이 | L-07 |
+
+### 3-3. 자동 판정 대신 사람이 판단해야 하는 항목
+
+아래 항목은 가이드 판단기준이 조직 정책이나 업무 필요성에 달려 있어 자동으로 VULN/GOOD 을 정하지 않는다(coverage `manual-by-design`).
+결과는 MANUAL 이며 근거 목록(계정·파일·설정)을 증적으로 남기므로, 보고서에서 증적을 보고 직접 판정해야 한다.
+상세 사유는 `lib/tests/coverage_exempt.json` 의 `note` 를 참고한다.
+
+| 카테고리 | 항목 (수) |
+|---|---|
+| 01_unix | U-07 U-08 U-23 U-25 U-33 U-45 U-49 U-64 U-66 (9) |
+| 02_windows | W-01 W-03 W-06 W-19 W-27 W-35 W-37 W-38 W-47 W-62 (10) |
+| 03_web | WEB-02(IIS) WEB-06(Apache·Nginx) WEB-10(Apache·Nginx·Tomcat) WEB-17(Apache·Nginx·Tomcat) WEB-24(IIS) WEB-25(IIS) (6) |
+| 05_network | N-02 N-05 N-12 N-14 N-17 N-23 N-24 (7) |
+| 07_pc | PC-09 PC-10 PC-11 PC-16 PC-17 (5) |
+| 08_dbms | D-02 D-03 D-04 D-06 D-10 D-13 D-20 D-25 D-26 (9, 해당 엔진 기준) |
+
+- 일부 항목은 한 방향만 자동 판정하고 반대 방향은 MANUAL 이다.
+  - 취약 방향만 자동 판정: U-66 N-02 N-14 D-03 D-10 D-26
+  - 양호 방향만 자동 판정: U-23 U-25 U-45 U-49 W-01 W-06 W-19 W-47 N-17 WEB-10 WEB-17 D-13 D-20
+- CI 에서 상태를 만들 수 없어 **한 방향만 검증한 항목**(coverage `env-unavailable`)도 있다. 이 항목들은 실환경 결과를 특히 주의해서 봐야 한다:
+  - W-34(Telnet, L-10)
+  - W-45(백신 미설치, L-11)
+  - W-60·W-63(도메인, L-01)
+  - PC-14(Defender, L-06)
+  - D-08(MSSQL 구버전 해시, L-09)
+  - D-12(Oracle 12.1 이하 리스너, L-05)
+- `na-for-engine`: W-26 은 가이드 대상이 Windows NT/2000/2003 이라 2008 이상에서는 NA 다.
+
+### 3-4. 테스트 체계 자체의 한계
+
+- **기대값의 근거**: 케이스의 기대 판정은 가이드 판단기준을 이 저장소가 해석해 정한 것이다.
+  - 판정 로직과 기대값을 같은 해석에서 만들었기 때문에, 해석이 틀렸다면 테스트도 같이 틀린다.
+  - 가이드 해석이 들어간 항목(3-1 Q-04, guide.json `deviation` 이 있는 항목)은 외부 검토가 필요하다.
+- **Oracle 회귀 주기**: Oracle 케이스는 주간·수동 실행만 돈다(H-06). Oracle check·fix 를 고쳤다면 `gh workflow run test.yml` 으로 수동 실행해 확인한다.
+- **원복 동일성 비교 범위**: 원복 후 같은지 비교하는 대상은 조치가 바꾸는 범위로 한정된다(H-07). 그 범위 밖을 건드리는 조치를 새로 만들면 비교 범위도 함께 넓혀야 한다.
+- **confirm 등급 조치**: CI 는 비대화형 응답 주입이나 가상 터미널(`script`)로 확인 단계를 통과시킨다.
+  - 실제 운영자 확인 화면의 문구·흐름은 사람이 따로 점검해야 한다.
+  - 특히 업무 영향을 고지하는 문구(F4/F5)가 대상이다.
+- **Windows 테스트 실행 위치**: 02/07 케이스·조치 테스트는 레지스트리를 실제로 바꾸므로 CI 러너에서만 돈다. 개발자 PC에서는 재현할 수 없다.
