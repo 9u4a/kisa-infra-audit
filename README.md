@@ -4,7 +4,7 @@
 Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고서를 생성하는 도구입니다.
 가능한 항목은 자동 조치(fix)까지 지원합니다.
 
-> ✅ v1.4.0 — Unix(67항목, Linux 대상 + Solaris/AIX/HP-UX 일부), Windows Server(64항목),
+> ✅ v1.4.1 — Unix(67항목, Linux 대상 + Solaris/AIX/HP-UX 일부), Windows Server(64항목),
 > Web(26항목, Apache/Nginx/Tomcat/IIS), PC(18항목, Windows 10/11), DBMS(26항목, MySQL/
 > PostgreSQL/Oracle/MSSQL), Network(38항목, Cisco IOS) 6개 카테고리 진단 + 자동 조치
 > (Network는 조치 명령어 스크립트 생성)가 구현되어 있습니다. **1.2.0부터 새 환경/벤더
@@ -34,36 +34,37 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | [`07_pc`](./07_pc) | PC | 7. PC | 18 | 🟢 18/18 진단 + 11/18 조치(fix) 구현 |
 | [`08_dbms`](./08_dbms) | D | 8. DBMS | 26 | 🟢 MySQL/PostgreSQL/Oracle/MSSQL 진단 + 조치(fix) 구현 |
 
-## 검증된 실행 환경 (v1.4.0)
+## 검증된 실행 환경 (v1.4.1)
 아래 환경에서는 진단·조치가 정상 동작함을 GitHub Actions CI로 확인했습니다
-(최종 확인 2026-11-01: main run `41317447353` 전 job 성공, Oracle 은 수동 실행 `41315823100` 성공).
+(최종 확인 2026-11-02: run `41369631338` 에서 Oracle 을 포함한 전 job 성공).
 
 **확인 방법**:
 - 각 항목을 가이드 판단기준의 **취약 상태와 양호 상태로 각각 세팅**하고, 진단 결과가 VULN/GOOD 으로 나오는지 확인했습니다.
 - 조치(fix)가 있는 항목은 취약 상태에서 다음 순서로 확인했습니다: 적용 → 재진단 GOOD → 원복 → 원래 상태와 동일.
 - 진단 전후로 시스템 상태가 같은지, 비밀값이 저장되지 않는지도 함께 검사합니다.
 - 전체 커버리지는 `python3 lib/tests/coverage.py`로 볼 수 있습니다.
-  - 카테고리×엔진×항목 421개 중 264개를 양방향으로 확인했습니다.
-  - 157개는 사유를 기록하고 면제했습니다(정책 판단 항목, 해당 엔진이 가이드 대상이 아님, CI에서 만들 수 없는 환경).
+  - 카테고리×엔진×항목 421개 중 266개를 양방향으로 확인했습니다.
+  - 155개는 사유를 기록하고 면제했습니다(정책 판단 항목, 해당 엔진이 가이드 대상이 아님, CI에서 만들 수 없는 환경).
   - 누락은 0건입니다.
 
 | 카테고리 | 검증한 대상(버전) | 실행 위치 | 양방향 확인 / 면제 |
 |---|---|---|---|
 | 01_unix | Debian 12.15, OpenSSH 9.2p1 (POSIX sh) | Docker `debian:12` | 58 / 9 |
 | 02_windows | Windows Server 2025 Datacenter (10.0.26100, en-US), PowerShell 5.1.26100 | GitHub `windows-2025` 러너 (IIS·FTP·DNS·SNMP 기능 설치) | 49 / 15 |
-| 03_web Apache | Apache httpd 2.4.68 (공식 이미지) | Docker `httpd:2.4` | 15 / 11 |
-| 03_web Apache(Debian 패키지) | apache2 2.4.68-1~deb12u1 | Docker `debian:12` | 15 / 11 |
-| 03_web Nginx | nginx 1.31.6 | Docker `nginx:latest` | 15 / 11 |
-| 03_web Tomcat | Apache Tomcat 10.1.60 | Docker `tomcat:10` | 18 / 8 |
+| 03_web Apache | Apache httpd 2.4.69 (공식 이미지) | Docker `httpd:2.4` | 16 / 10 |
+| 03_web Apache(Debian 패키지) | apache2 2.4.68-1~deb12u1 | Docker `debian:12` | 16 / 10 |
+| 03_web Nginx | nginx 1.31.8 | Docker `nginx:latest` | 15 / 11 |
+| 03_web Tomcat | Apache Tomcat 10.1.61 | Docker `tomcat:10` | 18 / 8 |
 | 03_web IIS | IIS 10.0 (Windows Server 2025, URL Rewrite·ARR 포함) | `windows-2025` 러너 | 20 / 6 |
 | 05_network | Cisco IOS 15.2 형식 running-config 텍스트 (실장비 아님), Python 3.12 | Ubuntu 24.04 러너 | 31 / 7 |
 | 07_pc | PC 18항목을 Windows Server 2025 러너에서 실행 (Windows 10/11 클라이언트 실기는 아님) | `windows-2025` 러너 | 12 / 6 |
-| 08_dbms MySQL | MySQL 8.4.11 | Docker `mysql:8` | 7 / 19 |
+| 08_dbms MySQL | MySQL 8.4.13 | Docker `mysql:8` | 7 / 19 |
 | 08_dbms PostgreSQL | PostgreSQL 16.15 | Docker `postgres:16` | 5 / 21 |
 | 08_dbms Oracle | Oracle AI Database 26ai Free | Docker `gvenzl/oracle-free:23-slim` (다이제스트 고정, 주간·수동 job) | 14 / 12 |
 | 08_dbms MSSQL | SQL Server 2025 LocalDB 17.0.4025.3 (RTM-CU3) | `windows-2025` 러너 | 5 / 21 |
 
-- 버전은 CI가 쓰는 이미지 태그 기준으로 2026-11-02에 확인했습니다. Oracle 을 뺀 태그는 고정되어 있지 않아, 이후 CI는 더 새로운 마이너 버전으로 돌 수 있습니다.
+- 버전은 위 실행의 job summary에 남은 값입니다. linux-integration job 의 "엔진 버전 기록" 단계가 매 실행마다 남깁니다.
+- Oracle 을 뺀 이미지 태그는 고정하지 않았습니다. 그래서 이후 실행은 더 새로운 마이너 버전으로 돌 수 있고, 실제 버전은 각 실행의 summary 에서 확인할 수 있습니다.
 - DBMS 의 면제가 많은 이유는 두 가지입니다. 가이드가 해당 엔진을 대상으로 하지 않는 항목이 많고, 계정 필요 여부 같은 정책 판단 항목은 항상 MANUAL 이기 때문입니다.
 
 **위 표에 없는 환경은 코드상 분기는 있어도 실기 검증을 하지 않았습니다**:
