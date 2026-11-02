@@ -165,6 +165,9 @@ function Compare-WinStateSnapshot {
                 elseif ($o[2] -ne $f[2]) {
                     # RemoteRegistry 는 Server 에서 유휴 시 스스로 멈춘다(시작 유형 그대로 Running→Stopped, main CI 40682689320 실측)
                     $idleStop = ($name -eq "RemoteRegistry" -and $o[2] -eq "Running" -and $f[2] -eq "Stopped")
+                    # Defender 는 플랫폼·엔진 자체 업데이트 때 WinDefend 를 스스로 재시작한다 - Running→*Pending 은 전환 중 상태라 참고로만
+                    # (main CI 41371521465, W-19 케이스 중 Running→Stop Pending). 조치가 Defender 를 멈추면 Stopped 로 남아 여전히 FAIL.
+                    if ($name -eq "WinDefend" -and $o[2] -eq "Running" -and $f[2] -like "*Pending") { $idleStop = $true }
                     if ($name -match $Script:WinStateWatchSvc -and -not $idleStop) { $hard += "$name $($o[2])→$($f[2])" } else { $soft += "$name $($o[2])→$($f[2])" }
                 }
             }
