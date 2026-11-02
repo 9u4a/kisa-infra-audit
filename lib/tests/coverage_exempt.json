@@ -119,12 +119,10 @@
     "WEB-10": {
       "reason": "manual-by-design",
       "engines": [
-        "apache",
-        "apache-debian",
         "nginx",
         "tomcat"
       ],
-      "note": "판단 기준이 \"불필요한\" Proxy 설정 - 업무상 필요 여부는 운영 판단이라 설정이 있으면 MANUAL(expected_*_vuln), 설정이 전혀 없을 때만 GOOD(expected_*_hardened). VULN 은 자동 판정하지 않음"
+      "note": "판단 기준이 \"불필요한\" Proxy 설정 - 역방향 프록시(proxy_pass, Tomcat proxyName)의 업무상 필요 여부는 운영 판단이라 설정이 있으면 MANUAL(expected_*_vuln), 설정이 전혀 없을 때만 GOOD(expected_*_hardened). Apache 는 1.4.1(Q-03)부터 정방향 프록시(ProxyRequests On)를 VULN 으로 판정해 양방향 검증(cases apache·apache-debian WEB-10_forward-proxy-on/off)"
     },
     "WEB-17": {
       "reason": "manual-by-design",

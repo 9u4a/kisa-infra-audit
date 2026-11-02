@@ -283,6 +283,24 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | Q-05 | 주간 스케줄 범위 | cron(일 03:00 KST)이 oracle job 만이 아니라 전 job 을 돈다 | ① 유지(주간 회귀 겸용) ② oracle 만 돌도록 다른 job 에 `if` 추가 | ① 비용 문제가 없다면 유지 |
 | Q-06 | Docker 이미지 태그 고정 | Oracle 만 다이제스트를 고정했다. `debian:12`·`httpd:2.4`·`nginx:latest`·`tomcat:10`·`mysql:8`·`postgres:16` 은 태그가 움직여 CI 결과가 엔진 버전 변화에 영향받는다 | ① 유지(새 버전 회귀를 빨리 발견) ② 다이제스트 고정 + 주기적 갱신 | ① 유지. 실패 시 이미지 버전부터 확인 |
 
+**처리 결과(1.4.1)**
+
+| ID | 상태 | 내용 |
+|---|---|---|
+| Q-01 | 해결(1.4.1) | 등급은 confirm 을 유지한다. IIS 는 자동 조치가 있고(`fixes/iis/WEB-05.ps1`) guide.json 등급은 항목 단위라, manual 로 내리면 IIS 조치까지 꺼지기 때문이다. Apache/Nginx/Tomcat 이 수동인 사유와 판정 기준(WEB-C1)은 `deviation` 에 기록했다. fix.sh 는 이 항목을 "조치 스크립트 미구현"으로 건너뛰고 로그에 남긴다 |
+| Q-02 | 해결(1.4.1) | WEB-17 `fix` 를 auto → manual 로 정정하고 deviation 을 기록했다. 알려진 경로를 VULN 으로 보는 판정은 넣지 않았다. 샘플 경로(`/manual`, Tomcat docs/examples)는 WEB-07 이 이미 VULN 으로 판정하므로 중복이다 |
+| Q-03 | 해결(1.4.1) | Apache `ProxyRequests On` → VULN, 조치 `fixes/WEB-10.sh`(confirm, Off 로 변경). apache·apache-debian 에 양방향 케이스를 추가했다(VULN → 조치 → GOOD → 원복 동일). 역방향 프록시는 지금처럼 MANUAL |
+| Q-04 | 해결(1.4.1) | WEB-02(C6)·WEB-05(C1)·WEB-11(C2)의 판정 해석을 `deviation` 에 기록했다 |
+| Q-05 | 결정: 유지 | 주간 스케줄에서 전 job 을 돌린다(움직이는 이미지 태그의 회귀를 주 1회 확인). test.yml 주석에 반영 |
+| Q-06 | 결정: 유지 | 태그는 고정하지 않는다. 대신 linux-integration job 이 실행한 엔진 버전을 job summary 에 표로 남긴다 |
+
+**재발 방지**: `lib/tests/guide_consistency.py` 를 CI static-analysis 에 추가했다.
+- guide.json `fix` 등급과 계열별 조치 스크립트가 어긋나면 FAIL 한다.
+- 예외 17건은 `lib/tests/fix_exempt.json` 에 사유와 함께 둔다.
+  - `no-vuln-path`: check 가 VULN 을 만들지 않는 항목이다. check 코드에 VULN 경로가 없는지 자동으로 확인한다.
+  - `engine-manual`: 그 엔진은 자동 조치가 안전하지 않은 항목이다. guide.json `deviation` 기록이 필수다.
+- 이 검사로 MSSQL D-01·D-08, Oracle D-07 의 조치가 없는 사유도 찾아 `deviation` 에 기록했다.
+
 ### 3-2. 검증 환경 밖 — 실사용 전 확인 권장
 
 코드에는 분기가 있지만 CI 실기 검증을 하지 않은 범위다. 이 환경에서 처음 돌릴 때는 dry-run 과 결과 검토를 먼저 할 것.

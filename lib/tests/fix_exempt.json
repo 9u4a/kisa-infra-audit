@@ -1,0 +1,52 @@
+{
+  "01_unix": {
+    "": {
+      "U-45": {"reason": "no-vuln-path", "note": "메일 서비스 버전의 최신 여부는 판단 불가 - 설치 시 MANUAL, 미설치 시 GOOD 이라 조치가 실행될 VULN 이 없음"}
+    }
+  },
+  "02_windows": {
+    "": {
+      "W-01": {"reason": "no-vuln-path", "note": "Administrator 이름이 기본값이면 MANUAL(비밀번호 설정 여부는 로그온 시도 없이 확인 불가, S3), 바꿨으면 GOOD"},
+      "W-06": {"reason": "no-vuln-path", "note": "관리자 2명 이상이면 '불필요' 여부를 판단할 수 없어 MANUAL, 1명이면 GOOD"},
+      "W-19": {"reason": "no-vuln-path", "note": "IIS 가 '필요에 따라' 구동 중인지는 운영 판단 - 구동 시 MANUAL, 중지 시 GOOD"},
+      "W-26": {"reason": "no-vuln-path", "note": "가이드 대상이 Windows NT/2000/2003 - 2008 이상은 NA"},
+      "W-35": {"reason": "no-vuln-path", "note": "시스템 DSN 의 '현재 사용' 여부는 운영 판단 - DSN 있으면 MANUAL, 없으면 NA"},
+      "W-47": {"reason": "no-vuln-path", "note": "화면보호기는 사용자별(HKCU) 설정이라 다른 사용자 상태를 확인할 수 없어 미설정은 MANUAL, 설정은 GOOD"}
+    }
+  },
+  "03_web": {
+    "": {
+      "WEB-05": {"reason": "engine-manual", "note": "Apache/Nginx/Tomcat 은 CGI 를 지정 디렉터리로 옮기려면 스크립트 콘텐츠·URL 이전이 필요해 수동 조치(IIS 는 fixes/iis/WEB-05.ps1), guide.json deviation"}
+    },
+    "iis": {
+      "WEB-02": {"reason": "no-vuln-path", "note": "IIS 는 관리자 비밀번호를 설정 파일에 저장하지 않아 강도를 판정할 수 없음 - 항상 MANUAL"}
+    }
+  },
+  "07_pc": {
+    "": {
+      "PC-16": {"reason": "no-vuln-path", "note": "화면보호기는 사용자별(HKCU) 설정 - 항상 MANUAL"},
+      "PC-17": {"reason": "no-vuln-path", "note": "이동식 매체 정책의 기관 정책 적합성은 판단 불가 - 항상 MANUAL"}
+    }
+  },
+  "08_dbms": {
+    "mssql": {
+      "D-01": {"reason": "engine-manual", "note": "sa 비활성화·비밀번호 교체는 sa 로 접속하는 애플리케이션을 끊을 수 있어 수동, guide.json deviation"},
+      "D-08": {"reason": "engine-manual", "note": "해시 알고리즘은 SQL Server 버전으로 고정 - 조치는 버전 업그레이드, guide.json deviation"}
+    },
+    "mysql": {
+      "D-10": {"reason": "engine-manual", "note": "허용 IP 목록을 스크립트가 알 수 없음(U-28 과 같은 구조), guide.json deviation"}
+    },
+    "oracle": {
+      "D-07": {"reason": "engine-manual", "note": "소유 계정 변경은 재설치 수준 작업, guide.json deviation"},
+      "D-10": {"reason": "engine-manual", "note": "허용 IP 목록을 스크립트가 알 수 없음, guide.json deviation"}
+    },
+    "postgres": {
+      "D-10": {"reason": "engine-manual", "note": "허용 IP 목록을 스크립트가 알 수 없음, guide.json deviation"}
+    }
+  },
+  "_manual_with_fix": {
+    "02_windows": {
+      "W-32": "1.3.0 에 auto→manual 재분류(guide.json deviation) - 진입점(fix.ps1)은 manual 등급을 실행하지 않으며, 스크립트는 영역별 판단 후 운영자가 참고할 구현으로 남김"
+    }
+  }
+}

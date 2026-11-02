@@ -5,6 +5,25 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+
+## [1.4.1] - 2026-11-02
+### 조치 등급 일관성 + KNOWN_ISSUES §3 결정 대기(Q-01~Q-06) 처리
+### Added
+- `lib/tests/guide_consistency.py`(CI static-analysis): guide.json `fix` 등급(auto/confirm/manual)과 계열별
+  조치 스크립트(`fixes/`, `fixes/iis/`, `fixes/<engine>/`)가 맞는지 검사한다.
+  - 예외는 `lib/tests/fix_exempt.json` 에 사유 필수.
+  - `no-vuln-path` 는 check 에 VULN 경로가 없는지 코드로 확인하고, `engine-manual` 은 deviation 기록이 필수다.
+  - 음성 대조: WEB-17 을 auto 로 되돌림 / W-01 check 에 VULN 추가 / WEB-10 조치 삭제 → 3건 모두 FAIL.
+- 03_web WEB-10 Apache 정방향 프록시(`ProxyRequests On`) VULN 판정 + 조치 `fixes/WEB-10.sh`(confirm, Off 로 변경).
+  apache·apache-debian 양방향 케이스 4건 추가(커버리지 264 → 266 양방향, 면제 157 → 155).
+- linux-integration job 이 실행한 엔진 이미지 버전을 job summary 에 기록한다(Q-06).
+
+### Changed
+- WEB-17 `fix` auto → manual 정정. check 가 VULN 을 만들지 않아 실행 경로가 없던 등급이었다(Q-02).
+- guide.json `deviation` 기록 추가
+  - WEB-02(C6), WEB-05(C1, Apache/Nginx/Tomcat 수동 사유), WEB-10, WEB-11(C2), WEB-17
+  - D-01 MSSQL, D-07 Oracle, D-08 MSSQL(조치가 없는 사유)
+
 ### Docs
 - README 에 "검증된 실행 환경" 절을 추가했다. CI 에서 양방향 케이스를 통과한 OS·엔진 버전, 실행 위치, 항목 수를 정리했다.
 - KNOWN_ISSUES §3 "검토 필요 사항"을 추가했다.

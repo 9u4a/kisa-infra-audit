@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    - cron: "0 18 * * 6"   # 매주 일요일 03:00 KST - oracle job(무거운 이미지)을 주 1회 돌리기 위함(다른 job 도 함께 돈다)
+    - cron: "0 18 * * 6"   # 매주 일요일 03:00 KST - oracle job(무거운 이미지)을 주 1회 돌리기 위함. 다른 job 도 함께 도는 것은 의도(1.4.1 Q-05 결정: 움직이는 이미지 태그의 새 버전 회귀를 push 없이도 주 1회 확인)
   workflow_dispatch:
     inputs:
       bootstrap_windows:
@@ -49,6 +49,11 @@ jobs:
         run: |
           set -o pipefail
           { echo '```'; python3 lib/tests/coverage.py --strict --list-missing; rc=$?; echo '```'; exit $rc; } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 조치 등급 ↔ 조치 스크립트 일관성(1.4.1)
+        # guide.json fix=auto/confirm 인데 조치 스크립트가 없거나(KNOWN_ISSUES Q-01·Q-02), manual 인데 스크립트가 있는 것을 막는다.
+        # 예외는 lib/tests/fix_exempt.json 에 사유 필수(no-vuln-path 는 check 에 VULN 경로가 없는지 기계 확인).
+        run: python3 lib/tests/guide_consistency.py
 
       - name: PSScriptAnalyzer (전체 *.ps1 / *.psm1)
         shell: pwsh
@@ -138,6 +143,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: 테스트 대상 엔진 버전 기록(1.4.1 Q-06)
+        # 베이스 이미지 태그는 고정하지 않는다(새 버전 회귀를 빨리 보기 위함) - 대신 이번 실행이 어떤 버전으로 돌았는지 남긴다.
+        run: |
+          v() { printf '| `%s` | %s |\n' "$1" "$(docker run --rm --entrypoint sh "$1" -c "$2" 2>&1 | tail -n 1)"; }
+          { echo '| 이미지 | 버전 |'; echo '|---|---|'
+            v debian:12 'cat /etc/debian_version'
+            v httpd:2.4 'httpd -v | head -n 1'
+            v nginx:latest 'nginx -v'
+            v tomcat:10 'catalina.sh version | grep "Server number"'
+            v mysql:8 'mysqld --version'
+            v postgres:16 'postgres --version'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - run: sh 01_unix/tests/run_tests.sh
       - run: sh 03_web/tests/run_tests.sh
       - run: sh 08_dbms/tests/run_tests.sh
