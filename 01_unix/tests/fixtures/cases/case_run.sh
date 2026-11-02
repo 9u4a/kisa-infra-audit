@@ -12,7 +12,8 @@ cd /infra || exit 2
 
 # snap — 파일시스템(경로·종류·권한·소유자·크기 + /etc·/root·/home·/srv·/usr/local·/var 내용 해시, /dev 의 일반 파일) +
 # 서비스 상태(케이스가 만든 /etc/systemd/system/*.service 의 enabled/active) + 실행 중인 프로세스 이름 집합.
-# systemd 가 계속 바꾸는 저널·상태 파일(/var/log/journal, /var/lib/systemd)은 제외한다.
+# systemd 가 계속 바꾸는 저널·상태 파일(/var/log/journal, /var/lib/systemd)은 제외한다. 로그인 기록(wtmp·btmp·lastlog)은
+# script(가상 터미널)가 남기는 OS 활동이라 제외(Rocky 9 의 util-linux script 는 조치·원복 때마다 wtmp 에 기록한다).
 snap() {
     { find / -xdev \( -path /proc -o -path /sys -o -path /dev -o -path /run -o -path /tmp -o -path /var/tmp \
             -o -path /var/log/journal -o -path /var/lib/systemd -o -path /var/cache \) -prune -o -printf '%p|%y|%m|%U|%G|%s\n' 2>/dev/null
@@ -25,7 +26,7 @@ snap() {
           printf 'unit|%s|%s|%s\n' "$u" "$(systemctl is-enabled "$u" 2>/dev/null)" "$(systemctl is-active "$u" 2>/dev/null)"
       done
       ps -e -o comm= 2>/dev/null | sed 's/^/proc|/'
-    } | grep -vE '^/etc/(passwd|group|shadow|gshadow|subuid|subgid)-\||^/etc/\.pwd\.lock\||^proc\|(ps|sort|find|md5sum|awk|sed|sh|grep|xargs|systemctl|basename|uniq)$' | sort -u
+    } | grep -vE '^/etc/(passwd|group|shadow|gshadow|subuid|subgid)-\||^/var/log/(wtmp|btmp|lastlog)\||^/etc/\.pwd\.lock\||^proc\|(ps|sort|find|md5sum|awk|sed|sh|grep|xargs|systemctl|basename|uniq)$' | sort -u
 }
 
 # 서비스 유닛이 막 기동된 직후 상태가 흔들리지 않게 잠깐 기다린다(systemd 가 바쁘면 is-active 가 activating 일 수 있음)
@@ -49,7 +50,7 @@ settle
 snap > /tmp/s1
 if cmp -s /tmp/s0 /tmp/s1; then echo "CHANGED=no"; else echo "CHANGED=yes"; fi
 
-sh 01_unix/run.sh -e debian -i "$CODE" -o /tmp/runout > /tmp/run.log 2>&1
+sh 01_unix/run.sh -e "${CASE_ENV:-debian}" -i "$CODE" -o /tmp/runout > /tmp/run.log 2>&1
 R=$(ls /tmp/runout/*/result.json 2>/dev/null | head -n1)
 st=$(sed -n "s/.*\"code\":\"$CODE\",\"status\":\"\([A-Z]*\)\".*/\1/p" "$R" 2>/dev/null | head -n1)
 echo "STATUS=${st:-none}"

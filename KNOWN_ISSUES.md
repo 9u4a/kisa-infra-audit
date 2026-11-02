@@ -259,7 +259,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | L-01 | **도메인 컨트롤러**: DC 전용 분기(W-01~03 계정 열거 생략, W-16 SYSVOL 제외, W-32 manual)는 코드 검토만 했다. CI 러너는 재부팅이 필요한 DC 승격을 할 수 없다. |
 | L-02 | **한글 Windows**: 러너가 영문(en-US)이라 로캘 의존 출력(W-40 auditpol, W-34 tlntadmn, PC-08 bcdedit)은 한글판에서 실측하지 못했다. |
 | L-03 | **Solaris/AIX/HP-UX**: 문서 기준 구현이며 실기 검증 불가(결과마다 "미검증" 문구가 붙음). |
-| L-04 | **RHEL 계열·RHEL Apache/Tomcat 패키지**: CI 픽스처는 Debian 12(01_unix)와 공식 httpd/nginx/tomcat 이미지, Debian apache2 패키지(1.4.0 `apache-debian`)만 쓴다. RHEL 계열 OS 와 그 패키지 레이아웃(httpd·tomcat, WEB-R1/WEB-R4)은 검증 범위 밖이다. |
+| L-04 | **RHEL Apache/Tomcat 패키지**: 03_web CI 픽스처는 공식 httpd/nginx/tomcat 이미지와 Debian apache2 패키지(1.4.0 `apache-debian`)만 쓴다. RHEL 패키지 레이아웃(httpd·tomcat, WEB-R1/WEB-R4)은 검증 범위 밖이다. 01_unix 의 rhel 계열 OS 는 1.5.0 부터 Rocky Linux 9 케이스(Debian 과 같은 케이스 + authselect PAM·su wheel 전용 케이스, 조치·원복)와 진단 실기 안전 검사로 검증한다 - RHEL 본체·Alma·SELinux enforcing 상태는 여전히 밖. |
 | L-05 | **Oracle**: 1.4.0 부터 CI `oracle` job(주간 스케줄·수동 실행, gvenzl/oracle-free 26ai 다이제스트 고정)에서 22항목 양방향 케이스·조치·원복을 돈다 - 매 push 에는 돌지 않는다(이미지 약 2.8GB). 남은 한계: ① D-12(리스너 비밀번호)는 12.2 이상에서 NA(가이드 명시)라 취약/양호 분기(12.1 이하 listener.ora)를 실기로 만들 수 없다(coverage 면제 env-unavailable) ② D-07 취약(Oracle 을 root 로 구동)은 Oracle 이 root 기동을 거부해 root 소유 `ora_pmon_*` 모의 프로세스로 check 의 /proc 판정 경로만 검증한다. |
 | L-06 | **PC-14 Defender**: 러너에서 켤 수 없어 조치는 "실패 후 원복" 경로만 확인했다. |
 | L-07 | **05_network**: 실제 장비가 아닌 텍스트 픽스처 기반 판정 로직 테스트다. |
@@ -307,7 +307,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 
 | 영역 | 검증한 것 | 검증하지 않은 것 · 위험 | 참고 |
 |---|---|---|---|
-| 01_unix OS | Debian 12 | RHEL/Rocky/Alma(README 는 "Linux rhel/debian" 지원으로 표기), SUSE. PAM 파일 구조(`system-auth`/`password-auth`), `authselect`, 패키지 관리자, SELinux 관련 경로가 다르다. 대부분의 check 가 `rhel\|debian\|suse` 공용 분기라 판정 로직은 공유하지만, 조치(PAM·서비스)는 rhel 경로를 실기로 돌려 보지 않았다 | L-04. rockylinux 컨테이너 케이스 job 추가는 CI 커버리지 확대(허용 범위)로 가능 |
+| 01_unix OS | Debian 12, Rocky Linux 9.8(1.5.0, authselect minimal PAM) | RHEL 본체·Alma, SUSE, SELinux enforcing(컨테이너는 SELinux 비활성). rhel 계열의 전역 vuln/hardened 픽스처 기대값 고정과 coverage 양방향 집계는 Debian 기준만 있다(Rocky 는 같은 케이스 재현 + 전용 케이스) | L-04 |
 | 01_unix 상용 Unix | — | Solaris/AIX/HP-UX 7항목은 문서 기준 구현이다(결과에 "미검증" 표기) | L-03 |
 | 02_windows OS | Server 2025 Datacenter, en-US, 워크그룹 | Server 2016/2019/2022(2012 R2 포함) 의 레지스트리 기본값·기능 차이, 한글 로캘 출력(auditpol·bcdedit 등), 도메인 컨트롤러 분기(W-01~03 열거 생략, W-16, W-32, W-60, W-63) | L-01, L-02, L-10 |
 | 07_pc | 서버 OS 위에서 PC 항목 실행 | Windows 10/11 클라이언트 SKU 실기 미검증. 에디션별 정책 차이와 Defender 실시간 감시(PC-14), 클라이언트 전용 기본값이 서버와 다를 수 있다 | L-06 |

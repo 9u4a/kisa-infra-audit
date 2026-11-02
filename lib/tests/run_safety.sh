@@ -100,7 +100,9 @@ f=$(find /tmp/rs_root -name result.json | head -n 1)
 [ -n "$f" ] && cp "$f" "$RS/root.json"
 
 # ---- 일반 사용자 실행(거짓 양호 비교용) - 저장소를 읽을 수 있어야 한다 ----
-id kisa_nr >/dev/null 2>&1 || useradd -M -s /bin/sh kisa_nr 2>/dev/null || adduser -D -H kisa_nr 2>/dev/null
+# 홈은 관례적 더미값 /nonexistent(U-32 등이 제외) - 없는 /home/kisa_nr 이면 일반 사용자 실행에서만 U-32 VULN 이 나는
+# 하네스 잡음이 생긴다(root 실행은 이 계정을 만들기 전이라 GOOD, 1.5.0 Rocky 9 에서 발견)
+id kisa_nr >/dev/null 2>&1 || useradd -M -d /nonexistent -s /bin/sh kisa_nr 2>/dev/null || adduser -D -H -h /nonexistent kisa_nr 2>/dev/null
 chmod -R a+rX "$(pwd)" 2>/dev/null
 snap_all 2_
 start=$(date +%s)

@@ -24,6 +24,19 @@ c_U_02__weak_policy() {
     echo "minlen = 6" > /etc/security/pwquality.conf
 }
 
+# rhel(Rocky 9, Dockerfile.cases.rhel) 전용 - authselect 가 관리하는 PAM(system-auth 는 /etc/authselect 로의 심볼릭 링크)
+c_U_03__authselect_faillock_default() { authselect enable-feature with-faillock >/dev/null; }
+c_U_03__authselect_faillock_deny5() {
+    authselect enable-feature with-faillock >/dev/null
+    sed -i 's/^#[[:space:]]*deny[[:space:]]*=.*/deny = 5/' /etc/security/faillock.conf
+}
+c_U_03__authselect_no_faillock() { printf 'deny = 5\n' >> /etc/security/faillock.conf; }
+c_U_06__su_wheel_required() { sed -i 's/^#\(auth[[:space:]]*required[[:space:]]*pam_wheel\.so use_uid\)$/\1/' /etc/pam.d/su; }
+c_U_06__su_wheel_trust_only() {
+    sed -i 's/^#\(auth[[:space:]]*sufficient[[:space:]]*pam_wheel\.so trust use_uid\)$/\1/' /etc/pam.d/su
+    useradd -m -G wheel kisaadm
+}
+
 # ---- 2. 파일 및 디렉토리 관리 ----
 c_U_18__shadow_400() { chown root /etc/shadow && chmod 400 /etc/shadow; }
 c_U_20__inetd_600() { chmod 600 /etc/inetd.conf; }
@@ -52,8 +65,10 @@ c_U_35__vsftpd_anon_no() { printf 'listen=YES\nanonymous_enable=NO\n' > /etc/vsf
 c_U_35__vsftpd_anon_yes() { printf 'listen=YES\nanonymous_enable=YES\n' > /etc/vsftpd.conf; }
 
 # ---- 3. 서비스 관리 ----
-c_U_37__crontab_750() { chmod 750 /usr/bin/crontab; }
-c_U_37__crontab_suid() { chmod 4755 /usr/bin/crontab; }
+# Rocky 9(cronie)는 기본 상태가 crontab SUID(4755) + /etc/cron.deny 644 라 기준 초과 - 양호 쪽은 cron.deny 도 640 으로,
+# SUID 쪽은 cron.deny 만 640 으로 바꿔(SUID 는 그대로) 판정 원인을 crontab 하나로 좁힌다(Debian 은 cron.deny 없음)
+c_U_37__crontab_750() { chmod 750 /usr/bin/crontab; [ ! -f /etc/cron.deny ] || chmod 640 /etc/cron.deny; }
+c_U_37__crontab_suid() { chmod 4755 /usr/bin/crontab; [ ! -f /etc/cron.deny ] || chmod 640 /etc/cron.deny; }
 c_U_37__cron_allow_644() { chmod 750 /usr/bin/crontab; echo root > /etc/cron.allow; chmod 644 /etc/cron.allow; }
 c_U_38__inetd_echo_commented() { printf '#echo\tstream\ttcp\tnowait\troot\tinternal\n' >> /etc/inetd.conf; }
 c_U_38__inetd_echo() { printf 'echo\tstream\ttcp\tnowait\troot\tinternal\n' >> /etc/inetd.conf; }
@@ -95,8 +110,13 @@ c_U_49__bind_installed() {
 }
 c_U_54__vsftpd_active() { fake_unit vsftpd active; }
 c_U_54__vsftpd_disabled() { fake_unit vsftpd installed; }
-c_U_55__ftp_shell() { echo "ftp:x:2100:2100::/srv/ftp:/bin/sh" >> /etc/passwd; echo "ftp:x:2100:" >> /etc/group; }
-c_U_55__ftp_nologin() { echo "ftp:x:2100:2100::/srv/ftp:/usr/sbin/nologin" >> /etc/passwd; echo "ftp:x:2100:" >> /etc/group; }
+# ftp 계정: Debian 은 기본으로 없어 만들고, Rocky 9 는 기본 계정(uid 14, /sbin/nologin)의 쉘만 바꾼다
+ftp_account() {
+    if grep -q '^ftp:' /etc/passwd; then usermod -s "$1" ftp
+    else echo "ftp:x:2100:2100::/srv/ftp:$1" >> /etc/passwd; echo "ftp:x:2100:" >> /etc/group; fi
+}
+c_U_55__ftp_shell() { ftp_account /bin/sh; }
+c_U_55__ftp_nologin() { ftp_account /usr/sbin/nologin; }
 c_U_56__proftpd_no_limit() { mkdir -p /etc/proftpd; printf 'ServerName "ftp"\nPort 21\n' > /etc/proftpd/proftpd.conf; }
 c_U_56__proftpd_limit_login() {
     mkdir -p /etc/proftpd
@@ -139,6 +159,8 @@ c_U_66__rsyslog_stopped() {
     fake_unit rsyslog installed
 }
 c_U_67__logs_root_644() {
+    # Rocky 9 는 기본 상태가 이미 기준 이내라(바뀌는 파일이 wtmp 뿐 - 스냅숏 제외) 기준 초과 로그를 하나 만든 뒤 함께 정리한다
+    : > /var/log/kisa-app.log && chmod 666 /var/log/kisa-app.log
     find /var/log -type f ! -user root -exec chown root {} +
     find /var/log -type f -perm /7133 -exec chmod u-xs,g-wxs,o-wx,-t {} +
 }

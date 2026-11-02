@@ -11,16 +11,25 @@
 #   - VULN 케이스의 조치 검증(fix 필드): GOOD/MANUAL = fix.sh 결과 APPLIED 이고 재검증이 그 값, NOFIX = 자동 조치 불가로
 #     변경 없이 끝남(FAILED_ROLLED_BACK/SKIPPED). 어느 쪽이든 --rollback 뒤 상태가 케이스 준비 직후와 같아야 함(ROLLBACK=same)
 # systemd 컨테이너는 --privileged 없이 띄운다(cgroup 만 쓰기 가능하게 마운트).
+# CASE_DISTRO=debian(기본, Dockerfile.cases) | rhel(Dockerfile.cases.rhel, Rocky Linux 9 - 1.5.0 C1). 같은 cases.json 을 쓰고
+# 케이스의 "distro" 필드(목록)가 있으면 그 배포판에서만 실행한다(배포판 고유 경로를 다루는 케이스).
 set -u
 export MSYS_NO_PATHCONV=1
+CASE_DISTRO=${CASE_DISTRO:-debian}
+case "$CASE_DISTRO" in
+    debian) IMG=kisa-u01-cases; DOCKERFILE=01_unix/tests/Dockerfile.cases ;;
+    rhel) IMG=kisa-u01-cases-rhel; DOCKERFILE=01_unix/tests/Dockerfile.cases.rhel ;;
+    *) echo "FAIL: cases - 알 수 없는 CASE_DISTRO=$CASE_DISTRO (debian|rhel)"; exit 2 ;;
+esac
+export CASE_DISTRO
 
 if [ "${1:-}" = "--one" ]; then
     # --one <출력 디렉터리> <코드> <이름> <base> <fix> — 케이스 1개(병렬 실행 단위)
     out=$2; code=$3; name=$4; base=$5; fx=$6
-    cname="kisa-u01-case-$$-$code-$name"
+    cname="kisa-u01-case-$CASE_DISTRO-$$-$code-$name"
     docker rm -f "$cname" >/dev/null 2>&1
     if ! docker run -d --name "$cname" --tmpfs /run --tmpfs /run/lock --cgroupns=host \
-            -v /sys/fs/cgroup:/sys/fs/cgroup:rw kisa-u01-cases >/dev/null 2>"$out/$code.$name.err"; then
+            -v /sys/fs/cgroup:/sys/fs/cgroup:rw "$IMG" >/dev/null 2>"$out/$code.$name.err"; then
         echo "BOOT=fail" > "$out/$code.$name.out"; exit 0
     fi
     i=0
@@ -29,19 +38,21 @@ if [ "${1:-}" = "--one" ]; then
         case "$s" in running|degraded) break ;; esac
         i=$((i + 1)); sleep 1
     done
-    docker exec "$cname" sh 01_unix/tests/fixtures/cases/case_run.sh "$code" "$name" "$base" "$fx" > "$out/$code.$name.out" 2>"$out/$code.$name.err"
+    docker exec -e CASE_ENV="$CASE_DISTRO" "$cname" sh 01_unix/tests/fixtures/cases/case_run.sh "$code" "$name" "$base" "$fx" > "$out/$code.$name.out" 2>"$out/$code.$name.err"
     docker rm -f "$cname" >/dev/null 2>&1
     exit 0
 fi
 
 cd "$(dirname "$0")/../.." || exit 2
 CASES=01_unix/tests/fixtures/cases/cases.json
-docker build -q -f 01_unix/tests/Dockerfile.cases -t kisa-u01-cases . >/dev/null || { echo "FAIL: cases - 이미지 빌드 실패"; exit 1; }
+docker build -q -f "$DOCKERFILE" -t "$IMG" . >/dev/null || { echo "FAIL: cases($CASE_DISTRO) - 이미지 빌드 실패"; exit 1; }
 
 # cases.json → "코드 이름 base fix expect" 줄(기본값: base=hardened, fix 는 VULN 이면 GOOD, 아니면 -)
-LIST=$(python3 - "$CASES" <<'PYEOF'
+LIST=$(python3 - "$CASES" "$CASE_DISTRO" <<'PYEOF'
 import json, sys
 for c in json.load(open(sys.argv[1], encoding="utf-8")):
+    if sys.argv[2] not in c.get("distro", ["debian", "rhel"]):
+        continue
     fx = c.get("fix") or ("GOOD" if c["expect"] == "VULN" else "-")
     print(c["code"], c["name"], c.get("base", "hardened"), fx, c["expect"])
 PYEOF
@@ -80,13 +91,13 @@ while read -r code name base fx expect; do
         fi
     fi
     if [ -z "$why" ]; then
-        echo "PASS: case $code/$name (STATUS=$expect$( [ "$fx" != "-" ] && printf ' FIX=%s ROLLBACK=same' "$(kv FIX)"))"
+        echo "PASS: case[$CASE_DISTRO] $code/$name (STATUS=$expect$( [ "$fx" != "-" ] && printf ' FIX=%s ROLLBACK=same' "$(kv FIX)"))"
     else
-        echo "FAIL: case $code/$name -$why"; fail=1
+        echo "FAIL: case[$CASE_DISTRO] $code/$name -$why"; fail=1
     fi
 done <<EOF
 $LIST
 EOF
-echo "cases: ${n}건(조치 검증 ${nfix}건), ${elapsed}초"
+echo "cases($CASE_DISTRO): ${n}건(조치 검증 ${nfix}건), ${elapsed}초"
 rm -rf "$OUT"
 exit $fail

@@ -5,6 +5,21 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+### Added
+- 01_unix rhel 계열 검증(1.5.0 C1): `01_unix/tests/Dockerfile.cases.rhel`(Rocky Linux 9, systemd PID 1, authselect minimal PAM).
+  - `run_cases.sh` 에 `CASE_DISTRO=debian|rhel`, 케이스 `distro` 필드. run_tests.sh 가 두 배포판으로 케이스를 돌린다
+    (rhel 59건 = Debian 과 같은 케이스 54건 + rhel 전용 5건, 조치 검증 31건).
+  - rhel 전용 케이스: U-03 authselect with-faillock(deny 주석 → VULN → faillock.conf deny=5 → GOOD, 심볼릭 링크 유지)·
+    deny=5 GOOD·모듈 없이 faillock.conf 만(VULN, 자동 조치 불가), U-06 Rocky 기본 su 의 required 예시 줄(GOOD)·
+    trust 예시 줄만(VULN → required 활성화 → GOOD).
+  - 진단 실기 안전 검사(`lib/tests/run_safety.sh`, S1·S2·S5·S6)도 Rocky 에서 vuln/hardened 두 픽스처로 실행.
+### Changed
+- 01_unix 케이스가 배포판 기본값 차이에 맞게 상태를 만든다: U-37(Rocky 의 crontab SUID·cron.deny 644 기본값),
+  U-55(Rocky 기본 ftp 계정은 쉘만 변경), U-67(기준 초과 로그를 만든 뒤 정리), U-32 는 Debian 전용.
+- 케이스 스냅숏 비교에서 로그인 기록(wtmp·btmp·lastlog)을 제외한다 - Rocky 의 script(가상 터미널)가 매번 기록한다.
+- run_safety: Rocky 는 하네스의 su(pam_lastlog)가 /var/log/lastlog 를 갱신해 rhel 실행에만 `--allow-fs`(08_dbms Oracle Linux 와
+  같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
+  U-32 VULN 이 나던 하네스 잡음.
 
 ## [1.4.1] - 2026-11-02
 ### 조치 등급 일관성 + KNOWN_ISSUES §3 결정 대기(Q-01~Q-06) 처리

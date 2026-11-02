@@ -50,6 +50,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | 카테고리 | 검증한 대상(버전) | 실행 위치 | 양방향 확인 / 면제 |
 |---|---|---|---|
 | 01_unix | Debian 12.15, OpenSSH 9.2p1 (POSIX sh) | Docker `debian:12` | 58 / 9 |
+| 01_unix rhel 계열 | Rocky Linux 9.8 (authselect minimal PAM, OpenSSH 9.9p1, cronie, systemd 252) | Docker `rockylinux/rockylinux:9` (1.5.0) | Debian 과 같은 케이스 54건 + rhel 전용 5건(authselect faillock·su wheel), 진단 실기 안전 검사 |
 | 02_windows | Windows Server 2025 Datacenter (10.0.26100, en-US), PowerShell 5.1.26100 | GitHub `windows-2025` 러너 (IIS·FTP·DNS·SNMP 기능 설치) | 49 / 15 |
 | 03_web Apache | Apache httpd 2.4.69 (공식 이미지) | Docker `httpd:2.4` | 16 / 10 |
 | 03_web Apache(Debian 패키지) | apache2 2.4.68-1~deb12u1 | Docker `debian:12` | 16 / 10 |
@@ -68,7 +69,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 - DBMS 의 면제가 많은 이유는 두 가지입니다. 가이드가 해당 엔진을 대상으로 하지 않는 항목이 많고, 계정 필요 여부 같은 정책 판단 항목은 항상 MANUAL 이기 때문입니다.
 
 **위 표에 없는 환경은 코드상 분기는 있어도 실기 검증을 하지 않았습니다**:
-- Unix: RHEL·Rocky 계열, SUSE, Solaris/AIX/HP-UX
+- Unix: RHEL·Alma 등 Rocky 이외의 rhel 계열(같은 패키지 계열이라 차이는 작음), SUSE, Solaris/AIX/HP-UX
 - Windows: Server 2025 이외 버전, 한글 Windows, 도메인 컨트롤러, Windows 10/11 클라이언트 실기
 - DB: 정식 MSSQL 인스턴스, 표의 버전과 다른 DB·웹 서버 메이저 버전
 - Network: Cisco 실장비 출력

@@ -116,6 +116,9 @@ fi
 # (Dockerfile.cases)에서 만들어 판정을 확인하고, VULN 케이스는 조치 → 재검증 → 원복 → 상태 동일까지 본다(run_cases.sh).
 # lib/tests/coverage.py 가 세는 01_unix 양방향 검증의 절반 이상이 여기서 나온다 - 케이스를 빼면 coverage --strict 가 실패.
 sh 01_unix/tests/run_cases.sh || fail=1
+# 1.5.0 C1: 같은 케이스를 rhel 계열(Rocky Linux 9, Dockerfile.cases.rhel)에서도 실행한다 - authselect PAM·cronie·기본 ftp 계정 등
+# 배포판 고유 경로. coverage.py 의 양방향 집계는 debian 기준 그대로이고, rhel 은 같은 케이스의 재현 + rhel 전용 케이스(distro).
+CASE_DISTRO=rhel sh 01_unix/tests/run_cases.sh || fail=1
 
 # ---- 진단(run.sh) 운영 안전 실기 검사 (lib/tests/run_safety.sh) ----------------------
 # 진단 전후 파일시스템·/etc 내용·프로세스·/tmp 가 같은지(S1), 비대화형으로 제한 시간 안에 끝나는지(S2),
@@ -127,21 +130,28 @@ sh 01_unix/tests/run_cases.sh || fail=1
 # 앞에 둠)에도 HANG_LIMIT 안에 끝나는지(vuln 만 - 시간 절약).
 UNIX_SECRETS='plainhash123|KisaComm77Secret|\$1\$kisasalt\$Qp0wYQK0rM1y9vUe6m3Vx/|KisaAuthPass#2026'
 UNIX_HANG='systemctl postconf sendmail exim exim4 rpcinfo firewall-cmd hostnamectl nft iptables ypwhich named exportfs showmount'
-for mode in vuln hardened; do
-    rs_dir="rs_unix_${mode}_$$"
+# 1.5.0 C1: rhel(Rocky 9 케이스 이미지 - run_cases.sh 가 빌드, systemd 없이 sh 로 실행)에서도 같은 검사를 한다.
+for target in debian:vuln debian:hardened rhel:vuln rhel:hardened; do
+    distro=${target%%:*}; mode=${target#*:}
+    img="$IMAGE"; [ "$distro" = "rhel" ] && img=kisa-u01-cases-rhel
+    rs_dir="rs_unix_${distro}_${mode}_$$"
     hang=""; [ "$mode" = "vuln" ] && hang="HANG_CMDS='$UNIX_HANG' HANG_LIMIT=180"
     expect=""; [ "$mode" = "vuln" ] && expect="--expect U-61=VULN"
-    docker rm -f "kisa-rs-unix-$mode" >/dev/null 2>&1 || true
-    docker create --name "kisa-rs-unix-$mode" "$IMAGE" sh -c "
+    docker rm -f "kisa-rs-unix-$distro-$mode" >/dev/null 2>&1 || true
+    docker create --name "kisa-rs-unix-$distro-$mode" "$img" sh -c "
         sh 01_unix/tests/fixtures/setup.sh $mode >/dev/null 2>&1
         mkdir -p /etc/snmp && echo 'rocommunity KisaComm77Secret' >> /etc/snmp/snmpd.conf
-        RUN_CMD='sh 01_unix/run.sh -e debian' SECRETS='$UNIX_SECRETS' $hang sh lib/tests/run_safety.sh
+        RUN_CMD='sh 01_unix/run.sh -e $distro' SECRETS='$UNIX_SECRETS' $hang sh lib/tests/run_safety.sh
     " >/dev/null
-    docker start -a "kisa-rs-unix-$mode" >/dev/null
-    docker cp "kisa-rs-unix-$mode:/rs" "$rs_dir" >/dev/null 2>&1
-    docker rm "kisa-rs-unix-$mode" >/dev/null
+    docker start -a "kisa-rs-unix-$distro-$mode" >/dev/null
+    docker cp "kisa-rs-unix-$distro-$mode:/rs" "$rs_dir" >/dev/null 2>&1
+    docker rm "kisa-rs-unix-$distro-$mode" >/dev/null
+    label="01_unix/$mode"; allow=""
+    # Rocky 9 는 su 의 PAM postlogin(pam_lastlog)이 하네스의 일반 사용자 전환 때 /var/log/lastlog 를 갱신한다 - 진단과 무관
+    # (08_dbms Oracle Linux 와 같은 처리)
+    if [ "$distro" = "rhel" ]; then label="01_unix-rhel/$mode"; allow='^[<>] /var/log/lastlog\|'; fi
     # shellcheck disable=SC2086
-    python3 lib/tests/run_safety_check.py "$rs_dir" "01_unix/$mode" $expect || fail=1
+    python3 lib/tests/run_safety_check.py "$rs_dir" "$label" $expect ${allow:+--allow-fs "$allow"} || fail=1
     rm -rf "$rs_dir"
 done
 

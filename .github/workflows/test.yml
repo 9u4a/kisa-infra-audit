@@ -139,7 +139,7 @@ jobs:
     # Docker(Debian 12)로 01_unix 를 회귀 테스트한다 - vuln/hardened 두 픽스처로 ~20개 항목은
     # 명시적으로 취약/강화 상태를 주입하고, 나머지는 이 베이스 이미지의 있는 그대로의 기본값을
     # 반영한다(완전한 전수 강화 검증이 아님 - 01_unix/CLAUDE.md "테스트 커버리지" 참고).
-    # rhel 계열은 아직 이 픽스처에 없다(후속 작업).
+    # rhel 계열(Rocky Linux 9)은 1.5.0 부터 항목별 케이스·진단 실기 안전 검사로 같이 돈다(run_tests.sh, Dockerfile.cases.rhel).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -149,6 +149,7 @@ jobs:
           v() { printf '| `%s` | %s |\n' "$1" "$(docker run --rm --entrypoint sh "$1" -c "$2" 2>&1 | tail -n 1)"; }
           { echo '| 이미지 | 버전 |'; echo '|---|---|'
             v debian:12 'cat /etc/debian_version'
+            v rockylinux/rockylinux:9 'cat /etc/rocky-release'
             v httpd:2.4 'httpd -v | head -n 1'
             v nginx:latest 'nginx -v'
             v tomcat:10 'catalina.sh version | grep "Server number"'
