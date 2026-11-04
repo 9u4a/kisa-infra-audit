@@ -27,6 +27,8 @@ snmp-server community EdgeIpv6#Comm07 RO ipv6 V6ACL
 snmp-server user v3user v3group v3 auth sha EdgeAuthKeyLeak08 priv aes 128 EdgePrivKeyLeak09
 snmp-server host 10.1.1.9 version 2c EdgeTrapCommLeak10
 snmp-server host 10.1.1.10 EdgeTrapCommLeak11
+snmp-server host 10.1.1.11 vrf MGMT informs version 2c EdgeVrfCommLeak14
+snmp-server host 10.1.1.12 vrf MGMT EdgeVrfCommLeak15
 !
 ip access-list standard MGMT
  permit 10.1.1.0 0.0.0.255

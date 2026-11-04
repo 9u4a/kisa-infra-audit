@@ -47,7 +47,7 @@ SECRETS = {
         "EdgeEnableHashLeak01", "EdgeUserT7", "EdgeAuditSecretLeak02", "EdgeOspfKeyLeak03",
         "EdgeTacacsKeyLeak04", "EdgeIsakmpKeyLeak05", "EdgeV13w#Comm06", "EdgeIpv6#Comm07",
         "EdgeAuthKeyLeak08", "EdgePrivKeyLeak09", "EdgeTrapCommLeak10", "EdgeTrapCommLeak11",
-        "EdgeVtyPassT7Leak12", "EdgeVtyPlainLeak13",
+        "EdgeVtyPassT7Leak12", "EdgeVtyPlainLeak13", "EdgeVrfCommLeak14", "EdgeVrfCommLeak15",
     ],
 }
 

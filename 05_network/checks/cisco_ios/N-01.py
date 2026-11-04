@@ -13,10 +13,16 @@ def check(ctx):
     has_enable = ctx.has(r"^enable (secret|password) \S+")
     vty_blocks = ctx.line_block_text("vty")
 
+    # aaa new-model + "aaa authentication login default ..." 이면 login authentication 을 따로 지정하지 않은
+    # 라인도 default 목록으로 인증한다(실무 적용 검증 P-11 - 예전에는 이 장비를 VULN 으로 오판).
+    aaa_default = ctx.has(r"^aaa new-model\s*$") and ctx.has(r"^aaa authentication login default \S+")
+
     def line_authenticated(block_text):
         # "no login" 은 password 줄이 있어도 비밀번호 없이 접속을 허용한다(진단 검수 D-R10).
         if re.search(r"^\s*no login\s*$", block_text, re.M):
             return False
+        if aaa_default:
+            return True
         if re.search(r"^\s*password \S+", block_text, re.M):
             return True
         if re.search(r"^\s*login local\s*$", block_text, re.M):
@@ -30,7 +36,7 @@ def check(ctx):
     vty_ok = all(line_authenticated(b) for b in vty_blocks) if vty_blocks else False
 
     # VTY 블록의 password 값(평문·type 7)은 증적에 남기지 않는다(진단 검수 D-R4, S5).
-    evidence = f"enable 비밀번호 설정={has_enable}\nVTY 인증 설정={vty_ok}\n" + cio.mask_secrets("\n---\n".join(vty_blocks))
+    evidence = f"enable 비밀번호 설정={has_enable}\nVTY 인증 설정={vty_ok}\nAAA 로그인 default 목록={aaa_default}\n" + cio.mask_secrets("\n---\n".join(vty_blocks))
 
     if not has_enable:
         return {"status": "VULN", "detail": "enable 비밀번호(enable secret/password)가 설정되어 있지 않음", "evidence": evidence}

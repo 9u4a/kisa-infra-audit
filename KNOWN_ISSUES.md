@@ -369,7 +369,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 
 | ID | 심각도 | 기준 | 내용 | 상태 |
 |---|---|---|---|---|
-| P-01 | 상(차단) | S5 | N-17: `snmp-server host <IP> vrf <이름> ...` 줄은 마스킹이 vrf 이름을 가리고 community 원문을 남긴다. raw/N-17.txt·result.json·report.html 에 저장됨(재현 확인) | 열림 |
+| P-01 | 상(차단) | S5 | N-17: `snmp-server host <IP> vrf <이름> ...` 줄은 마스킹이 vrf 이름을 가리고 community 원문을 남긴다. raw/N-17.txt·result.json·report.html 에 저장됨(재현 확인) | 해결(1.5.0): 마스킹 패턴에 vrf 추가, edge 픽스처에 vrf 줄 2개 + 비밀값 잔존 검사 |
 | P-02 | 상 | S6 | U-04: /etc/passwd 비밀번호 필드가 빈 계정(비밀번호 없이 su 가능)을 GOOD 으로 판정하고, 증적에 "2번째 필드 전부 'x'"라고 남긴다(`length($2) > 0`) | 열림 |
 | P-03 | 상 | S6 | U-47/48: Exim 을 보지 않아 Exim 서버를 "메일 서비스 미설치"로 GOOD 판정(U-45/46 은 Exim 확인) | 열림 |
 | P-04 | 상 | S6 | WEB-01/02(Tomcat): tomcat-users.xml 의 작은따옴표 속성, `manager-script`·`admin-gui` 등 다른 관리 역할 계정을 놓쳐 GOOD | 열림 |
@@ -378,8 +378,8 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | P-07 | 중 | S6 | Tomcat: 실행 중 인스턴스가 여러 개여도 첫 인스턴스만 진단(`tomcat_home`) | 열림 |
 | P-08 | 상 | S6 | MySQL D-10: `host='%'` 만 본다. `0.0.0.0/0.0.0.0`, `%.%` 등 전체 허용 호스트를 GOOD | 열림 |
 | P-09 | 상 | S6 | PostgreSQL D-01: pg_hba `trust`(비밀번호 없이 접속)를 보지 않고 비밀번호 설정 여부만으로 GOOD | 열림 |
-| P-10 | 상 | S6 | N-03: `username ... password 0 <평문>` 을 보지 않아 enable secret 만 있으면 GOOD. 증적 마스킹이 일반 단어("또는")까지 가린다 | 열림 |
-| P-11 | 중 | 판정 | N-01: AAA 기본 목록(`aaa authentication login default ...`)으로 VTY 를 인증하는 장비를 VULN 으로 판정 | 열림 |
+| P-10 | 상 | S6 | N-03: `username ... password 0 <평문>` 을 보지 않아 enable secret 만 있으면 GOOD. 증적 마스킹이 일반 단어("또는")까지 가린다 | 해결(1.5.0): service password-encryption 없이 username 평문 password 가 있으면 VULN, 한글 문장은 마스킹하지 않음. 케이스 2건 |
+| P-11 | 중 | 판정 | N-01: AAA 기본 목록(`aaa authentication login default ...`)으로 VTY 를 인증하는 장비를 VULN 으로 판정 | 해결(1.5.0): aaa new-model + login default 목록이면 라인 인증으로 인정. 케이스 2건 |
 | P-12 | 하 | 판정 | PostgreSQL D-10: 인증 방식 열을 보지 않아 전체 대역 `reject` 규칙도 VULN | 열림 |
 | P-13 | 하 | 판정 | WEB-13(Tomcat): 기본 UserDatabase Realm 만 있어도 항상 VULN | 열림 |
 | P-14 | 하 | 판정 | U-01: `PermitRootLogin prohibit-password` 를 MANUAL 로 판정(가이드상 root 직접 접속 허용 = 취약) | 열림 |

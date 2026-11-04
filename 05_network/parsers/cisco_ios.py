@@ -241,13 +241,15 @@ _MASK = "<masked>"
 _SECRET_PATTERNS = [
     # snmp-server community <string> ...
     (re.compile(r"(\bsnmp-server\s+community\s+)\S+", re.I), r"\1<community>"),
-    # snmp-server host <addr> [informs|traps] [version 1|2c|3 [auth|noauth|priv]] <community> ...
-    (re.compile(r"(\bsnmp-server\s+host\s+\S+(?:\s+(?:informs|traps))?(?:\s+version\s+(?:1|2c|3(?:\s+(?:auth|noauth|priv))?))?\s+)(?!version\b|informs\b|traps\b)\S+", re.I), r"\1<community>"),
+    # snmp-server host <addr> [vrf <이름>] [informs|traps] [version 1|2c|3 [auth|noauth|priv]] <community> ...
+    # (vrf 를 빠뜨려 vrf 이름이 가려지고 community 원문이 남았다 - 실무 적용 검증 P-01)
+    (re.compile(r"(\bsnmp-server\s+host\s+\S+(?:\s+vrf\s+\S+)?(?:\s+(?:informs|traps))?(?:\s+version\s+(?:1|2c|3(?:\s+(?:auth|noauth|priv))?))?\s+)(?!version\b|informs\b|traps\b)\S+", re.I), r"\1<community>"),
     # SNMPv3 user: ... auth md5|sha* <key> priv des|3des|aes [128|192|256] <key>
     (re.compile(r"(\bauth\s+(?:md5|sha\S*)\s+)\S+", re.I), r"\1" + _MASK),
     (re.compile(r"(\bpriv\s+(?:des\S*|3des|aes(?:\s+\d+)?)\s+)\S+", re.I), r"\1" + _MASK),
     # password|secret [암호화 타입 숫자] <값>  (enable/username/line/ppp chap 등 공통)
-    (re.compile(r"(\b(?:password|secret)(?:\s+\d{1,2})?\s+)\S+", re.I), r"\1" + _MASK),
+    # run.py 가 detail 에도 적용하므로 한글 문장("enable secret 또는 ...")은 값으로 보지 않는다(P-10).
+    (re.compile(r"(\b(?:password|secret)(?:\s+\d{1,2})?\s+)(?![가-힣])\S+", re.I), r"\1" + _MASK),
     # key / key-string / authentication-key / message-digest-key [n] [md5] [타입] <값>, crypto isakmp key <값>
     (re.compile(r"(\b(?:[\w-]*-)?key(?:-string)?(?:\s+\d{1,3})?(?:\s+md5)?(?:\s+\d)?\s+)(?!generate\b|zeroize\b|chain\b|config-key\b|pubkey|storage\b|export\b|import\b|decrypt\b|encrypt\b|rsa\b|ec\b)\S+", re.I), r"\1" + _MASK),
 ]

@@ -21,6 +21,13 @@
   같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
   U-32 VULN 이 나던 하네스 잡음.
 
+### Fixed (실무 적용 교차 검증, KNOWN_ISSUES §4)
+- 05_network N-17(P-01, S5): `snmp-server host <IP> vrf <이름> ...` 줄의 community 원문이 결과물에 남던 문제 - 마스킹이
+  vrf 이름을 community 로 보고 가렸다. edge 픽스처에 vrf 줄을 넣어 비밀값 잔존 검사로 고정.
+- 05_network N-03(P-10): enable secret 이 있어도 `username ... password 0 <평문>` 계정이 있으면 VULN(service
+  password-encryption 이 없을 때). 증적 마스킹이 detail 의 "enable secret 또는 ..." 문장을 가리던 문제도 수정.
+- 05_network N-01(P-11): `aaa new-model` + `aaa authentication login default` 장비를 VTY 인증 없음(VULN)으로 오판하던 문제.
+
 ## [1.4.1] - 2026-11-02
 ### 조치 등급 일관성 + KNOWN_ISSUES §3 결정 대기(Q-01~Q-06) 처리
 ### Added

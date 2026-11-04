@@ -1,0 +1,17 @@
+Building configuration...
+!
+version 15.2
+!
+hostname CaseRouter
+!
+enable secret 9 $9$CaseEnableHash
+aaa new-model
+aaa authentication login default group tacacs+ local
+username netops privilege 15 secret 9 $9$CaseUserHash
+!
+line vty 0 4
+ transport input ssh
+line vty 5 15
+ transport input ssh
+!
+end

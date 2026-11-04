@@ -1,0 +1,13 @@
+Building configuration...
+!
+version 15.2
+!
+hostname CaseRouter
+!
+enable secret 9 $9$CaseEnableHash
+username netops privilege 15 secret 9 $9$CaseUserHash
+!
+line vty 0 4
+ transport input ssh
+!
+end

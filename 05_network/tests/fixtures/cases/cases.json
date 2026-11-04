@@ -126,5 +126,37 @@
     "expect": "VULN",
     "file": "N-31_vuln_acl.txt",
     "why": "ACL 지정 directed-broadcast 허용도 차단하지 않은 것"
+  },
+  {
+    "code": "N-01",
+    "engine": "cisco_ios",
+    "name": "good_aaa_default",
+    "expect": "GOOD",
+    "file": "N-01_good_aaa_default.txt",
+    "why": "aaa new-model + aaa authentication login default - 라인에 login authentication 이 없어도 default 목록으로 인증(P-11, 예전 VULN 오판)"
+  },
+  {
+    "code": "N-01",
+    "engine": "cisco_ios",
+    "name": "vuln_no_aaa",
+    "expect": "VULN",
+    "file": "N-01_vuln_no_aaa.txt",
+    "why": "AAA 없이 VTY 에 password/login 설정이 없음 - 비밀번호 없이 접속(P-11 대조)"
+  },
+  {
+    "code": "N-03",
+    "engine": "cisco_ios",
+    "name": "vuln_user_plain",
+    "expect": "VULN",
+    "file": "N-03_vuln_user_plain.txt",
+    "why": "enable secret 은 있으나 username ... password 0 평문 계정, service password-encryption 없음(P-10, 예전 GOOD 오판)"
+  },
+  {
+    "code": "N-03",
+    "engine": "cisco_ios",
+    "name": "good_user_type7",
+    "expect": "GOOD",
+    "file": "N-03_good_user_type7.txt",
+    "why": "service password-encryption 으로 username password 가 Type 7 - 가이드 양호(암호화 적용)"
   }
 ]
