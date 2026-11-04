@@ -1,4 +1,5 @@
 # D-15 (하) 관리자 이외의 사용자가 리스너 로그/trace 파일 변경 제한 [Oracle] — 조치 [fix: auto]
+# 변경: listener.ora 권한 644(초과 시, 소유자 root/oracle 유지), ADMIN_RESTRICTIONS_LISTENER = ON 없으면 추가 후 lsnrctl reload
 # checks/oracle/D-15.sh: 양호 = listener.ora 권한 644 이하 & ADMIN_RESTRICTIONS_LISTENER=ON.
 run_fix() {
     f=$(oracle_listener_ora)

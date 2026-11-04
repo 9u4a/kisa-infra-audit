@@ -1,4 +1,5 @@
 ﻿# WEB-05 (상) 지정하지 않은 CGI/ISAPI 실행 제한 [IIS] — 조치 [fix: confirm]
+# 변경: IIS isapiCgiRestriction notListedCgisAllowed·notListedIsapisAllowed true → false(APPHOST 서버 전역)
 # 서버 전역 설정이라 다른 사이트의 CGI/ISAPI 동작에도 영향을 줄 수 있어 confirm 등급이다.
 
 if (-not (Test-IisAvailable)) {

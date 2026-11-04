@@ -17,6 +17,8 @@ WEB-05 confirm 인데 Apache/Nginx/Tomcat 조치 없음, WEB-17 auto 인데 조�
      "_manual_with_fix" 에 사유가 있으면 통과.
   R3 면제가 더는 필요 없으면(스크립트가 생겼거나 등급이 manual 이 됨) FAIL - 오래된 면제를 남기지 않는다.
   R4 조치 스크립트에 대응하는 check 가 없으면 FAIL.
+  R5 조치 스크립트 머리말(앞 12줄)에 "# 변경: <무엇을 어떤 값으로>" 가 없으면 FAIL - dry-run·적용 전 확인 목록이 이 줄을
+     보여 준다(실무 적용 검증 P-24, lib/common.sh fix_change_note / lib/Common.psm1 Get-FixRollbackNote -Label 변경).
 
 사용법: python lib/tests/guide_consistency.py   (불일치 0 이면 exit 0)
 """
@@ -85,6 +87,10 @@ def main() -> int:
                     errors.append(f"{label} {code}: fix=manual 인데 조치 스크립트가 있음(R2, 진입점이 실행하지 않음)")
             for code in sorted(fixes - checks):
                 errors.append(f"{label} {code}: 조치 스크립트에 대응하는 check 가 없음(R4)")
+            for code in sorted(fixes):
+                head = (ROOT / cat / "fixes" / fam / f"{code}.{ext}").read_text(encoding="utf-8-sig").splitlines()[:12]
+                if not any(re.match(r"# 변경: \S", ln) for ln in head):
+                    errors.append(f"{label} {code}: 조치 머리말(앞 12줄)에 '# 변경: ...' 이 없음(R5)")
             for code in sorted(set(ex) - checks):
                 errors.append(f"{label} {code}: check 가 없는 항목의 면제(R3)")
         for code in sorted(manual_ok.get(cat, {})):

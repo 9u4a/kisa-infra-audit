@@ -219,6 +219,24 @@ try {
         }
     }
 
+    # ---- S7 중복 실행 방지(P-25): 이 프로세스가 진단 잠금을 잡은 채 run.ps1 을 띄우면 결과 없이 exit 2 로 끝나야 한다 ----
+    Import-Module (Join-Path $Repo "lib\Common.psm1") -Force
+    $held = Enter-RunLock -CategoryNum $Category.Substring(0, 2)
+    if (-not $held) { $fail += "S7: 검사용 진단 잠금을 잡지 못함" }
+    else {
+        try {
+            $dupOut = Join-Path ([System.IO.Path]::GetTempPath()) "kisa_rs_dup"
+            Remove-Item -Recurse -Force $dupOut -ErrorAction SilentlyContinue
+            $firstCode = @{ "02_windows" = "W-01"; "07_pc" = "PC-01"; "03_web" = "WEB-02"; "08_dbms" = "D-01" }[$Category]
+            $p3 = Start-Process powershell -ArgumentList (@("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "`"$runPs1`"", "-OutBase", "`"$dupOut`"", "-Items", $firstCode) + $extra) `
+                -NoNewWindow -PassThru -RedirectStandardOutput "$dupOut.stdout.txt" -RedirectStandardError "$dupOut.stderr.txt" -RedirectStandardInput $emptyIn
+            $null = $p3.Handle   # 핸들을 잡아 두지 않으면 WaitForExit(시간) 뒤 ExitCode 가 비어 나온다(.NET Process 동작)
+            if (-not $p3.WaitForExit(120 * 1000)) { $p3.Kill(); $fail += "S7: 잠금 중 두 번째 진단이 120초 안에 끝나지 않음(대기하고 있음)" }
+            elseif ($p3.ExitCode -ne 2) { $fail += "S7: 잠금 중 두 번째 진단의 종료 코드가 2가 아님($($p3.ExitCode))" }
+            if (Get-ChildItem -Path $dupOut -Recurse -Filter "result*.json" -ErrorAction SilentlyContinue) { $fail += "S7: 잠금 중 두 번째 진단이 결과를 만듦" }
+        } finally { Exit-FixLock -Mutex $held }
+    }
+
     # ---- S5 비밀값 검색 ------------------------------------------------------------------
     # 원문 + JSON 이스케이프(PS 5.1 ConvertTo-Json 은 & < > ' 를 \u0026 등으로) + HTML 이스케이프 형태를 파일 바이트에서 찾고,
     # result.json 은 ConvertFrom-Json 으로 풀어 모든 문자열 값에서도 찾는다(이스케이프 형태가 무엇이든 잡힘).

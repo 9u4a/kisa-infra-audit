@@ -1,4 +1,5 @@
 ﻿# D-24 (상) Registry Procedure 권한 제한 [MSSQL] — 조치 [fix: auto]
+# 변경: master 의 xp_regread·xp_regwrite 등 레지스트리 확장 프로시저 7종에 대한 public/guest EXECUTE 권한 REVOKE
 # checks/mssql/D-24.ps1 이 찾아낸 (프로시저, principal) 조합에서 실행 권한을 회수한다.
 # 1.4.0(커버리지 C-D23/C-D24): xp_cmdshell·xp_reg* 는 sys 스키마 시스템 객체(음수 object_id)라 master.sys.objects 에 없고
 # master.sys.all_objects(system_objects) 에만 있다 - 예전 JOIN sys.objects 는 public 에 권한을 줘도 0건이라 VULN 을 낼 수 없었다(CI 실측).

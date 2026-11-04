@@ -1,4 +1,5 @@
 # WEB-14 (상) 웹 서비스 경로 내 파일의 접근 통제 — 조치 [fix: auto]
+# 변경: 권한이 750 을 넘는 설정 파일을 750 으로(소유자 유지) - Apache 메인 설정, Nginx nginx.conf, Tomcat web.xml
 run_fix() {
     detect_web_engines
     applied=""

@@ -1,4 +1,5 @@
 # D-26 (상) 감사 기록 설정 [PostgreSQL] — 조치 [fix: confirm]
+# 변경: ALTER SYSTEM SET logging_collector = on, log_statement = 'mod' 후 PostgreSQL 재기동(실패 시 postgresql.auto.conf 되돌리고 재기동)
 # 원복: 일부 — postgresql.auto.conf·log_statement 는 되돌리지만(reload 포함) logging_collector 반영에는 재기동이 필요함
 # checks/postgres/D-26.sh: 취약 = logging_collector=off. logging_collector 는 정적 파라미터라 재기동이 필요하다
 # - confirm 등급에서 재기동까지 수행한다(DB 클라이언트 연결만 영향, 이 스크립트의 OS 세션에는 영향 없음).

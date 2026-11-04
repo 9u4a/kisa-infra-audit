@@ -1,4 +1,5 @@
 # U-66 (중) 정책에 따른 시스템 로깅 설정 — 조치
+# 변경: rsyslog/syslog/syslog-ng 중 첫 유닛 시작·활성화, rsyslog.conf/syslog.conf 에 유효 규칙이 없으면 authpriv→/var/log/secure, *.info→/var/log/messages 규칙 추가
 # 자동화 범위: 이 항목은 VULN 조건이 "로깅 서비스 미실행" 또는 "유효 규칙 전무"인 두 경우뿐이며
 # (그 외는 항상 MANUAL), 두 경우 모두 서비스 시작/기본 규칙 추가로 조치 가능하다.
 run_fix() {

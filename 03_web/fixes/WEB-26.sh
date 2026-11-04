@@ -1,4 +1,5 @@
 # WEB-26 (중) 로그 디렉터리 및 파일 권한 설정 — 조치 [fix: auto]
+# 변경: Apache/Nginx/Tomcat 로그 폴더와 그 안 파일에서 기타(other) 권한 제거(chmod o-rwx, 소유자·그룹 권한 유지)
 # checks/WEB-26.sh 와 같은 기준(lib/common.sh web_log_dirs 의 로그 폴더, 기타 권한 비트 하나라도)으로 찾은
 # 로그 폴더·파일에서 기타(other) 권한만 제거한다(가이드 조치 "chmod o-rwx"). 소유자·그룹 권한은 그대로라
 # 로그를 쓰는 웹 서버(root 마스터 또는 소유 계정)와 adm 그룹 등의 읽기에는 영향이 없다.

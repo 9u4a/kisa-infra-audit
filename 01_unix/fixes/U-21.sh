@@ -1,4 +1,5 @@
 # U-21 (상) /etc/(r)syslog.conf 파일 소유자 및 권한 설정 — 조치
+# 변경: /etc/rsyslog.conf(없으면 /etc/syslog.conf) 소유자 root·권한 640 으로 설정
 run_fix() {
     if [ -f /etc/rsyslog.conf ]; then
         fix_set_owner_perm "/etc/rsyslog.conf" "root" 640

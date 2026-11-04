@@ -1,4 +1,5 @@
 # U-57 (중) Ftpusers 파일 설정 — 조치
+# 변경: /etc/ftpusers·/etc/ftpd/ftpusers 에 root 추가, vsftpd user_list 에 root 추가(userlist_enable=YES·userlist_deny≠NO 일 때만), proftpd RootLogin on→off
 # 가이드 조치 방법: root 계정의 FTP 접속 차단
 run_fix() {
     applied=""

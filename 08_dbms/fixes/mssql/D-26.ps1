@@ -1,4 +1,5 @@
 ﻿# D-26 (상) 감사 기록 설정 [MSSQL] — 조치 [fix: confirm]
+# 변경: 감사가 없으면 KISA_D26_Audit(TO APPLICATION_LOG)+로그인 성공/실패 감사 사양 생성·STATE=ON, 비활성 감사는 STATE=ON(재시작 없음)
 # checks/mssql/D-26.ps1: 취약 = 서버 감사(Server Audit)가 없거나 비활성화됨. 서버 감사 객체
 # 생성/활성화는(PostgreSQL/Oracle 의 logging_collector/audit_trail 과 달리) 인스턴스 재시작이
 # 필요 없는 런타임 조작이라 재시작 없이 바로 재검증을 통과할 수 있다.

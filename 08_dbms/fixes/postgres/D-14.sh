@@ -1,4 +1,5 @@
 # D-14 (중) 데이터베이스의 주요 설정 파일 접근 권한 적절성 [PostgreSQL] — 조치 [fix: auto]
+# 변경: postgresql.conf·pg_hba.conf 권한이 640 을 넘으면 640, 소유자 root/postgres 이면 유지(그 외 postgres)
 run_fix() {
     conf=$(postgres_config_path)
     hba=$(postgres_hba_path)

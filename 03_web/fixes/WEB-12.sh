@@ -1,4 +1,5 @@
 # WEB-12 (중) 웹 서비스 링크 사용 금지 — 조치 [fix: confirm]
+# 변경: Apache: Options -FollowSymLinks(Options 없으면 수동), Nginx: http 블록에 disable_symlinks on; 추가, Tomcat: allowLinking="true" → "false"
 # 심볼릭 링크로 실제 서비스 콘텐츠가 구성된 경우 이 조치로 서비스가 깨질 수 있다는 점이
 # 가이드 '조치 시 영향'에 명시되어 있어 confirm 등급이다(checks/WEB-12.sh 참고).
 run_fix() {

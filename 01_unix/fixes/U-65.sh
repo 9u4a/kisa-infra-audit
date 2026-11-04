@@ -1,4 +1,5 @@
 # U-65 (중) NTP 및 시각 동기화 설정 — 조치
+# 변경: chrony.conf/ntp.conf(먼저 찾은 것)에 server/pool 없으면 "pool pool.ntp.org iburst" 추가, chronyd/chrony/ntpd/ntp 중 첫 유닛 시작·활성화. 둘 다 없으면 SKIPPED
 run_fix() {
     applied=""
     conf=""

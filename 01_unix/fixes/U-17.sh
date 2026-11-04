@@ -1,4 +1,5 @@
 # U-17 (상) 시스템 시작 스크립트 권한 설정 — 조치
+# 변경: /etc/systemd/system 하위(깊이 2) 유닛 파일 중 비 root 소유·그룹/기타 쓰기 가능 파일(최대 50건)을 소유자 root, chmod go-w. 디렉터리 없으면 변경 안 함
 # 가이드 조치 방법: 시작 스크립트(유닛 파일)를 root 소유로, 그룹/기타 쓰기 권한 제거
 run_fix() {
     systemd_dir="/etc/systemd/system"

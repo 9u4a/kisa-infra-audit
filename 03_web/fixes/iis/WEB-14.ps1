@@ -1,4 +1,5 @@
 ﻿# WEB-14 (상) 웹 서비스 경로 내 파일의 접근 통제 [IIS] — 조치 [fix: auto]
+# 변경: 사이트 물리 경로 ACL 에서 FullControl/Modify/Write 허용이 있는 Everyone·BUILTIN\Users·Authenticated Users 의 허용(Allow) ACE 전부 제거
 
 if (-not (Test-IisAvailable)) {
     $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; $Global:FixEvidence = ""

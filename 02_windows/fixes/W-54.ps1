@@ -1,4 +1,5 @@
 ﻿# W-54 (중) Dos 공격 방어 레지스트리 설정 [fix: confirm]
+# 변경: HKLM\...\Services\Tcpip\Parameters SynAttackProtect=1, EnableDeadGWDetect=0, KeepAliveTime=300000, NoNameReleaseOnDemand=1
 # checks/W-54.ps1 기준값 4개를 그대로 설정한다.
 
 $path = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"

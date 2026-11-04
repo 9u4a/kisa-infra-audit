@@ -1,4 +1,5 @@
 # U-04 (상) 비밀번호 파일 보호 — 조치
+# 변경: pwconv 실행으로 /etc/passwd 의 비밀번호를 /etc/shadow 로 이전(쉐도우 체계 전환). 빈 비밀번호 계정이 있으면 변경 안 함(SKIPPED)
 # 가이드 조치 방법: pwconv 로 쉐도우 비밀번호 체계로 전환
 run_fix() {
     case "$OS_FAMILY" in

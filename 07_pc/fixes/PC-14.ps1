@@ -1,4 +1,5 @@
 ﻿# PC-14 (상) 바이러스 백신 프로그램에서 제공하는 실시간 감시 기능 활성화 [fix: auto]
+# 변경: Windows Defender 실시간 보호 사용(Set-MpPreference -DisableRealtimeMonitoring $false)
 
 try {
     Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction Stop

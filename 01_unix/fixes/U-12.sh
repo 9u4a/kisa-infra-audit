@@ -1,4 +1,5 @@
 # U-12 (하) 세션 종료 시간 설정 — 조치
+# 변경: /etc/profile TMOUT=600 (기존 TMOUT= 줄은 교체, 없으면 추가) + export TMOUT 줄이 없으면 추가
 # 가이드 조치 방법: TMOUT 을 600초(10분) 이하로 설정
 run_fix() {
     f="/etc/profile"

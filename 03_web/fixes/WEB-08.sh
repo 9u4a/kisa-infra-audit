@@ -1,4 +1,5 @@
 # WEB-08 (하) 웹 서비스 파일 업로드 및 다운로드 용량 제한 — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
+# 변경: Apache: LimitRequestBody 0→10485760(미설정 시 추가), Nginx: client_max_body_size 0→10m, Tomcat: maxPostSize·maxSwallowSize 음수→10485760(미설정 시 8080 Connector 에 추가)
 # 가이드 권고에 맞춰 넉넉한 상한값(10MB)을 기본값으로 설정한다 - 실제 업무에 필요한 값은
 # 조직마다 다를 수 있지만, "제한이 전혀 없는" 상태보다 안전한 값이라 U-28류 문제는 아니다.
 run_fix() {

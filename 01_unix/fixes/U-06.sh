@@ -1,4 +1,5 @@
 # U-06 (상) 사용자 계정 su 기능 제한 — 조치
+# 변경: /etc/pam.d/su 의 주석된 "auth required pam_wheel.so [use_uid]" 줄 해제, 없으면 "auth required pam_wheel.so use_uid" 추가. wheel 에 root 외 구성원 없으면 변경 안 함
 # 가이드 조치 방법: /etc/pam.d/su 에 pam_wheel.so 활성화(wheel 그룹만 su 허용)
 run_fix() {
     case "$OS_FAMILY" in

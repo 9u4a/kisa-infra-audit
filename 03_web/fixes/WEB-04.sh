@@ -1,4 +1,5 @@
 # WEB-04 (상) 웹 서비스 디렉터리 리스팅 방지 설정 — 조치 [fix: auto]
+# 변경: Apache: Options 의 Indexes 제거(-Indexes), Nginx: autoindex on → off, Tomcat: web.xml listings true → false
 run_fix() {
     detect_web_engines
     applied=""

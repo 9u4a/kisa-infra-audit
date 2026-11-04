@@ -1,4 +1,5 @@
 # U-02 (상) 비밀번호 관리정책 설정 — 조치
+# 변경: /etc/login.defs PASS_MAX_DAYS 90, /etc/security/pwquality.conf minlen = 8 (있으면 값 교체, 없으면 추가, 파일 없으면 건너뜀)
 # 가이드 조치 방법: 비밀번호 사용 기간(90일 이하)·최소 길이(8자 이상) 정책 설정
 run_fix() {
     case "$OS_FAMILY" in

@@ -1,4 +1,5 @@
 # U-47 (상) 스팸 메일 릴레이 제한 — 조치
+# 변경: postfix 에 reject_unauth_destination 없으면 smtpd_recipient_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination, sendmail.mc/cf promiscuous_relay 줄 주석
 run_fix() {
     applied=""
 

@@ -1,4 +1,5 @@
 ﻿# W-43 (중) 이벤트 로그 파일 접근 통제 설정 [fix: auto]
+# 변경: %SystemRoot%\System32\winevt\Logs, System32\config 폴더 NTFS ACL 에서 Everyone 허용(Allow) ACE 제거
 # checks/W-43.ps1 과 동일한 대상 경로에서 Everyone 허용 ACE 만 제거한다.
 
 $paths = @(

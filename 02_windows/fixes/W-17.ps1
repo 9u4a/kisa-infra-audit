@@ -1,4 +1,5 @@
 ﻿# W-17 (상) 하드디스크 기본 공유 제거 [fix: confirm]
+# 변경: LanmanServer\Parameters\AutoShareServer=0 + 기본 공유(C$/ADMIN$ 등) 즉시 삭제(거부 시 Server 서비스 재시작 - SMB 연결 끊김)
 # 원복: 일부 — 레지스트리는 되돌리지만 중지한 기본 공유는 Server 서비스 재시작/재부팅 후에야 다시 생김(실행 중 삭제가 거부되면 조치가 Server 서비스를 재시작 - SMB 연결 끊김)
 # checks/W-17.ps1: 양호 = AutoShareServer=0 이며 기본(관리용) 공유가 존재하지 않는 경우.
 # 재시작 후에도 유지되도록 레지스트리를 먼저 설정하고(백업/원복 가능), 현재 활성 중인 기본

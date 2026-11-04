@@ -1,4 +1,5 @@
 # U-09 (하) 계정이 존재하지 않는 GID 금지 — 조치
+# 변경: /etc/passwd 의 고아 GID 마다 그룹 gid<번호> 생성(groupadd -g → /etc/group·/etc/gshadow 변경), 계정의 그룹 이동은 안 함
 # 가이드 조치 방법: /etc/group 과 /etc/passwd 를 비교해 고아 GID 정리
 # 자동화 범위: 계정을 다른 그룹으로 옮기는 것은 업무 영향을 알 수 없어 위험하므로, 고아 GID에
 # 해당하는 그룹을 /etc/group 에 새로 만들어(gid<번호>) "존재하지 않는 GID" 상태만 해소한다.

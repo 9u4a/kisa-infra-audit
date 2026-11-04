@@ -1,4 +1,5 @@
 # D-11 (상) DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정 [Oracle] — 조치 [fix: auto]
+# 변경: DBA 외 일반 계정의 SYS 소유·DBA_* 테이블 권한(EXECUTE 제외)마다 REVOKE <권한> ON <owner.table> FROM <계정>(SYS 소유는 SYSDBA 필요)
 # checks/oracle/D-11.sh 와 동일한 조건(oracle_maintained='N')으로 찾아낸 (owner, table, privilege,
 # grantee) 조합을 정확히 그 권한만 회수한다.
 run_fix() {

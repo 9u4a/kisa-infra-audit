@@ -1,4 +1,5 @@
 # U-62 (하) 로그인 시 경고 메시지 설정 — 조치
+# 변경: /etc/motd·/etc/issue 에 경고문 덧붙임(기본 문구뿐일 때), sshd Banner 없으면 /etc/issue.net 작성+Banner /etc/issue.net, telnetd 있으면 issue.net, vsftpd ftpd_banner 추가
 run_fix() {
     banner_text="Authorized access only. All activity may be monitored and reported."
     applied=""

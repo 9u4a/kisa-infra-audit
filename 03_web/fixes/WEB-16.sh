@@ -1,4 +1,5 @@
 # WEB-16 (중) 웹 서비스 헤더 정보 노출 제한 — 조치 [fix: auto]
+# 변경: Apache: 메인 설정 끝에 ServerTokens Prod·ServerSignature Off 추가, Nginx: server_tokens off(on/build 교체·http 블록 추가), Tomcat: 8080 Connector server="WebServer"
 run_fix() {
     detect_web_engines
     applied=""

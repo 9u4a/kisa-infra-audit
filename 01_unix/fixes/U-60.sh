@@ -1,4 +1,5 @@
 # U-60 (중) SNMP Community String 복잡성 설정 — 조치
+# 변경: snmpd.conf(include 포함)의 public/private·복잡도 미달 community 값을 무작위 영숫자 16자로 교체(community 필드만, 같은 값은 같은 새 값). 모니터링 측 갱신 필요
 # 자동화 범위: 기본값(public/private) 또는 길이/복잡도 미달 Community String 을 임의 생성한
 # 강력한 문자열로 교체한다(영문 대소문자+숫자 16자, /dev/urandom 기반).
 # check(U-60)와 같이 IPv6 지시어(*6)와 includeFile/includeDir 로 불러온 파일까지 대상으로 한다(F-R8).

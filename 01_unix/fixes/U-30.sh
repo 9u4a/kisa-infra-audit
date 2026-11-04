@@ -1,4 +1,5 @@
 # U-30 (중) UMASK 설정 관리 — 조치
+# 변경: login.defs·/etc/profile·profile.d/*.sh·bashrc 의 022 미만 umask 줄을 umask 022(login.defs 는 UMASK 022)로 교체, login.defs·/etc/profile 에 없으면 추가
 # 가이드 조치 방법: UMASK 값을 022 이상으로 설정
 # check(U-30)와 같은 순서·기준(진단 검수 U-R15): login.defs → /etc/profile → profile.d → bashrc 중 umask 줄이 있는
 # 파일에서 022 비트를 마스킹하지 않는 값만 022 로 바꾸고(이미 027 등 더 엄격한 값은 그대로), login.defs·/etc/profile

@@ -1,4 +1,5 @@
 # WEB-13 (상) 웹 서비스 설정 파일 노출 제한 — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
+# 변경: Tomcat server.xml·context.xml 중 DB <Resource> 가 있는 파일 권한 600, 소유자 root/tomcat* 이면 유지(그 외 tomcat)
 # checks/WEB-13.sh 와 같은 대상: server.xml·context.xml 중 <Resource> 가 있는 파일을 600 으로(소유자는 허용 목록이면 유지).
 run_fix() {
     detect_web_engines

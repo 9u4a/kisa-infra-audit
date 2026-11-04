@@ -1,4 +1,5 @@
 # D-08 (상) 안전한 암호화 알고리즘 사용 [MySQL] — 조치 [fix: confirm]
+# 변경: mysql_native_password 계정마다 ALTER USER ... IDENTIFIED WITH caching_sha2_password BY <운영자 터미널 입력값>(계정별 확인, 비대화형이면 미변경)
 # 원복: 불가 — 원래 비밀번호·인증 플러그인으로 되돌릴 수 없음
 # checks/mysql/D-08.sh: 취약 = mysql_native_password(SHA-1)를 쓰는 계정 존재. 해당 계정을
 # caching_sha2_password(SHA-256)로 전환한다 - 기존 해시를 재사용할 수 없어 비밀번호를 새로 설정해야 한다.

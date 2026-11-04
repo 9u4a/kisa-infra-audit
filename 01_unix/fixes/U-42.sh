@@ -1,4 +1,5 @@
 # U-42 (상) 불필요한 RPC 서비스 비활성화 — 조치
+# 변경: rpc.cmsd·ttdbserverd·sadmind·rusersd·rwalld·rstatd·rpc.nisd·rexd·pcnfsd·rpc-statd·ypupdated·rquotad·kcms_server·cachefsd 정지·비활성화 및 프로세스 종료(rpcbind 유지)
 # 원복: 일부 — systemd 서비스 상태는 되돌리지만, 직접 종료한 프로세스(inetd 계열 등)는 다시 띄우지 않음
 # 자동화 범위: 프로세스 종료 + systemd 유닛 비활성화까지만 수행한다. rpcbind 자체를 내리면
 # 다른 정상 RPC 서비스(NFS 등)에도 영향을 줄 수 있어 개별 데몬만 대상으로 한다.

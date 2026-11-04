@@ -1,4 +1,5 @@
 # D-08 (상) 안전한 암호화 알고리즘 사용 [PostgreSQL] — 조치 [fix: confirm]
+# 변경: ALTER SYSTEM SET password_encryption = 'scram-sha-256' + pg_reload_conf(), md5 저장 role 은 운영자 터미널 입력값으로 ALTER ROLE ... PASSWORD(role별 확인)
 # 원복: 일부 — password_encryption 은 되돌리지만, 다시 설정한 role 비밀번호는 원래 값으로 되돌릴 수 없음
 # checks/postgres/D-08.sh: 취약 = password_encryption 이 md5, 또는 설정은 scram-sha-256 이나 pg_authid 에
 # md5 해시로 저장된 role 이 남아 있음(진단 검수 D-R7).

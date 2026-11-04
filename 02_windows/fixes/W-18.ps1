@@ -1,4 +1,5 @@
 ﻿# W-18 (상) 불필요한 서비스 제거 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
+# 변경: RemoteRegistry/SSDPSRV/upnphost/simptcp/Browser/WerSvc 중 실행 중인 서비스만 중지 + 시작 유형 사용 안 함
 # checks/W-18.ps1 과 동일한 대상 목록 중 실제로 Running 인 서비스만 중지+비활성화한다.
 
 $targets = @("RemoteRegistry", "SSDPSRV", "upnphost", "simptcp", "Browser", "WerSvc")

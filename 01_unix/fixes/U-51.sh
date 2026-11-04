@@ -1,4 +1,5 @@
 # U-51 (중) DNS 서비스의 취약한 동적 업데이트 설정 금지 — 조치
+# 변경: named.conf(include 포함)의 한 줄 "allow-update { ... any; ... };" 를 allow-update { none; }; 로 교체(여러 줄 블록은 변경 안 함)
 # check(U-51)와 같이 include 된 파일 전체에서 any 를 허용하는 allow-update 를 찾는다(진단 검수 U-R5).
 run_fix() {
     conf=""

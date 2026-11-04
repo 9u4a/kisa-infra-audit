@@ -1,4 +1,5 @@
 ﻿# WEB-07 (중) 웹 서비스 경로 내 불필요한 파일 제거 [IIS] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
+# 변경: 백업 후 삭제 - inetpub\iissamples·AdminScripts·wwwroot\iishelp, Common Files\System\msadc(TrustedInstaller 소유면 삭제 안 함·수동)
 # checks/iis/WEB-07.ps1 과 동일한 대상 경로를 제거한다(내용 전체를 백업 후 삭제 -
 # Backup-FixPathAndRemove 로 원복 가능).
 # C-WEB07(1.4.0): Windows 구성요소(TrustedInstaller 소유, 예: Windows Server 의 MDAC msadc)는 관리자도 다 지울 수 없어

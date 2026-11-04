@@ -1,4 +1,5 @@
 # D-07 (중) root 권한으로 서비스 구동 제한 [MySQL] — 조치 [fix: confirm]
+# 변경: my.cnf user = mysql, @@datadir 의 root 소유 파일을 mysql:mysql 로 chown 후 mysqld 재기동(기동 실패 시 my.cnf 되돌리고 재기동)
 # 원복: 일부 — my.cnf·데이터 파일 소유자는 되돌리지만, root 구동으로 돌아가려면 mysqld 재기동이 필요함
 # checks/mysql/D-07.sh 는 /proc 기반으로 "실행 중인" 프로세스의 uid 를 직접 확인하므로, 설정 파일만 고쳐서는
 # 재검증을 통과할 수 없다 - mysqld 재기동이 필요하다(DB 클라이언트 연결만 끊김, OS 세션 영향 없음).

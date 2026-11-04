@@ -1,4 +1,5 @@
 # U-01 (상) root 계정 원격 접속 제한 — 조치
+# 변경: /etc/ssh/sshd_config 맨 앞(Include 위)에 PermitRootLogin no 삽입(sshd -t 통과 시만 유지, 재시작 안 함). root 외 관리자 없음·Telnet 사용 중·sshd 없음이면 변경 안 함
 # 가이드 조치 방법: sshd_config 에 PermitRootLogin no 설정
 # 운영 안전(1.2.2):
 #  - root 외 관리자 수단(sudo/wheel/admin 그룹 구성원, sudoers 개별 지정)이 없으면 바꾸지 않는다 -

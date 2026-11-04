@@ -1,4 +1,5 @@
 # U-55 (중) FTP 계정 shell 제한 — 조치
+# 변경: ftp 계정 쉘을 nologin 으로(usermod -s, ftp 계정 없으면 변경 없음)
 run_fix() {
     passwd_file="/etc/passwd"
     entry=$(grep '^ftp:' "$passwd_file" 2>/dev/null)

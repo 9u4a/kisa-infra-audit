@@ -57,6 +57,12 @@
   - 호스트 이름(P-23): sh 는 `host_name`(hostname → uname -n → /proc), 05_network 는 설정의 hostname 줄.
   - 옵션 값 누락은 사용법 오류(exit 2), 08_dbms DB 접속 실패는 종료 코드 4(audit.sh 가 구분), 05 `run.py -i` 코드 검증(P-24).
   - README 에 Windows 실행 정책(Unblock-File, `-Scope Process`) 안내(P-20). run_safety_windows.ps1 의 잘못된 `-Force`(P-27).
+  - 조치 dry-run·적용 전 확인 목록에 바꿀 대상·값을 표시(P-24) - 조치 파일 전부에 머리말 `# 변경: ...` 을 두고
+    (`fix_change_note` / `Get-FixRollbackNote -Label 변경`), guide_consistency.py R5 가 누락을 막는다.
+  - Windows run.ps1 중복 실행 잠금(P-25, S7): 같은 카테고리 진단이 이미 돌고 있으면 exit 2(`Enter-RunLock`, Mutex).
+    run_safety_windows.ps1 이 잠금 중 두 번째 실행을 검사. run.ps1 준수율도 sh·merge.py 와 같은 버림.
+- `Remove-FixAclIdentity`(W-22/43/46/58, IIS WEB-03/14/26 조치)가 설명과 달리 거부(Deny) ACE 까지 지우던 문제 - "Everyone 거부"
+  같은 보호 설정이 사라져 접근이 오히려 넓어질 수 있었다. 허용 ACE 만 제거(P-24 머리말 작성 중 발견).
 ### Changed (조치 등급, KNOWN_ISSUES §4)
 - auto → confirm(deviation 기록): U-40·U-42·U-52·U-54(서비스 즉시 중지·공유 차단), U-65(공용 pool.ntp.org 추가), W-21(FTP 중지),
   D-18·D-22(Oracle PUBLIC 권한 회수·RESOURCE_LIMIT). `--apply --yes` 일괄 적용에서 빠지고 항목별 확인을 받는다.

@@ -1,4 +1,5 @@
 # U-35 (상) 공유 서비스에 대한 익명 접근 제한 설정 — 조치
+# 변경: vsftpd anonymous_enable=YES→NO, proftpd <Anonymous> 블록 주석 처리, smb.conf guest ok/public = yes→no (해당 설정 있을 때만, 서비스 재시작 안 함)
 run_fix() {
     applied=""
 

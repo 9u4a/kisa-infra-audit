@@ -1,4 +1,5 @@
 # U-48 (중) expn, vrfy 명령어 제한 — 조치
+# 변경: sendmail.cf PrivacyOptions 에 noexpn,novrfy 추가(goaway 또는 둘 다 있으면 건너뜀, 줄 없으면 새로 추가), postfix disable_vrfy_command = yes (postconf -e)
 run_fix() {
     applied=""
 

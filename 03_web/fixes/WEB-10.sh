@@ -1,4 +1,5 @@
 # WEB-10 (상) 불필요한 프록시 설정 제한 — 조치 [fix: confirm]
+# 변경: Apache: ProxyRequests On → Off(정방향 프록시만, ProxyPass·Nginx proxy_pass·Tomcat proxyName 은 변경 안 함)
 # Apache 정방향(오픈) 프록시 ProxyRequests On 만 Off 로 바꾼다(checks/WEB-10.sh 의 VULN 기준과 같음, 1.4.1 Q-03).
 # 역방향 프록시(ProxyPass/proxy_pass, Tomcat proxyName)는 업무 필요 여부를 스크립트가 알 수 없어 건드리지 않는다.
 # 정방향 프록시를 업무에 쓰는 서버(사내 아웃바운드 프록시 등)는 서비스가 끊기므로 confirm 등급이다.

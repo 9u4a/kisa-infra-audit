@@ -1,4 +1,5 @@
 # D-03 (상) 비밀번호 사용 기간 및 복잡도를 기관의 정책에 맞도록 설정 [Oracle] — 조치 [fix: confirm]
+# 변경: 미설정 프로파일(DEFAULT 먼저)에 ALTER PROFILE ... LIMIT PASSWORD_LIFE_TIME 90 PASSWORD_VERIFY_FUNCTION ora12c_verify_function(즉시 적용)
 # ALTER PROFILE 은 동적으로 즉시 적용된다(인스턴스 재시작 불필요).
 # 주의(Docker 실기 테스트로 발견): "LIMIT ... DEFAULT" 로 원복하면 Oracle의 실제 내장 기본값으로
 # 돌아가는데, 최신 버전(23ai/26ai)의 DEFAULT 프로파일 내장 기본값 자체가 UNLIMITED/NULL 이

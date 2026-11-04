@@ -1,4 +1,5 @@
 # D-17 (하) Audit Table은 데이터베이스 관리자 계정으로 접근하도록 제한 [Oracle] — 조치 [fix: auto]
+# 변경: SYS.AUD$ 에 SYS/SYSTEM 외 계정이 가진 권한마다 REVOKE <권한> ON SYS.AUD$ FROM <계정>(SYSDBA 로 실행 필요)
 run_fix() {
     owner=$(oracle_query "SELECT owner FROM dba_tables WHERE table_name = 'AUD\$';")
     owner_t=$(printf '%s' "$owner" | tr -d ' \r')

@@ -1,4 +1,5 @@
 # U-24 (상) 사용자, 시스템 환경변수 파일 소유자 및 권한 설정 — 조치
+# 변경: 로그인 계정 홈의 .profile·.kshrc·.cshrc·.bashrc·.bash_profile·.login·.exrc·.netrc 소유자가 root/본인이 아니면 본인으로 chown, 기타 쓰기 권한 제거(o-w)
 run_fix() {
     passwd_file="/etc/passwd"
     dotfiles=".profile .kshrc .cshrc .bashrc .bash_profile .login .exrc .netrc"

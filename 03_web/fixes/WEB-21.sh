@@ -1,4 +1,5 @@
 # WEB-21 (중) HTTP 리디렉션 — 조치 [fix: confirm]
+# 변경: Apache(SSLEngine on·ServerName 있을 때): 메인 설정에 <If HTTPS != on> Redirect permanent / https://<ServerName>/ 추가, Nginx 는 수동
 # WEB-20(SSL/TLS 활성화)이 선행되어 있어야 한다(HTTPS 로 보낼 곳이 없으면 리다이렉트 자체가
 # 서비스 중단을 일으킴). Apache 는 ServerName 값을 이용해 안전하게 리다이렉트 대상을 구성할
 # 수 있지만, Nginx 는 리다이렉트를 넣어야 할 정확한 server{} 블록을 텍스트 치환만으로 안전하게

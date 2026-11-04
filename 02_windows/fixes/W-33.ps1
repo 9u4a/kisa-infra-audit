@@ -1,4 +1,5 @@
 ﻿# W-33 (하) HTTP/FTP/SMTP 배너 차단 [fix: auto]
+# 변경: IIS requestFiltering removeServerHeader=true (서버 전역 + 재정의한 사이트별) - HTTP Server 헤더 제거
 # checks/W-33.ps1: VULN 은 HTTP Server 헤더 노출인 경우에만 발생(FTP/SMTP 는 MANUAL). IIS 10+
 # 의 removeServerHeader 로 Server 헤더 자체를 제거한다(03_web WEB-16 과 같은 설정·같은 공용 함수).
 # 진단은 실제 응답 헤더를 보므로 서버 전역만 바꾸면 사이트 재정의(web.config/location 의 removeServerHeader=false)가

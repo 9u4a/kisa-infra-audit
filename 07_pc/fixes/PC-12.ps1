@@ -1,4 +1,5 @@
 ﻿# PC-12 (중) Windows 자동 로그인 점검 [fix: auto]
+# 변경: 값이 있으면 HKLM\...\Windows NT\CurrentVersion\Winlogon\AutoAdminLogon = "0", DefaultPassword 값이 있으면 삭제
 # 02_windows/fixes/W-52.ps1 과 동일한 대상/조치 (PC 카테고리는 secedit 확인 없이 레지스트리만 다룸)
 
 $path = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"

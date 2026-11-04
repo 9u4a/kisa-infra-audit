@@ -113,6 +113,14 @@ if ($RemoteMode -and $env:DB_TRUST_SERVER_CERT -eq '1' -and $env:DB_USER) {
     Write-Warning "원격 SQL 인증에서 서버 인증서 검증을 끕니다(DB_TRUST_SERVER_CERT=1) - 중간자에게 비밀번호가 노출될 수 있습니다."
 }
 
+# 같은 카테고리 진단 동시 실행 방지(운영 안전 기준 S7, P-25) - 접속 시도 전에 잡고 맨 아래 finally 에서 해제한다.
+$RunLock = Enter-RunLock -CategoryNum $CategoryNum
+if (-not $RunLock) {
+    foreach ($n in $EnvNames) { [Environment]::SetEnvironmentVariable($n, $EnvBefore[$n], 'Process') }
+    Write-Error "같은 카테고리 진단이 이미 실행 중입니다. 끝난 뒤 다시 실행하세요."
+    exit 2
+}
+
 try {
     if (-not $OutBase) { $OutBase = Join-Path (Split-Path -Parent $ScriptDir) "output" }
     $OutDir = New-OutputDir -BaseDir $OutBase -CategoryNum $CategoryNum
@@ -197,7 +205,7 @@ try {
     $counts = @{ VULN = 0; MANUAL = 0; ERROR = 0; NA = 0; GOOD = 0 }
     foreach ($r in $Results) { $counts[$r.status]++ }
     $base = $counts.VULN + $counts.GOOD
-    $rate = if ($base -gt 0) { [int](($counts.GOOD * 100) / $base) } else { 0 }
+    $rate = if ($base -gt 0) { [int][math]::Floor(($counts.GOOD * 100) / $base) } else { 0 }
 
     $summary = @"
 === $CategoryName 진단 요약 ===
@@ -224,6 +232,7 @@ try {
     Write-Host "  - report.html                (브라우저로 열람)"
     Write-Host "  - summary.txt / run.log      (요약 · 실행 로그)"
 } finally {
+    Exit-FixLock -Mutex $RunLock
     Remove-Item -Path $Global:DbErrFile -Force -ErrorAction SilentlyContinue
     foreach ($n in $EnvNames) { [Environment]::SetEnvironmentVariable($n, $EnvBefore[$n], 'Process') }
     $Global:DbConnFailed = $false

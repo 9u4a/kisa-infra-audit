@@ -1,4 +1,5 @@
 # U-26 (상) /dev에 존재하지 않는 device 파일 점검 — 조치
+# 변경: /dev 아래 일반 파일(/dev/mqueue·/dev/shm 제외, 같은 파일시스템, 최대 50건)을 백업 후 삭제(rm -f)
 # 가이드 조치 방법: major/minor 번호가 없는(위장) device 파일 제거
 run_fix() {
     fake=$(find /dev -xdev -type f -not -path '/dev/mqueue/*' -not -path '/dev/shm/*' 2>/dev/null | head -n 50)

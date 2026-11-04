@@ -1,4 +1,5 @@
 # WEB-06 (상) 웹 서비스 상위 디렉터리 접근 제한 설정 — 조치 [fix: confirm]
+# 변경: Tomcat server.xml·context.xml 의 allowLinking="true" → "false"(Apache/Nginx 는 대상 아님)
 # 대상: Tomcat 전용(checks/WEB-06.sh 참고 — Apache/Nginx 는 자동 판정 자체가 MANUAL 이라 VULN 을
 # 내지 않으므로 fix 대상이 아님).
 run_fix() {

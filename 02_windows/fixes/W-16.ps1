@@ -1,4 +1,5 @@
 ﻿# W-16 (상) 공유 권한 및 사용자 그룹 설정 [fix: confirm]
+# 변경: 일반 공유(이름이 $ 로 끝나지 않는 공유, DC 의 SYSVOL/NETLOGON 제외)에서 Everyone 공유 권한 제거
 # checks/W-16.ps1: 취약 = 일반(비관리용) 공유에 Everyone 권한이 부여된 경우.
 # 해당 공유들에서 Everyone 권한만 제거한다($ 로 끝나는 관리용 공유는 W-17 에서 별도 처리).
 

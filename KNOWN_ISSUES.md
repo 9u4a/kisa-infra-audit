@@ -392,7 +392,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | P-21 | 하 | 운영 | sh 진입점 result.csv 에 BOM 이 없어 한글 Excel 에서 깨진다 | 해결(1.5.0): csv_init 이 UTF-8 BOM 을 쓴다 |
 | P-22 | 하 | 운영 | merge.py: 같은 호스트 결과 중복 제거 없음, 준수율 반올림(은행가 반올림)이 summary 와 다름 | 해결(1.5.0): merge.py 가 같은 호스트(+카테고리·환경)는 최근 결과만 남기고 경고, 준수율은 summary.txt 와 같은 버림(report.html 도). merge_test 확장 |
 | P-23 | 하 | 운영 | 호스트명: 05_network 는 입력 파일명, 08_dbms sh 는 `uname -n` 대체 없음 | 해결(1.5.0): sh 는 host_name(hostname → uname -n → /proc), 05_network 는 설정의 hostname 줄(없으면 파일 이름) |
-| P-24 | 하 | 운영 | `-i` 인자 없이 실행 시 비정상 종료, DB preflight 실패 시 종료 코드 0, dry-run 이 바꿀 값을 보여주지 않음, `audit.sh -h` 에 `set -u` 오류 줄 출력. 05 `run.py -i` 코드 검증 없음 | 일부 해결(1.5.0): 값 없는 옵션은 사용법 오류(exit 2), DB 접속 실패는 종료 코드 4(audit.sh 가 구분), audit.sh -h 정리, 05 run.py -i 코드 검증. dry-run 에 바꿀 값 표시는 열림 |
-| P-25 | 하 | S7 | Windows run.ps1 에 중복 실행 잠금이 없다(sh 는 R-06 에서 해결) | 열림(Windows 진입점이라 CI 에서만 검증 가능 - 별도 진행) |
+| P-24 | 하 | 운영 | `-i` 인자 없이 실행 시 비정상 종료, DB preflight 실패 시 종료 코드 0, dry-run 이 바꿀 값을 보여주지 않음, `audit.sh -h` 에 `set -u` 오류 줄 출력. 05 `run.py -i` 코드 검증 없음 | 해결(1.5.0): 값 없는 옵션은 사용법 오류(exit 2), DB 접속 실패는 종료 코드 4(audit.sh 가 구분), audit.sh -h 정리, 05 run.py -i 코드 검증, 조치 파일마다 머리말 `# 변경:` 을 두어 dry-run·적용 전 확인 목록에 바꿀 대상·값 표시(guide_consistency R5 가 누락 검사) |
+| P-25 | 하 | S7 | Windows run.ps1 에 중복 실행 잠금이 없다(sh 는 R-06 에서 해결) | 해결(1.5.0): run.ps1 4개가 `Enter-RunLock`(카테고리별 Mutex, 비정상 종료 시 자동 해제)을 잡고 이미 실행 중이면 exit 2. run_safety_windows.ps1 S7 이 잠금 중 두 번째 실행을 확인 |
 | P-26 | 하 | 운영 | WEB-22 Apache 조치의 한글 ErrorDocument 문구가 iso-8859-1 로 응답돼 깨진다 | 해결(1.5.0): 인라인 문구를 ASCII(Not Found/Internal Server Error)로 |
 | P-27 | 하 | 테스트 | `run_safety_windows.ps1:255` `-Force` 매개변수 오류를 무시하고 진행 | 해결(1.5.0): Remove-WebVirtualDirectory 에 없는 -Force 제거 |

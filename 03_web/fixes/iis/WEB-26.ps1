@@ -1,4 +1,5 @@
 ﻿# WEB-26 (중) 로그 디렉터리 및 파일 권한 설정 [IIS] — 조치 [fix: auto]
+# 변경: 사이트 로그 디렉터리(logFile directory, 기본 inetpub\logs\LogFiles) ACL 에서 Everyone·BUILTIN\Users·Authenticated Users 허용(Allow) ACE 제거
 
 if (-not (Test-IisAvailable)) {
     $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; $Global:FixEvidence = ""

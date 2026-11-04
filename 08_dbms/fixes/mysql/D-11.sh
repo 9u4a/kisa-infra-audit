@@ -1,4 +1,5 @@
 # D-11 (상) DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정 [MySQL] — 조치 [fix: confirm]
+# 변경: root/mysql.% 외 계정의 mysql 스키마 DB·테이블 권한 REVOKE ALL PRIVILEGES·GRANT OPTION(전역 *.*·와일드카드 DB 권한은 수동)
 # 원복 방식: 회수 직전 SHOW GRANTS 의 mysql 스키마 GRANT 문을 큐에 넣어 그대로 다시 실행한다(예전에는 원복 불가였다).
 # checks/mysql/D-11.sh 와 같은 범위(root/mysql.% 외 계정, 권한 테이블 직접 조회)를 본다(조치 후속 F-R6 - 예전 조치는
 # information_schema.schema_privileges 만 보고 DB 단위 권한만 회수해, 진단이 새로 잡는 전역·테이블 권한이 남아

@@ -1,4 +1,5 @@
 # U-44 (상) tftp, talk 서비스 비활성화 — 조치
+# 변경: tftp·tftp.socket·talk·ntalk 정지·비활성화, /etc/xinetd.d/tftp·talk·ntalk disable=yes, inetd.conf 해당 줄 주석, tftpd/talkd 프로세스 종료
 # 원복: 일부 — systemd 서비스 상태는 되돌리지만, 직접 종료한 프로세스(inetd 계열 등)는 다시 띄우지 않음
 run_fix() {
     fix_service_disable tftp tftp.socket talk ntalk

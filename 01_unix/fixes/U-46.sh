@@ -1,4 +1,5 @@
 # U-46 (상) 일반 사용자의 메일 서비스 실행 방지 — 조치
+# 변경: /etc/mail/sendmail.cf PrivacyOptions 에 restrictqrun 추가(줄 없으면 "O PrivacyOptions=restrictqrun" 추가), /usr/sbin/postsuper·exiqgrep 기타 실행 권한 제거(o-x)
 run_fix() {
     applied=""
 

@@ -1,4 +1,5 @@
 # U-37 (상) crontab 설정파일 권한 설정 미흡 — 조치
+# 변경: /usr/bin/crontab·at 권한 750(750 초과·SUID 시), /var/spool/cron·at 하위 기타 rwx 파일 o-rwx, /etc/cron.allow·deny·at.allow·deny 권한 640(초과 시)
 run_fix() {
     applied=""
 

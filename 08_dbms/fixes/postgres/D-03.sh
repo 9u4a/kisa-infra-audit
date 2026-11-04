@@ -1,4 +1,5 @@
 # D-03 (상) 비밀번호 사용 기간 및 복잡도를 기관의 정책에 맞도록 설정 [PostgreSQL] — 조치 [fix: confirm]
+# 변경: LOAD 'passwordcheck' 확인 후 ALTER SYSTEM SET shared_preload_libraries = <기존>, 'passwordcheck' + PostgreSQL 재기동(실패 시 auto.conf 되돌림)
 # checks/postgres/D-03.sh: 취약 = passwordcheck 모듈이 shared_preload_libraries 에 없음.
 # passwordcheck 는 SQL 함수가 없는 C 훅 모듈이라 CREATE EXTENSION 으로 설치할 수 없고 shared_preload_libraries
 # (정적 파라미터)에 넣어 재기동해야 한다 - confirm 등급에서 재기동까지 수행한다.

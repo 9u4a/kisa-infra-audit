@@ -1,4 +1,5 @@
 # D-14 (중) 데이터베이스의 주요 설정 파일 접근 권한 적절성 [Oracle] — 조치 [fix: auto]
+# 변경: $ORACLE_HOME/network/admin 의 listener.ora·sqlnet.ora 권한이 644 를 넘으면 644, 소유자 root/oracle 이면 유지(그 외 oracle)
 run_fix() {
     home=$(oracle_home)
     if [ -z "$home" ]; then

@@ -1,4 +1,5 @@
 ﻿# W-20 (상) NetBIOS 바인딩 서비스 구동 점검 [fix: confirm]
+# 변경: IP 활성 어댑터마다 NetBT\Parameters\Interfaces\Tcpip_<GUID>\NetbiosOptions = 2 (NetBIOS over TCP/IP 사용 안 함)
 # checks/W-20.ps1: 양호 = 활성 어댑터 전부 TcpipNetbiosOptions=2(사용 안 함).
 # 이 값은 WMI 로 조회하지만 실제로는 어댑터별 레지스트리
 # HKLM\SYSTEM\CurrentControlSet\Services\NetBT\Parameters\Interfaces\Tcpip_<SettingID>\NetbiosOptions

@@ -1,4 +1,5 @@
 # WEB-03 (상) 비밀번호 파일 권한 관리 — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
+# 변경: Tomcat tomcat-users.xml 권한 600, 소유자 root/tomcat 이면 유지(그 외는 tomcat 으로 변경)
 run_fix() {
     detect_web_engines
     case " $WEB_ENGINES " in *" tomcat "*) : ;; *)

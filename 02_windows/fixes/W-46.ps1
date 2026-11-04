@@ -1,4 +1,5 @@
 ﻿# W-46 (상) SAM 파일 접근 통제 설정 [fix: auto]
+# 변경: %SystemRoot%\System32\config\SAM ACL 에서 Administrators/SYSTEM/TrustedInstaller 외 계정의 허용(Allow) ACE 제거
 # checks/W-46.ps1: 양호 = Administrators/SYSTEM/TrustedInstaller 외 권한이 없는 경우.
 # 실제로 부여되어 있는 "그 외" 계정만 골라 제거한다(허용 목록은 고정값이라 U-28류 문제 아님).
 

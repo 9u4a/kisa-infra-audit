@@ -1,4 +1,5 @@
 ﻿# W-52 (상) Autologon 기능 제어 [fix: confirm]
+# 변경: 값이 있으면 HKLM\...\Windows NT\CurrentVersion\Winlogon\AutoAdminLogon = "0", DefaultPassword 값이 있으면 삭제
 # checks/W-52.ps1: 양호 = AutoAdminLogon 값이 없거나 0. 값이 존재하는 경우에만 0으로 설정한다.
 
 $path = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"

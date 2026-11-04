@@ -1,4 +1,5 @@
 # D-08 (상) 안전한 암호화 알고리즘 사용 [Oracle] — 조치 [fix: confirm]
+# 변경: sqlnet.ora 에 SQLNET.ALLOWED_LOGON_VERSION_SERVER=12 설정(있으면 값 교체, 없으면 추가, 재시작 없음)
 # sqlnet.ora 는 매 연결 시 새로 읽히는 설정이라 인스턴스/리스너 재시작이 필요 없다.
 run_fix() {
     f=$(oracle_sqlnet_ora)

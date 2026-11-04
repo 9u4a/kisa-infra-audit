@@ -2417,6 +2417,11 @@ fix_lock_release() {
 fix_rollback_note() {
     [ -f "$1" ] && sed -n '1,12s/^# 원복: //p' "$1" | head -n1
 }
+# fix_change_note <조치 파일> — 조치 파일 머리말의 "# 변경: ..." 표기(무엇을 어떤 값으로 바꾸는지). dry-run·적용 전 확인 목록에
+# 보여 준다(실무 적용 검증 P-24 - 예전에는 등급만 보여 실제로 바뀔 값을 적용 전에 알 수 없었다). lib/tests/guide_consistency.py 가 필수로 검사.
+fix_change_note() {
+    [ -f "$1" ] && sed -n '1,12s/^# 변경: //p' "$1" | head -n1
+}
 
 fix_confirm_plan() {
     [ "${YES:-0}" -eq 1 ] && return 0
@@ -2426,11 +2431,15 @@ fix_confirm_plan() {
         _g=$(guide_field "$GUIDE_JSON" "$_c" "fix"); [ -z "$_g" ] && _g="manual"
         _t=$(guide_field "$GUIDE_JSON" "$_c" "title")
         _rb=$(fix_rollback_note "${FIX_FILE_DIR:-.}/$_c.sh")
+        _chg=$(fix_change_note "${FIX_FILE_DIR:-.}/$_c.sh")
         case "$_g" in
             auto) printf '  [auto]    %-8s %s  ← 개별 확인 없이 적용\n' "$_c" "$_t"; _n_auto=$((_n_auto + 1)) ;;
             confirm) printf '  [confirm] %-8s %s  ← 적용 직전 항목별로 다시 확인\n' "$_c" "$_t" ;;
         esac
-        case "$_g" in auto|confirm) [ -n "$_rb" ] && printf '            └ 원복: %s\n' "$_rb" ;; esac
+        case "$_g" in auto|confirm)
+            [ -n "$_chg" ] && printf '            └ 변경: %s\n' "$_chg"
+            [ -n "$_rb" ] && printf '            └ 원복: %s\n' "$_rb" ;;
+        esac
     done
     printf '위 목록대로 진행하시겠습니까? (auto %s건은 추가 확인 없이 적용됨) [y/N] ' "$_n_auto"
     _ans=""

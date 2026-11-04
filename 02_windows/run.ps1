@@ -77,8 +77,14 @@ if (-not $Selected -or $Selected.Count -eq 0) {
 
 if (-not $OutBase) { $OutBase = Join-Path (Split-Path -Parent $ScriptDir) "output" }
 # R-12: 결과 폴더 접근 권한을 제한하지 못하면 New-PrivateDirectory 가 중단시킨다(예전에는 경고만 하고 진행)
+# 같은 카테고리 진단 동시 실행 방지(운영 안전 기준 S7, P-25). 아래 진단 루프의 finally 에서 해제한다.
+$RunLock = Enter-RunLock -CategoryNum $CategoryNum
+if (-not $RunLock) {
+    Write-Error "같은 카테고리 진단이 이미 실행 중입니다. 끝난 뒤 다시 실행하세요."
+    exit 2
+}
 try { $OutDir = New-OutputDir -BaseDir $OutBase -CategoryNum $CategoryNum }
-catch { Write-Error "결과 폴더 준비 실패: $($_.Exception.Message)"; exit 2 }
+catch { Exit-FixLock -Mutex $RunLock; Write-Error "결과 폴더 준비 실패: $($_.Exception.Message)"; exit 2 }
 # 비관리자 실행 여부(아래 공통 변환 규칙). 비관리자는 서비스·보안 정책·레지스트리 조회가 조용히 실패해
 # "없음/중지/미설정"으로 읽히기 쉽다(CI 실측: W-18 VULN→NA, W-33 VULN→GOOD).
 $IsElevatedAdmin = Test-IsElevatedAdmin
@@ -142,6 +148,7 @@ foreach ($code in $Selected) {
 
 $runCompleted = $true
 } finally {
+    Exit-FixLock -Mutex $RunLock
     if (-not $runCompleted -and @($Results).Count -gt 0) {
         Save-ResultJson -Results $Results -OutFile (Join-Path $OutDir "result.partial.json") -Category $CategoryName -OsFamily $OsFamily
         Write-Warning "중단됨 - 지금까지 진단한 $(@($Results).Count)개 항목을 $(Join-Path $OutDir 'result.partial.json') 에 저장했습니다."
@@ -156,7 +163,7 @@ New-ReportHtml -LibDir $LibDir -GuideJson $GuideJsonPath -ResultJson $ResultJson
 $counts = @{ VULN = 0; MANUAL = 0; ERROR = 0; NA = 0; GOOD = 0 }
 foreach ($r in $Results) { $counts[$r.status]++ }
 $base = $counts.VULN + $counts.GOOD
-$rate = if ($base -gt 0) { [int](($counts.GOOD * 100) / $base) } else { 0 }
+$rate = if ($base -gt 0) { [int][math]::Floor(($counts.GOOD * 100) / $base) } else { 0 }
 
 $summary = @"
 === $CategoryName 진단 요약 ===

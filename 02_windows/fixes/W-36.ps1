@@ -1,4 +1,5 @@
 ﻿# W-36 (중) 원격터미널 접속 타임아웃 설정 [fix: auto]
+# 변경: RDP 사용 시 HKLM\...\Terminal Server\WinStations\RDP-Tcp\MaxIdleTime = 1800000 (DWORD, 유휴 30분)
 # checks/W-36.ps1: 양호 = MaxIdleTime <= 30분. 가이드 권고 상한값(30분=1800000ms)으로 설정한다.
 
 $deny = Test-RegistryValue -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections"

@@ -1,4 +1,5 @@
 ﻿# PC-05 (상) 항목의 불필요한 서비스 제거 [fix: auto]
+# 변경: RemoteRegistry/SSDPSRV/upnphost/WerSvc/TapiSrv/Fax 중 실행 중인 서비스만 중지 + 시작 유형 사용 안 함
 # checks/PC-05.ps1 과 동일한 대상 목록 중 실제로 Running 인 서비스만 중지+비활성화한다.
 
 $targets = @("RemoteRegistry", "SSDPSRV", "upnphost", "WerSvc", "TapiSrv", "Fax")

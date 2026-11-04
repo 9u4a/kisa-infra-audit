@@ -1,4 +1,5 @@
 ﻿# WEB-06 (상) 웹 서비스 상위 디렉터리 접근 제한 설정 [IIS] — 조치 [fix: confirm]
+# 변경: IIS 사이트별 system.webServer/asp enableParentPaths=true → false
 
 if (-not (Test-IisAvailable)) {
     $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; $Global:FixEvidence = ""

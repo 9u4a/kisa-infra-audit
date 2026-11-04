@@ -1,4 +1,5 @@
 ﻿# D-11 (상) DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정 [MSSQL] — 조치 [fix: auto]
+# 변경: master 시스템 객체(spt_* 제외)에 public/guest 가 가진 권한마다 REVOKE <권한> ON OBJECT::<객체> FROM [public|guest]
 # checks/mssql/D-11.ps1 과 동일한 조건으로 찾아낸 (principal, object, permission) 을 회수한다.
 # USE 대신 master.sys.* 3-part naming 을 쓰는 이유는 checks/mssql/D-11.ps1 주석 참고.
 

@@ -1,4 +1,5 @@
 # WEB-19 (중) 웹 서비스 SSI(Server Side Includes) 사용 제한 — 조치 [fix: auto]
+# 변경: Apache: Options 의 Includes 제거(-Includes), Nginx: ssi on → off, Tomcat SSIServlet/SSIFilter 매핑은 수동
 # Tomcat 의 SSI 서블릿/필터 매핑은 web.xml 안에서 여러 줄에 걸친 XML 블록이라 안전하게
 # 자동 제거하기 어려워(잘못 잘라내면 XML 자체가 깨질 위험) 이 엔진만 수동 조치로 남긴다.
 run_fix() {

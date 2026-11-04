@@ -1,4 +1,5 @@
 # D-21 (중) 인가되지 않은 GRANT OPTION 사용 제한 [MySQL] — 조치 [fix: auto]
+# 변경: root 외 Grant_priv='Y' 계정마다 REVOKE GRANT OPTION ON *.* FROM 'user'@'host'(다른 권한은 유지)
 # checks/mysql/D-21.sh 가 찾아낸 root 외 Grant_priv='Y' 계정에서 GRANT OPTION 만 회수한다
 # (전체 권한을 회수하는 것이 아니라 "다른 계정에게 권한을 나눠줄 수 있는" 권한만 제거).
 run_fix() {

@@ -1,4 +1,5 @@
 ﻿# D-03 (상) 비밀번호 사용 기간 및 복잡도를 기관의 정책에 맞도록 설정 [MSSQL] — 조치 [fix: confirm]
+# 변경: CHECK_POLICY 미적용 SQL 로그인마다 ALTER LOGIN [이름] WITH CHECK_POLICY = ON(기존 비밀번호는 유지)
 # checks/mssql/D-03.ps1: 취약 = CHECK_POLICY 가 적용되지 않은 SQL 로그인 존재. 해당 로그인에
 # CHECK_POLICY=ON 을 적용한다(기존 비밀번호를 바꾸지 않음 - 다음 비밀번호 변경부터 정책 적용).
 

@@ -1,4 +1,5 @@
 # WEB-23 (중) LDAP 알고리즘 적절하게 구성 — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
+# 변경: Tomcat server.xml 의 Realm digest 속성 → "SHA-256"(이미 SHA-256 이상이면 건너뜀)
 # 대상: Tomcat 전용
 run_fix() {
     detect_web_engines

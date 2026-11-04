@@ -1,4 +1,5 @@
 # D-19 (상) OS_ROLES, REMOTE_OS_AUTHENTICATION, REMOTE_OS_ROLES를 FALSE로 설정 [Oracle] — 조치 [fix: confirm]
+# 변경: PFILE 백업 후 ALTER SYSTEM SET os_roles·remote_os_authent·remote_os_roles = FALSE SCOPE=SPFILE, 인스턴스 재기동(실패 시 PFILE 로 복구)
 # 원복: 일부 — SPFILE 값은 원래대로 되돌리지만 반영하려면 인스턴스 재기동이 필요함
 # 세 파라미터 모두 정적(static) 파라미터라 SPFILE 값을 바꾼 뒤 인스턴스를 재기동해야 반영된다 - confirm 등급에서
 # 재기동까지 수행한다(DB 클라이언트 연결만 영향, 이 스크립트의 OS 세션에는 영향 없음).

@@ -1,4 +1,5 @@
 # WEB-18 (상) 웹 서비스 WebDAV 비활성화 — 조치 [fix: auto]
+# 변경: Apache: dav 모듈 끔(mods-enabled 링크 제거, LoadModule dav*·Dav* 지시어 주석, 모듈 없으면 Dav On→Off), Nginx: dav_methods 주석 처리
 # Debian/Ubuntu 레이아웃(mods-enabled/*.load·*.conf 심볼릭 링크)은 a2dismod 와 같은 방식으로 dav 모듈의
 # 링크(.load 와 같은 이름의 .conf)를 제거한다(1.3.3, F-R4). 링크는 tar 로 백업되어(fix_backup_remove_path)
 # 원복 시 링크 그대로 되살아난다. 예전에는 링크 대상 파일의 LoadModule 만 sed -i 로 주석 처리해 ① 링크가

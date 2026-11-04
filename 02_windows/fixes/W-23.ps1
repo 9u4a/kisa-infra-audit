@@ -1,4 +1,5 @@
 ﻿# W-23 (상) 공유 서비스에 대한 익명 접근 제한 설정 [fix: confirm]
+# 변경: FTP 구동 중이면 IIS FTP 익명 인증 enabled=false(사이트 또는 siteDefaults), 아니면 LanmanServer\Parameters\RestrictNullSessAccess=1(Lsa 의 0 도 1)
 # checks/W-23.ps1 과 같은 분기·같은 위치를 고친다(F-R1 - 예전에는 진단이 보지 않는 Lsa 경로와 존재하지 않는
 # IIS:\ 의 system.ftpServer 경로에 써서 재검증 실패 → 원복으로 끝났다).
 #  - FTP 구동 중: FTP 사이트마다 진단과 같은 방법으로 익명 인증 값을 읽어, 사이트에 명시 값이 true 면 그 사이트

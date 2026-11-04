@@ -1,4 +1,5 @@
 # U-20 (상) /etc/(x)inetd.conf 파일 소유자 및 권한 설정 — 조치
+# 변경: /etc/xinetd.conf 소유자 root·권한 600 + /etc/xinetd.d/* 소유자 root·go-w, 없으면 /etc/inetd.conf, 그것도 없으면 /etc/systemd/system.conf 를 root·600 으로
 run_fix() {
     if [ -f /etc/xinetd.conf ]; then
         fix_set_owner_perm "/etc/xinetd.conf" "root" 600

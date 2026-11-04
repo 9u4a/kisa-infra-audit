@@ -1,4 +1,5 @@
 ﻿# W-58 (중) 사용자별 홈 디렉터리 권한 설정 [fix: auto]
+# 변경: %SystemDrive%\Users 아래 홈 디렉터리(Public/Default/Default User/All Users 제외) ACL 에서 Everyone 허용(Allow) ACE 제거
 # checks/W-58.ps1 과 동일한 대상(Public/Default/Default User/All Users 제외)에서
 # Everyone 허용 ACE 만 제거한다.
 

@@ -144,6 +144,7 @@ try {
         if (-not $Apply) {
             Write-Host "[$code] $title"
             Write-Host "  등급: $grade (dry-run — 실제 적용하려면 -Apply 추가)"
+            $chg = Get-FixRollbackNote -File $fixFile -Label "변경"; if ($chg) { Write-Host "  변경: $chg" }
             $rbn = Get-FixRollbackNote -File $fixFile; if ($rbn) { Write-Host "  원복: $rbn" -ForegroundColor Yellow }
             $nPreview++
             continue

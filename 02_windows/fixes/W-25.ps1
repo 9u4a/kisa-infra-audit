@@ -1,4 +1,5 @@
 ﻿# W-25 (상) DNS Zone Transfer 설정 [fix: confirm]
+# 변경: DNS 서비스 구동 중이면 SecureSecondaries=0 인 영역을 3(영역 전송 안 함)으로 변경(WMI, 자동 원복 불가)
 # 원복: 불가 — DNS 영역 전송 설정(WMI)은 자동 원복 경로 없음(변경 전 값은 changes.log)
 # checks/W-25.ps1: 취약 = SecureSecondaries=0(모든 서버에 영역 전송 허용)인 영역이 존재.
 # 특정 보조 서버로 제한하려면 그 서버 목록을 알아야 하므로(스크립트가 안전하게 추정 불가),

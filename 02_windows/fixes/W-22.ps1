@@ -1,4 +1,5 @@
 ﻿# W-22 (상) FTP 디렉토리 접근권한 설정 [fix: auto]
+# 변경: IIS FTP 사이트 홈 디렉터리(PhysicalPath) NTFS ACL 에서 Everyone 허용(Allow) ACE 제거
 # checks/W-22.ps1: 양호 = FTP 홈 디렉터리에 Everyone 권한이 없는 경우.
 # WebAdministration 으로 FTP 사이트의 실제 경로를 찾아 Everyone ACE 만 제거한다.
 

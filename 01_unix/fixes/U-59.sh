@@ -1,4 +1,5 @@
 # U-59 (상) 안전한 SNMP 버전 사용 — 조치
+# 변경: snmpd.conf(includeFile/includeDir 포함)의 com2sec·rocommunity·rwcommunity(IPv6 *6 포함) 줄 주석 처리(v3 계정 생성 안 함). include 파일을 못 읽으면 변경 안 함
 # 가이드 조치 방법: SNMP v1/v2 대신 v3 사용. 자동화 범위: v3 계정을 대신 만들어주는 것은
 # 비밀번호를 임의로 정해야 해 위험하므로, v1/v2 community 설정을 비활성화(주석 처리)한다.
 # check(U-59)와 같이 IPv6 지시어(com2sec6/rocommunity6/rwcommunity6)와 includeFile/includeDir 로 불러온

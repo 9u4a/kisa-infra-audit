@@ -1,4 +1,5 @@
 ﻿# D-23 (상) xp_cmdshell 사용 제한 [MSSQL] — 조치 [fix: confirm]
+# 변경: USE master; REVOKE EXECUTE ON xp_cmdshell FROM public(xp_cmdshell 자체는 끄지 않음)
 # checks/mssql/D-23.ps1: 취약 = xp_cmdshell 활성화 & public 실행 권한 존재. xp_cmdshell 자체를
 # 끄지 않고(가이드가 제시한 둘째 조건: public 실행 권한만 제거해도 양호 기준을 충족) public
 # 권한만 회수한다 - 이미 xp_cmdshell 을 정상적인 관리 작업에 쓰는 자동화가 있을 수 있어

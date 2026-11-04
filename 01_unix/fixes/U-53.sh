@@ -1,4 +1,5 @@
 # U-53 (하) FTP 서비스 정보 노출 제한 — 조치
+# 변경: vsftpd.conf 에 ftpd_banner 없으면 "ftpd_banner=Authorized users only." 추가, proftpd ServerIdent on → on "Authorized users only." (없으면 추가)
 run_fix() {
     applied=""
 

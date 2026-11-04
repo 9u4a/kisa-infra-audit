@@ -852,11 +852,13 @@ function Read-FixConfirm {
 
 function Get-FixRollbackNote {
     <# 조치 파일 머리말의 "# 원복: ..." 표기. 없으면 빈 값(= 백업으로 원복 가능). 원복할 수 없거나 일부만
-       되돌아가는 조치를 적용 "전에" 알리기 위함(운영 안전 기준 F4) #>
-    param([Parameter(Mandatory)][string]$File)
+       되돌아가는 조치를 적용 "전에" 알리기 위함(운영 안전 기준 F4).
+       -Label 변경 은 "# 변경: ..."(무엇을 어떤 값으로 바꾸는지, 실무 적용 검증 P-24 - lib/tests/guide_consistency.py 가 필수로 검사) #>
+    param([Parameter(Mandatory)][string]$File, [string]$Label = "원복")
     if (-not (Test-Path -LiteralPath $File)) { return "" }
-    $line = Get-Content -LiteralPath $File -Encoding UTF8 -TotalCount 12 | Where-Object { $_ -like "# 원복: *" } | Select-Object -First 1
-    if ($line) { return $line.Substring("# 원복: ".Length) }
+    $prefix = "# ${Label}: "
+    $line = Get-Content -LiteralPath $File -Encoding UTF8 -TotalCount 12 | Where-Object { $_.StartsWith($prefix) } | Select-Object -First 1
+    if ($line) { return $line.Substring($prefix.Length) }
     return ""
 }
 
@@ -874,6 +876,8 @@ function Confirm-FixPlan {
         if ($g -eq "auto") { Write-Host ("  [auto]    {0,-8} {1}  <- 개별 확인 없이 적용" -f $c, $t); $nAuto++ }
         elseif ($g -eq "confirm") { Write-Host ("  [confirm] {0,-8} {1}  <- 적용 직전 항목별로 다시 확인" -f $c, $t) }
         $rb = if ($FixDir) { Get-FixRollbackNote -File (Join-Path $FixDir "$c.ps1") } else { "" }
+        $chg = if ($FixDir) { Get-FixRollbackNote -File (Join-Path $FixDir "$c.ps1") -Label "변경" } else { "" }
+        if ($chg -and $g -in @("auto", "confirm")) { Write-Host "            └ 변경: $chg" }
         if ($rb -and $g -in @("auto", "confirm")) { Write-Host "            └ 원복: $rb" -ForegroundColor Yellow }
     }
     return (Read-FixConfirm -Prompt "위 목록대로 진행하시겠습니까? (auto $nAuto 건은 추가 확인 없이 적용됨) [y/N]")
@@ -882,16 +886,23 @@ function Confirm-FixPlan {
 function Enter-FixLock {
     <# 같은 카테고리 조치의 동시 실행 방지(서로의 백업을 덮어쓰고 같은 설정을 번갈아 바꾸는 것 방지).
        획득하면 Mutex 객체, 다른 실행이 잡고 있으면 $null. 비정상 종료로 버려진 잠금은 인수한다 #>
-    param([Parameter(Mandatory)][string]$CategoryNum)
+    param([Parameter(Mandatory)][string]$CategoryNum, [string]$Kind = "fix")
     $m = $null
     foreach ($scope in @("Global", "Local")) {
-        try { $m = New-Object System.Threading.Mutex($false, "$scope\kisa-infra-audit-fix-$CategoryNum"); break } catch { $m = $null }
+        try { $m = New-Object System.Threading.Mutex($false, "$scope\kisa-infra-audit-$Kind-$CategoryNum"); break } catch { $m = $null }
     }
     if (-not $m) { return $null }
     $got = $false
     try { $got = $m.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $got = $true }
     if (-not $got) { $m.Dispose(); return $null }
     return $m
+}
+
+function Enter-RunLock {
+    <# 같은 카테고리 진단(run.ps1)의 동시 실행 방지(운영 안전 기준 S7, sh 의 run_lock_acquire 와 같은 역할 - 실무 적용 검증 P-25).
+       Mutex 라 프로세스가 비정상 종료해도 잠금이 남지 않는다. 해제는 Exit-FixLock 을 같이 쓴다 #>
+    param([Parameter(Mandatory)][string]$CategoryNum)
+    return (Enter-FixLock -CategoryNum $CategoryNum -Kind "run")
 }
 
 function Exit-FixLock {
@@ -1539,8 +1550,10 @@ function Remove-FixAclIdentity {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string[]]$IdentityPatterns)
     Backup-FixAcl -Path $Path | Out-Null
     $acl = Get-Acl -Path $Path
+    # 허용 ACE 만 - 예전에는 거부(Deny) ACE 도 지워 "Everyone 거부" 같은 보호 설정이 사라지면서 오히려 접근이 넓어질 수 있었다
     $toRemove = @($acl.Access | Where-Object {
         $ident = $_.IdentityReference.Value
+        if ($_.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow) { return $false }
         ($IdentityPatterns | Where-Object { $ident -match $_ }).Count -gt 0
     })
     foreach ($rule in $toRemove) { [void]$acl.RemoveAccessRule($rule) }
@@ -1784,4 +1797,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

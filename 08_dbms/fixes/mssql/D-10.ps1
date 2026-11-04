@@ -1,4 +1,5 @@
 ﻿# D-10 (상) 원격에서 DB 서버로의 접속 제한 [MSSQL] — 조치 [fix: confirm]
+# 변경: Windows 방화벽 모든 프로필 Enabled=True(사용 중인 RDP/WinRM 규칙 그룹 활성화, SQL 포트(기본 1433)·RDP·WinRM 허용 규칙이 없으면 켜지 않음)
 # checks/mssql/D-10.ps1: 취약 = 모든 Windows 방화벽 프로필이 비활성화됨. 02_windows/fixes/W-64.ps1 과
 # 같은 lib/Common.psm1 Enable-FixFirewallSafely 로 켜되, SQL Server 포트도 필수 허용 포트로 넘긴다 -
 # 예전에는 DB 서버에서 방화벽만 켜 1433 접속을 끊을 수 있었다(사실상 서비스 중단). 포트는 현재 접속의

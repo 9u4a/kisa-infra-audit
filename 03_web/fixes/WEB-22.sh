@@ -1,4 +1,5 @@
 # WEB-22 (하) 에러 페이지 관리 — 조치 [fix: auto]
+# 변경: Apache: ErrorDocument 404/500 인라인 문구 추가, Nginx: error_page 50x→/50x.html·404→/404.html 추가, Tomcat: web.xml 에 404/500 <error-page> 추가
 # 별도 에러 페이지 파일을 새로 만들지 않고, 정보 노출이 없는 일반 안내 문구를 인라인으로
 # 반환하도록 설정한다(가이드 취지: "에러 페이지가 별도로 지정됨").
 run_fix() {

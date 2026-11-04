@@ -1,4 +1,5 @@
 # U-67 (중) 로그 디렉터리 소유자 및 권한 설정 — 조치
+# 변경: /var/log 하위 파일 중 비 root 소유·644 초과·특수비트 파일(최대 200건) 소유자 root, chmod u-xs,g-wxs,o-wx,-t (644 이하로 축소, 넓히지 않음)
 run_fix() {
     case "$OS_FAMILY" in
         rhel|debian|suse|solaris) : ;;

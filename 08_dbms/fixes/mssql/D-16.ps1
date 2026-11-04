@@ -1,4 +1,5 @@
 ﻿# D-16 (하) Windows 인증 모드 사용 [MSSQL] — 조치 [fix: auto]
+# 변경: ALTER LOGIN sa WITH CHECK_POLICY = ON(sa 활성·정책 미적용일 때만, 인증 모드(LoginMode) 변경·서비스 재시작 없음)
 # checks/mssql/D-16.ps1: 취약 = 혼합 인증 모드에서 sa 계정이 활성화되어 있고 암호 정책도
 # 미적용인 경우. 인증 모드 자체(LoginMode 레지스트리)를 바꾸려면 서비스 재시작이 필요하고
 # 기존 SQL 인증 연결을 전부 끊는 더 큰 변경이라, 이 스크립트는 check 가 실제로 요구하는 더

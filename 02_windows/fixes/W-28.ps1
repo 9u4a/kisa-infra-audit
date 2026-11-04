@@ -1,4 +1,5 @@
 ﻿# W-28 (중) 터미널 서비스 암호화 수준 설정 [fix: confirm]
+# 변경: RDP 사용 시 HKLM\...\Terminal Server\WinStations\RDP-Tcp\MinEncryptionLevel = 3 (DWORD, 높음)
 # checks/W-28.ps1: 양호 = MinEncryptionLevel >= 2. 가이드 권고값(3=높음)으로 설정한다.
 
 $deny = Test-RegistryValue -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections"

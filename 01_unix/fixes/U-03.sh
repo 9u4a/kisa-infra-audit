@@ -1,4 +1,5 @@
 # U-03 (상) 계정 잠금 임계값 설정 — 조치
+# 변경: /etc/security/faillock.conf deny = 5 (있으면 교체, 없으면 추가), 파일 없으면 PAM(system-auth/password-auth/common-auth) pam_faillock/tally deny=5. PAM 모듈 미구성 시 변경 안 함
 # 가이드 조치 방법: pam_faillock(또는 pam_tally2)/faillock.conf 의 deny 값을 10회 이하로 설정
 run_fix() {
     case "$OS_FAMILY" in

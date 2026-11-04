@@ -1,4 +1,5 @@
 # U-38 (상) DoS 공격에 취약한 서비스 비활성화 — 조치
+# 변경: /etc/xinetd.d/echo·discard·daytime·chargen(-tcp/-udp) disable=yes, /etc/inetd.conf 의 해당 서비스 줄 주석 처리
 run_fix() {
     targets="echo discard daytime chargen"
     applied=""

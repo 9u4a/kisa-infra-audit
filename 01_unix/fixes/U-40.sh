@@ -1,4 +1,5 @@
 # U-40 (상) NFS 접근 통제 — 조치
+# 변경: /etc/exports·/etc/exports.d/*.exports 권한 644, 전체 공개(* 또는 호스트 생략) 공유 줄 주석 처리 후 exportfs -ra 로 즉시 반영
 # check(U-40)와 같은 범위·기준(진단 검수 U-R15): /etc/exports + /etc/exports.d/*.exports, "*" 또는 호스트를 생략한
 # 전체 공개 공유 줄.
 run_fix() {

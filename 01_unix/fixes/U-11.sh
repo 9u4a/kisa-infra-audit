@@ -1,4 +1,5 @@
 # U-11 (하) 사용자 shell 점검 — 조치
+# 변경: daemon·bin·sys·adm·listen·nobody·nobody4·noaccess·diag·operator·games·gopher 계정 쉘을 nologin 으로(usermod -s, 이미 nologin/false 면 건너뜀)
 # 가이드 조치 방법: 로그인이 불필요한 기본 계정에 /bin/false 또는 nologin 쉘 부여
 run_fix() {
     passwd_file="/etc/passwd"

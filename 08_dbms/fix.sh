@@ -176,6 +176,7 @@ for code in $VULN_CODES; do
     if [ "$APPLY" -ne 1 ]; then
         echo "[$code] $title"
         echo "  등급: $grade (dry-run — 실제 적용하려면 --apply 추가)"
+        _chg=$(fix_change_note "$fix_file"); [ -n "$_chg" ] && echo "  변경: $_chg"
         _rbn=$(fix_rollback_note "$fix_file"); [ -n "$_rbn" ] && echo "  원복: $_rbn"
         N_PREVIEW=$((N_PREVIEW + 1))
         continue

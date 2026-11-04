@@ -1,4 +1,5 @@
 # U-27 (상) $HOME/.rhosts, hosts.equiv 사용 금지 — 조치
+# 변경: /etc/hosts.equiv·각 계정 ~/.rhosts 에서 "+" 포함 줄 삭제, 소유자 root(.rhosts 는 해당 계정)·권한 600 (원격/자동마운트 홈 제외)
 # 가이드 조치 방법: 소유자/권한(600 이하)을 바로잡고 "+"(모든 호스트 신뢰) 설정 제거
 run_fix() {
     applied=""

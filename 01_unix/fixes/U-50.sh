@@ -1,4 +1,5 @@
 # U-50 (상) DNS ZoneTransfer 설정 — 조치
+# 변경: named.conf(include 포함)의 한 줄 "allow-transfer { ... any; ... };" 를 allow-transfer { none; }; 로, options 에 없으면 options { 바로 뒤에 추가
 # 자동화 범위: 관리자가 허용할 대상을 알 수 없으므로 전체 허용을 "허용 없음(none)"으로
 # 안전하게 좁힌다(필요 시 관리자가 실제 보조 네임서버 IP로 다시 넓혀야 함).
 # check(U-50)와 같이 include 된 파일 전체를 대상으로 한다(진단 검수 U-R5) - 예전에는 Debian 에서 include 만 있는

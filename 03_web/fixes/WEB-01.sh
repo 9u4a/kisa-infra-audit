@@ -1,4 +1,5 @@
 # WEB-01 (상) Default 관리자 계정명 변경 — 조치 [fix: auto]
+# 변경: Tomcat tomcat-users.xml 관리 역할 계정명 admin/tomcat → webadmin_<무작위 8자리>(주석 밖 한 줄 요소만, 여러 줄이면 수동)
 # 대상: Tomcat 전용(checks/WEB-01.sh 참고). manager-gui 역할 계정명이 admin/tomcat 이면
 # 무작위 접미사를 붙인 새 이름으로 변경한다(어떤 이름이 "적절한지"는 조직마다 다르지만,
 # 무작위 문자열은 스크립트가 안전하게 만들어낼 수 있는 값이라 U-28류 문제가 아니다).

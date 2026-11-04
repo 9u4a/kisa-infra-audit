@@ -1,4 +1,5 @@
 # D-12 (상) 안전한 리스너 비밀번호 설정 및 사용 [Oracle] — 조치 [fix: auto]
+# 변경: 12c R2 미만에서만 listener.ora 에 PASSWORDS_LISTENER = (무작위 20자) 추가 후 lsnrctl reload(12.2 이상은 건너뜀)
 # checks/oracle/D-12.sh 와 동일하게 12c R2 이상은 이 기능 자체가 없어(가이드 원문 명시) NA.
 # 12c R2 미만에서만 listener.ora 에 무작위 비밀번호를 설정하고 lsnrctl reload 로 즉시 반영한다
 # (reload 는 기존 DB 세션 연결에는 영향 없음 - 리스너 프로세스만 설정을 다시 읽음).
