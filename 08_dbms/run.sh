@@ -44,6 +44,8 @@ usage() {
 }
 
 while [ $# -gt 0 ]; do
+    # 값이 필요한 옵션을 값 없이 주면 set -u 오류(parameter not set)로 죽었다(실무 적용 검증 P-24) - 사용법 오류로 끝낸다
+    case "$1" in -i|-g|-e|-o|--host|--port|--user|--db|--socket) [ $# -ge 2 ] || { echo "오류: $1 옵션에 값이 필요합니다 (-h 로 사용법 확인)" >&2; exit 2; } ;; esac
     case "$1" in
         -i) ITEM_FILTER=$2; shift 2 ;;
         -g) GROUP_FILTER=$2; shift 2 ;;
@@ -144,7 +146,7 @@ NDJSON="$OUT_DIR/.result.ndjson"
 result_trap_partial "$NDJSON" "$CATEGORY_NAME" DBMS_ENGINE
 CSV_FILE="$OUT_DIR/result.csv"
 csv_init "$CSV_FILE"
-HOST_NAME=$(hostname 2>/dev/null || echo unknown)
+HOST_NAME=$(host_name)
 
 echo "${C_BOLD}=== 주요정보통신기반시설 자동 진단 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VERSION}) ===${C_OFF}"
 [ "$(id -u 2>/dev/null)" != "0" ] && log_warn "root 권한이 아닙니다. DB 설정 파일·프로세스 기반 항목은 읽지 못하면 ERROR 로 표시됩니다(DB 서버 호스트에서 root 실행 권장)."
@@ -170,6 +172,7 @@ if db_preflight; then
 else
     log_warn "DB 접속 사전 점검 실패 - 계정 잠금 방지를 위해 재시도하지 않고 DB 조회 항목은 ERROR 로 처리합니다: $DB_CONN_FAIL_MSG"
     log_to_file "DB 접속 사전 점검 실패(재시도 안 함): $DB_CONN_FAIL_MSG"
+    DB_PREFLIGHT_FAILED=1
 fi
 echo "----------------------------------------------------------------------"
 
@@ -222,3 +225,9 @@ echo "----------------------------------------------------------------------"
 cat "$OUT_DIR/summary.txt"
 echo "----------------------------------------------------------------------"
 echo "결과 경로: $OUT_DIR"
+# 결과물은 만들었지만 DB 에 접속하지 못해 DB 조회 항목이 전부 ERROR 다 - 예전에는 종료 코드 0 이라 스크립트·일괄 실행에서
+# 정상 진단과 구분되지 않았다(실무 적용 검증 P-24). 4 = "완료, 단 DB 접속 실패"(audit.sh 가 구분해 알린다).
+if [ -n "${DB_PREFLIGHT_FAILED:-}" ]; then
+    log_warn "DB 접속에 실패해 DB 조회 항목은 ERROR 입니다(종료 코드 4) - 접속 정보를 확인해 다시 실행하세요."
+    exit 4
+fi

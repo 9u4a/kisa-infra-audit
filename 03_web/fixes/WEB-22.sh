@@ -16,7 +16,8 @@ run_fix() {
         done
         if [ -z "$hit" ] && [ -f "$conf" ]; then
             fix_backup "$conf"
-            printf '\n# KISA WEB-22: 에러 페이지 지정\nErrorDocument 404 "페이지를 찾을 수 없습니다."\nErrorDocument 500 "일시적인 오류가 발생했습니다."\n' >> "$conf"
+            # 인라인 문구는 Content-Type 이 iso-8859-1 로 나가 한글이 깨진다(실무 적용 검증 P-26) - ASCII 문구를 쓴다
+            printf '\n# KISA WEB-22: 에러 페이지 지정\nErrorDocument 404 "Not Found"\nErrorDocument 500 "Internal Server Error"\n' >> "$conf"
             applied="$applied apache($conf)"
         fi
     esac
@@ -38,6 +39,20 @@ run_fix() {
             else
                 manual_only="$manual_only nginx($conf 에서 http 블록을 찾지 못함 - http 블록에 error_page 수동 추가)"
             fi
+        elif [ -n "$hit" ]; then
+            # 실무 적용 검증 P-05: error_page 가 있는 블록은 바깥 설정을 물려받지 않으므로, 404 가 없는 블록마다 그 블록의
+            # 첫 error_page 줄 바로 뒤에 같은 들여쓰기로 404 를 넣는다(진단과 같은 lib/common.sh nginx_error_page_gaps).
+            for f in $files; do
+                [ -f "$f" ] || continue
+                gaps=$(nginx_error_page_gaps "$f" | tr '\n' ' ')
+                [ -n "$gaps" ] || continue
+                fix_backup "$f"
+                awk -v gaps=" $gaps" '
+                    { print }
+                    index(gaps, " " FNR " ") { ind = $0; sub(/[^ \t].*$/, "", ind); print ind "error_page 404 /404.html;" }
+                ' "$f" > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
+                applied="$applied nginx($f 404 추가)"
+            done
         fi
     esac
 

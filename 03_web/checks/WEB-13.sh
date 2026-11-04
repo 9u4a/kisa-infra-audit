@@ -24,7 +24,10 @@ run_check() {
                     CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 를 읽을 수 없음(권한 부족)"; CHECK_EVIDENCE=""
                     return
                 fi
-                [ "$(strip_xml_comments "$f" | grep -cE '<Resource([[:space:]/>]|$)')" -gt 0 ] && files="$files $f"
+                # 기본 server.xml 의 UserDatabase(tomcat-users.xml 을 읽는 인증 저장소)는 DB 연결 정보가 아니다 - 예전에는 이것도
+                # 세어 모든 Tomcat 이 항상 대상이 됐다(실무 적용 검증 P-13). 요소 단위로 잘라 type 이 UserDatabase 인 것은 뺀다.
+                [ -n "$(strip_xml_comments "$f" | tr '\n' ' ' | grep -oE '<Resource([[:space:]][^>]*)?/?>' | \
+                    grep -v 'org\.apache\.catalina\.UserDatabase')" ] && files="$files $f"
             done
             if [ -z "$files" ]; then
                 CHECK_STATUS="NA"; CHECK_DETAIL="DB 연결 리소스(Resource)가 설정되어 있지 않음"; CHECK_EVIDENCE="server.xml·context.xml 에 <Resource> 없음"

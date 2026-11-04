@@ -40,6 +40,8 @@ usage() {
 }
 
 while [ $# -gt 0 ]; do
+    # 값이 필요한 옵션을 값 없이 주면 set -u 오류(parameter not set)로 죽었다(실무 적용 검증 P-24) - 사용법 오류로 끝낸다
+    case "$1" in -i|-g|-e|-o) [ $# -ge 2 ] || { echo "오류: $1 옵션에 값이 필요합니다 (-h 로 사용법 확인)" >&2; exit 2; } ;; esac
     case "$1" in
         -i) ITEM_FILTER=$2; shift 2 ;;
         -g) GROUP_FILTER=$2; shift 2 ;;
@@ -120,13 +122,21 @@ NDJSON="$OUT_DIR/.result.ndjson"
 result_trap_partial "$NDJSON" "$CATEGORY_NAME" WEB_ENGINES
 CSV_FILE="$OUT_DIR/result.csv"
 csv_init "$CSV_FILE"
-HOST_NAME=$(hostname 2>/dev/null || echo unknown)
+HOST_NAME=$(host_name)
 
 echo "${C_BOLD}=== 주요정보통신기반시설 자동 진단 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VERSION}) ===${C_OFF}"
 [ "$(id -u 2>/dev/null)" != "0" ] && log_warn "root 권한이 아닙니다. 읽지 못한 설정·로그 파일 관련 항목은 ERROR 로 표시됩니다(root 실행 권장)."
 echo "카테고리   : $CATEGORY_NAME"
 echo "호스트     : $HOST_NAME"
 echo "감지된 엔진: ${WEB_ENGINES:-없음}"
+# 실무 적용 검증 P-07: Tomcat 인스턴스가 여러 개면 한 번에 하나만 진단한다(lib/common.sh tomcat_home) - 대상과 재실행 방법을 알린다
+case " $WEB_ENGINES " in *" tomcat "*)
+    _tci=$(tomcat_instances)
+    if [ "$(printf '%s\n' "$_tci" | grep -c .)" -gt 1 ]; then
+        log_warn "실행 중인 Tomcat 인스턴스가 여러 개입니다. 이번 진단 대상: $(tomcat_home 2>/dev/null || echo 없음). 나머지는 인스턴스마다 CATALINA_BASE=<경로> sh run.sh -e tomcat 으로 따로 진단하세요: $(printf '%s' "$_tci" | tr '\n' ' ')"
+        log_to_file "Tomcat 다중 인스턴스: $(printf '%s' "$_tci" | tr '\n' ' ') / 진단 대상: $(tomcat_home 2>/dev/null)"
+    fi ;;
+esac
 echo "대상 항목  : ${TOTAL}개"
 echo "시작 시각  : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "----------------------------------------------------------------------"

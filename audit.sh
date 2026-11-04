@@ -19,7 +19,7 @@ OUT_BASE="$SCRIPT_DIR/output"
 DBMS_ENGINE=""
 
 usage() {
-    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while getopts "e:o:h" opt; do
@@ -31,7 +31,7 @@ while getopts "e:o:h" opt; do
     esac
 done
 
-HOST=$(hostname 2>/dev/null || echo unknown)
+HOST=$(hostname 2>/dev/null || uname -n 2>/dev/null || echo unknown)
 TS=$(date +%Y%m%d-%H%M%S)
 RUN_LOG_DIR="$OUT_BASE/${HOST}_audit_${TS}"
 # 실행자만 접근(700) - lib/common.sh make_private_dir 와 같은 이유(이 런처는 common.sh 를 소싱하지 않음)
@@ -56,9 +56,13 @@ sh "$SCRIPT_DIR/03_web/run.sh" -o "$OUT_BASE" | tee "$RUN_LOG_DIR/03_web.log"
 WEB_DIR=$(grep "결과 경로: " "$RUN_LOG_DIR/03_web.log" | sed 's/.*결과 경로: //')
 
 echo "[3/3] 08_dbms 진단 중... (구동 중인 엔진을 찾지 못하면 건너뜀)"
-if sh "$SCRIPT_DIR/08_dbms/run.sh" ${DBMS_ENGINE:+-e "$DBMS_ENGINE"} -o "$OUT_BASE" > "$RUN_LOG_DIR/08_dbms.log" 2>&1; then
+sh "$SCRIPT_DIR/08_dbms/run.sh" ${DBMS_ENGINE:+-e "$DBMS_ENGINE"} -o "$OUT_BASE" > "$RUN_LOG_DIR/08_dbms.log" 2>&1
+dbms_rc=$?
+if [ "$dbms_rc" -eq 0 ] || [ "$dbms_rc" -eq 4 ]; then
     cat "$RUN_LOG_DIR/08_dbms.log"
     DBMS_DIR=$(grep "결과 경로: " "$RUN_LOG_DIR/08_dbms.log" | sed 's/.*결과 경로: //')
+    # 4 = 진단은 끝났지만 DB 접속 실패(DB 조회 항목 ERROR) - 08_dbms/run.sh
+    [ "$dbms_rc" -eq 4 ] && echo "  주의 - DB 에 접속하지 못해 DB 조회 항목이 ERROR 입니다(DB_PASSWORD·--user 등 접속 정보 확인 후 08_dbms/run.sh 재실행)."
 else
     echo "  건너뜀 - 구동 중인 DBMS 엔진을 자동 감지하지 못했거나 여러 엔진이 동시에 감지되었습니다."
     echo "  (-e mysql|postgres|oracle 로 수동 지정해 다시 시도할 수 있음)"

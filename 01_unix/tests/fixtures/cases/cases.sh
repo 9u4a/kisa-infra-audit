@@ -164,3 +164,27 @@ c_U_67__logs_root_644() {
     find /var/log -type f ! -user root -exec chown root {} +
     find /var/log -type f -perm /7133 -exec chmod u-xs,g-wxs,o-wx,-t {} +
 }
+
+# ---- 실무 적용 검증(KNOWN_ISSUES §4, 1.5.0) -------------------------------------------------------------------------
+# P-14: 강화 기준의 PermitRootLogin no 를 prohibit-password(OpenSSH 기본값)로 바꾼다 - 키 인증 root 직접 접속 허용 = 취약
+c_U_01__sshd_prohibit_password() {
+    sed -i 's/^PermitRootLogin no$/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+    # Rocky 컨테이너는 sshd 를 한 번도 띄우지 않아 호스트 키가 없다 - 조치의 sshd -t 사전 검사가 통과하도록 만든다
+    ssh-keygen -A >/dev/null 2>&1
+    # 조치의 안전장치(root 외 관리자 계정이 있어야 root 원격 접속을 막음)를 통과시킬 관리자 계정(Debian sudo / Rocky wheel)
+    if getent group sudo >/dev/null 2>&1; then useradd -m -G sudo kisaadm; else useradd -m -G wheel kisaadm; fi
+}
+# P-02: /etc/passwd 비밀번호 필드가 빈 계정(비밀번호 없이 로그인) - 예전에는 GOOD 이었다
+c_U_04__passwd_empty_field() {
+    useradd -M -s /bin/sh kisanopw
+    sed -i 's/^kisanopw:x:/kisanopw::/' /etc/passwd
+}
+# P-15: 전체 공개 NFS 공유(조치는 주석 처리 + exportfs -ra)
+c_U_40__exports_open() { echo "/srv *(rw,no_root_squash)" > /etc/exports; chmod 644 /etc/exports; }
+# P-03: Exim(MTA)만 설치된 서버 - 설정 조회 명령(exim4 -bP)을 흉내 내는 가짜 실행 파일
+exim_fake() {
+    printf '#!/bin/sh\necho "relay_from_hosts = <; 127.0.0.1 ; ::1"\necho "acl_smtp_rcpt = acl_check_rcpt"\n' > /usr/local/sbin/exim4
+    chmod 755 /usr/local/sbin/exim4
+}
+c_U_47__exim_only() { exim_fake; }
+c_U_48__exim_only() { exim_fake; }

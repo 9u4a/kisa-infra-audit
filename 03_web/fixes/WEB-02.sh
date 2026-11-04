@@ -1,5 +1,5 @@
 # WEB-02 (상) 취약한 비밀번호 사용 제한 — 조치 [fix: confirm]
-# 대상: Tomcat 전용(checks/WEB-02.sh 참고). 취약 판정된 manager-gui 계정의 비밀번호를 바꾼다.
+# 대상: Tomcat 전용(checks/WEB-02.sh 참고). 취약 판정된 관리 역할(manager-*/admin-*) 계정의 비밀번호를 바꾼다.
 # 1.3.0: 무작위 비밀번호 생성을 폐지했다(아무도 새 값을 몰라 배포 파이프라인·관리 접속이 끊겼음).
 # 계정마다 사전 승인 + 운영자가 새 비밀번호를 터미널에서 직접 입력한다(lib/common.sh
 # fix_read_new_password). 비대화형이면 바꾸지 않는다. 새 비밀번호는 XML 이스케이프해 해당 <user> 요소의
@@ -21,12 +21,10 @@ run_fix() {
         return
     fi
 
-    # checks/WEB-01.sh 와 같은 방식: 주석 제거 후 따옴표 속성 단위로 <user> 요소를 잘라낸다
-    elems=$(strip_xml_comments "$f" | tr '\n' ' ' | \
-        grep -oE '<user([[:space:]]+[A-Za-z_:.-]+[[:space:]]*=[[:space:]]*"[^"]*")*[[:space:]]*/?>' | \
-        grep -E 'roles="[^"]*manager-gui')
+    # checks/WEB-02.sh 와 같은 함수: 주석 제거 후 관리 역할 <user> 요소(큰/작은따옴표 속성 - 실무 적용 검증 P-04)
+    elems=$(tomcat_admin_user_elems "$f")
     if [ -z "$elems" ]; then
-        FIX_STATUS="NA"; FIX_DETAIL="manager-gui 계정이 없음"; FIX_EVIDENCE=""
+        FIX_STATUS="NA"; FIX_DETAIL="관리 역할 계정이 없음"; FIX_EVIDENCE=""
         return
     fi
 
@@ -35,8 +33,8 @@ run_fix() {
 '
     for e in $elems; do
         IFS=$old_ifs
-        user=$(printf '%s' "$e" | sed -nE 's/.*username="([^"]*)".*/\1/p')
-        pass=$(printf '%s' "$e" | sed -nE 's/.*password="([^"]*)".*/\1/p')
+        user=$(xml_attr "$e" username)
+        pass=$(xml_attr "$e" password)
         if [ -n "$user" ] && { [ "${#pass}" -lt 8 ] || [ "$pass" = "$user" ] || \
              printf '%s' "$pass" | grep -qiE '^(admin|admin123|123admin|password|tomcat)$'; }; then
             weak_users="$weak_users $user"
@@ -60,15 +58,18 @@ run_fix() {
     for user in $weak_users; do
         if fix_confirm_tty "  Tomcat manager 계정 '$user' 의 비밀번호가 취약합니다. 지금 바꿀까요? (배포 도구·스크립트에 저장된 비밀번호도 함께 바꿔야 함)" \
            && fix_read_new_password "Tomcat '$user'"; then
-            if KISA_USER="$user" KISA_NEWPW="$FIX_NEW_PASSWORD" awk '
+            # \047 = 작은따옴표. 계정 이름은 정규식이 아니라 문자열로 비교한다(이름에 정규식 문자가 있어도 안전).
+            if KISA_USER="$user" KISA_NEWPW="$FIX_NEW_PASSWORD" KISA_ROLES="$TOMCAT_ADMIN_ROLE_RE" awk '
                 function xesc(s) { gsub(/&/, "\\&amp;", s); gsub(/</, "\\&lt;", s); gsub(/>/, "\\&gt;", s); gsub(/"/, "\\&quot;", s); return s }
                 function fixseg(s,    out, e, re, pw, u) {
-                    re = "<user([ \t]+[A-Za-z_:.-]+[ \t]*=[ \t]*\"[^\"]*\")*[ \t]*/?>"
-                    u = "username=\"" ENVIRON["KISA_USER"] "\""
+                    re = "<user([ \t]+[A-Za-z_:.-]+[ \t]*=[ \t]*(\"[^\"]*\"|\047[^\047]*\047))*[ \t]*/?>"
+                    u = ENVIRON["KISA_USER"]
                     out = ""
                     while (match(s, re)) {
                         e = substr(s, RSTART, RLENGTH)
-                        if (index(e, u) && e ~ /roles="[^"]*manager-gui/ && match(e, /password="[^"]*"/)) {
+                        if ((index(e, "username=\"" u "\"") || index(e, "username=\047" u "\047")) &&
+                            e ~ ("[ \t]roles[ \t]*=[ \t]*(\"[^\"]*|\047[^\047]*)" ENVIRON["KISA_ROLES"]) &&
+                            match(e, "password[ \t]*=[ \t]*(\"[^\"]*\"|\047[^\047]*\047)")) {
                             pw = xesc(ENVIRON["KISA_NEWPW"])
                             e = substr(e, 1, RSTART - 1) "password=\"" pw "\"" substr(e, RSTART + RLENGTH)
                             cnt++

@@ -41,6 +41,8 @@ usage() {
 }
 
 while [ $# -gt 0 ]; do
+    # 값이 필요한 옵션을 값 없이 주면 set -u 오류(parameter not set)로 죽었다(실무 적용 검증 P-24) - 사용법 오류로 끝낸다
+    case "$1" in -r|-i|-o|--rollback) [ $# -ge 2 ] || { echo "오류: $1 옵션에 값이 필요합니다 (-h 로 사용법 확인)" >&2; exit 2; } ;; esac
     case "$1" in
         -r) RESULT_JSON=$2; shift 2 ;;
         -i) ITEM_FILTER=$2; shift 2 ;;
@@ -60,6 +62,9 @@ if [ "$APPLY" -eq 1 ] || [ -n "$ROLLBACK_DIR" ]; then
     fix_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
     trap 'fix_lock_release' EXIT
     trap 'exit 130' INT TERM
+    # 실무 적용 검증 P-19: SSH 가 끊겨도(HUP) 조치 도중 죽지 않게 HUP 은 무시한다 - 진행 중인 항목은 재검증·원복까지 끝나고, 터미널이
+    # 없어진 뒤의 확인(confirm)은 읽기 실패로 거부 처리된다. 무시("")한 트랩은 항목 서브셸(run_fix_isolated)에도 물려진다.
+    trap '' HUP
 fi
 
 if [ -n "$ROLLBACK_DIR" ]; then

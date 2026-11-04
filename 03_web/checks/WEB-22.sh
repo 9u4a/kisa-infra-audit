@@ -23,15 +23,18 @@ $f: $l"
     case " $WEB_ENGINES " in *" nginx "*)
         checked=1
         if web_load_conf nginx; then
-            hit=""
+            hit=""; gaps=""
             for f in $WEB_FILES; do
                 l=$(grep -nE '^[^#]*error_page' "$f" 2>/dev/null)
                 [ -n "$l" ] && hit="$hit
 $f: $l"
+                for n in $(nginx_error_page_gaps "$f"); do gaps="$gaps $f:$n"; done
             done
             evidence="$evidence
-[Nginx] error_page 검색: ${hit:-없음}"
-            [ -z "$hit" ] && violations="$violations nginx"
+[Nginx] error_page 검색: ${hit:-없음}${gaps:+
+[Nginx] 404 를 지정하지 않은 error_page 블록(바깥 블록 설정을 물려받지 않음):$gaps}"
+            # 실무 적용 검증 P-05: error_page 가 있는 블록마다 404 도 지정돼야 한다(lib/common.sh nginx_error_page_gaps)
+            { [ -z "$hit" ] || [ -n "$gaps" ]; } && violations="$violations nginx"
         fi
     esac
 

@@ -16,7 +16,10 @@ run_check() {
                 return
             fi
             # 2번째 필드(평문/해시)는 결과물에 원문을 남기지 않고 길이만 기록한다.
-            plain_accounts=$(awk -F: '$2 != "x" && $2 != "*" && $2 != "!" && length($2) > 0 {print $1": 2번째 필드 " length($2) "자(원문 미저장)"}' "$passwd_file")
+            # 빈 필드는 비밀번호 없이 로그인되는 계정이다(쉐도우도 암호화 저장도 아님) - 예전에는 length($2) > 0 으로 빼
+            # GOOD 이었고 증적에 "전부 'x'" 라고 남겼다(실무 적용 검증 P-02).
+            plain_accounts=$(awk -F: '$2 == "" {print $1": 2번째 필드 비어 있음(비밀번호 없음)"; next}
+                $2 != "x" && $2 != "*" && $2 != "!" {print $1": 2번째 필드 " length($2) "자(원문 미저장)"}' "$passwd_file")
             if [ -f /etc/shadow ] && [ -z "$plain_accounts" ]; then
                 CHECK_STATUS="GOOD"
                 CHECK_DETAIL="쉐도우 비밀번호 사용 중이며 /etc/passwd 에 평문 비밀번호 필드가 없음"

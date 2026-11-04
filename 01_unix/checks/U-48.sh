@@ -31,6 +31,16 @@ postfix disable_vrfy_command: ${vrfy:-미설정(기본값 no)}"
         fi
     fi
 
+    # 실무 적용 검증 P-03: Exim 은 VRFY/EXPN 을 ACL(acl_smtp_vrfy·acl_smtp_expn)로 제어한다. 예전에는 보지 않아 Exim 서버가
+    # "메일 서비스 미설치"로 GOOD 이었다. ACL 값을 증적으로 남기고 수동 확인으로 둔다.
+    exim_manual=""
+    if command -v exim >/dev/null 2>&1 || command -v exim4 >/dev/null 2>&1; then
+        checked=1; exim_manual=1
+        ev=$(run_to 15 exim -bP acl_smtp_vrfy acl_smtp_expn 2>/dev/null || run_to 15 exim4 -bP acl_smtp_vrfy acl_smtp_expn 2>/dev/null)
+        evidence="$evidence
+exim -bP acl_smtp_vrfy acl_smtp_expn: ${ev:-조회 실패}"
+    fi
+
     if [ "$checked" -eq 0 ]; then
         CHECK_STATUS="GOOD"
         CHECK_DETAIL="메일 서비스가 설치되어 있지 않음"
@@ -38,6 +48,10 @@ postfix disable_vrfy_command: ${vrfy:-미설정(기본값 no)}"
     elif [ -z "$violations" ] && [ -n "$unverified" ]; then
         CHECK_STATUS="ERROR"
         CHECK_DETAIL="설정을 조회하지 못해 확인하지 못함: $unverified"
+        CHECK_EVIDENCE="$evidence"
+    elif [ -z "$violations" ] && [ -n "$exim_manual" ]; then
+        CHECK_STATUS="MANUAL"
+        CHECK_DETAIL="Exim 이 설치되어 있음 - VRFY/EXPN 허용 ACL(acl_smtp_vrfy·acl_smtp_expn, 미설정이면 거부)을 증적으로 수동 확인 필요"
         CHECK_EVIDENCE="$evidence"
     elif [ -z "$violations" ]; then
         CHECK_STATUS="GOOD"

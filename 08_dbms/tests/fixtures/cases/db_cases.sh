@@ -32,7 +32,8 @@ chmod 777 "$WORK" 2>/dev/null
 # ---- 엔진별 SQL 실행기(표준입력의 SQL) ----------------------------------------------------------
 my() { MYSQL_PWD="$ROOTPW" mysql -uroot -N -B 2>&1; }
 my_nopw() { mysql -uroot -N -B 2>&1; }
-pg() { psql -U postgres -d postgres -qAtX -v ON_ERROR_STOP=1 2>&1; }
+# TCP(127.0.0.1)·비밀번호로 접속한다 - postgres:no-trust 케이스가 trust 규칙을 모두 없애도 준비·확인·원복이 계속 접속되게(P-09)
+pg() { PGPASSWORD="$ROOTPW" psql -h 127.0.0.1 -U postgres -d postgres -qAtX -v ON_ERROR_STOP=1 2>&1; }
 as_oracle() { su oracle -s /bin/sh -c "$1"; }
 # ora_pdb / ora_cdb: SYSDBA(OS 인증)로 PDB(FREEPDB1) / CDB 루트에서 실행. 출력은 머리말 없이 | 구분.
 ora_run() {
@@ -186,7 +187,11 @@ meta() {
         mysql:mycnf-644) _m=root; _fix=1 ;;
         mysql:mycnf-640) _m=root ;;
         mysql:grant-option-user) _m=root; _fix=1 ;;
-        postgres:postgres-no-password) _m=local; _fix=1; _ans="y\ny\n$NEWPW\n$NEWPW\n"; _rb=irreversible ;;
+        # 조치(비밀번호 설정) 후에도 이미지 기본 pg_hba 의 trust 규칙이 남아 재진단은 MANUAL(P-09)
+        postgres:postgres-no-password) _m=local; _fix=1; _fx=MANUAL; _ans="y\ny\n$NEWPW\n$NEWPW\n"; _rb=irreversible ;;
+        postgres:no-trust) _m=local ;;
+        postgres:hba-reject-all) _m=local ;;
+        mysql:mask-any-host) _m=root ;;
         postgres:no-passwordcheck) _m=local; _fix=1; _fx=MANUAL ;;
         postgres:passwordcheck-loaded) _m=local ;;
         postgres:md5-encryption) _m=local; _fix=1 ;;
@@ -256,6 +261,8 @@ EOF
         mysql:native-password-account) echo "CREATE USER 'kisa_native'@'localhost' IDENTIFIED WITH mysql_native_password BY 'KisaOld#1234';" | my ;;
         # D-10 양호: 모든 호스트(%) 계정을 특정 IP 로 제한
         mysql:no-any-host) echo "RENAME USER 'root'@'%' TO 'root'@'10.0.0.5';" | my ;;
+        # D-10 취약(P-08): '%' 계정은 없지만 마스크 0(0.0.0.0/0.0.0.0) 계정이 모든 IP 를 허용
+        mysql:mask-any-host) echo "RENAME USER 'root'@'%' TO 'root'@'10.0.0.5'; CREATE USER 'kisa_mask'@'0.0.0.0/0.0.0.0' IDENTIFIED BY 'KisaMask#1234';" | my ;;
         # D-14 양호: my.cnf 권한 640
         mysql:mycnf-640) cp -p "$MYCNF" "$WORK/my.cnf.orig"; chmod 640 "$MYCNF"; chgrp mysql "$MYCNF" ;;
         # D-21 취약: 일반 계정에 전역 WITH GRANT OPTION(Role 이 아닌 사용자에게 직접)
@@ -270,6 +277,17 @@ EOF
         postgres:hba-restricted)
             cp -p "$PGD/pg_hba.conf" "$WORK/pg_hba.conf.orig"
             sed -i -E 's/^(host[[:space:]]+all[[:space:]]+all[[:space:]]+)all([[:space:]])/\1172.16.0.0\/12\2/' "$PGD/pg_hba.conf"
+            echo "SELECT pg_reload_conf();" | pg >/dev/null; sleep 1 ;;
+        # D-10 양호(P-12): 전체 허용 규칙을 특정 대역으로 바꾸고, 나머지 전체 대역은 reject(막는 규칙)
+        postgres:hba-reject-all)
+            cp -p "$PGD/pg_hba.conf" "$WORK/pg_hba.conf.orig"
+            sed -i -E 's/^(host[[:space:]]+all[[:space:]]+all[[:space:]]+)all([[:space:]])/\1172.16.0.0\/12\2/' "$PGD/pg_hba.conf"
+            printf 'host all all 0.0.0.0/0 reject\nhost all all 0.0.0.0 0.0.0.0 reject\n' >> "$PGD/pg_hba.conf"
+            echo "SELECT pg_reload_conf();" | pg >/dev/null; sleep 1 ;;
+        # D-01 양호(P-09): 비밀번호 설정 + trust(무인증) 규칙 없음(이미지 기본 trust 를 scram-sha-256 으로)
+        postgres:no-trust)
+            cp -p "$PGD/pg_hba.conf" "$WORK/pg_hba.conf.orig"
+            sed -i -E 's/[[:space:]]trust[[:space:]]*$/ scram-sha-256/' "$PGD/pg_hba.conf"
             echo "SELECT pg_reload_conf();" | pg >/dev/null; sleep 1 ;;
         postgres:conf-perm-644) chmod 644 "$PGD/postgresql.conf" ;;
         postgres:non-admin-owner) echo "CREATE ROLE kisa_app LOGIN; CREATE TABLE public.kisa_app_t (id int); ALTER TABLE public.kisa_app_t OWNER TO kisa_app;" | pg ;;
@@ -324,6 +342,8 @@ case_verify() {
         mysql:native-password-account) [ "$(echo "SELECT plugin FROM mysql.user WHERE user='kisa_native';" | my)" = "mysql_native_password" ] ;;
         mysql:root-any-host) [ -n "$(echo "SELECT user FROM mysql.user WHERE host='%';" | my)" ] ;;
         mysql:no-any-host) [ -z "$(echo "SELECT user FROM mysql.user WHERE host='%';" | my)" ] ;;
+        mysql:mask-any-host) [ -z "$(echo "SELECT user FROM mysql.user WHERE host='%';" | my)" ] \
+            && [ "$(echo "SELECT host FROM mysql.user WHERE user='kisa_mask';" | my)" = "0.0.0.0/0.0.0.0" ] ;;
         mysql:mycnf-644) [ "$(stat -c '%a' "$MYCNF")" = "644" ] ;;
         mysql:mycnf-640) [ "$(stat -c '%a' "$MYCNF")" = "640" ] ;;
         mysql:grant-option-user) [ "$(echo "SELECT Grant_priv FROM mysql.user WHERE user='kisa_go';" | my)" = "Y" ] ;;
@@ -337,6 +357,10 @@ case_verify() {
         postgres:hba-any-address) [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE type = 'host' AND address = 'all';" | pg)" != "0" ] ;;
         postgres:hba-restricted) [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE type LIKE 'host%' AND (address IS NULL OR address IN ('all', '0.0.0.0', '::'));" | pg)" = "0" ] \
             && [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE address = '172.16.0.0';" | pg)" != "0" ] ;;
+        postgres:hba-reject-all) [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE auth_method = 'reject' AND (address = '0.0.0.0' OR netmask = '0.0.0.0');" | pg)" = "2" ] \
+            && [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE type LIKE 'host%' AND address = 'all';" | pg)" = "0" ] ;;
+        postgres:no-trust) [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE auth_method = 'trust';" | pg)" = "0" ] \
+            && [ "$(echo "SELECT rolpassword IS NOT NULL FROM pg_authid WHERE rolname='postgres';" | pg)" = "t" ] ;;
         postgres:conf-perm-644) [ "$(stat -c '%a' "$PGD/postgresql.conf")" = "644" ] ;;
         postgres:conf-perm-600) [ "$(stat -c '%a' "$PGD/postgresql.conf")" = "600" ] && [ "$(stat -c '%a' "$PGD/pg_hba.conf")" = "600" ] ;;
         postgres:non-admin-owner) [ "$(echo "SELECT tableowner FROM pg_tables WHERE tablename='kisa_app_t';" | pg)" = "kisa_app" ] ;;
@@ -401,6 +425,7 @@ case_restore() {
         mysql:mysqld-as-root) cp -p "$WORK/my.cnf.orig" "$MYCNF"; chown -R mysql:mysql /var/lib/mysql; restart_mysql ;;
         mysql:native-password-account) echo "DROP USER IF EXISTS 'kisa_native'@'localhost';" | my ;;
         mysql:no-any-host) echo "RENAME USER 'root'@'10.0.0.5' TO 'root'@'%';" | my ;;
+        mysql:mask-any-host) echo "DROP USER IF EXISTS 'kisa_mask'@'0.0.0.0/0.0.0.0'; RENAME USER 'root'@'10.0.0.5' TO 'root'@'%';" | my ;;
         mysql:mycnf-640|mysql:mycnf-644) [ -f "$WORK/my.cnf.orig" ] && cp -p "$WORK/my.cnf.orig" "$MYCNF"; chmod 644 "$MYCNF"; chown root:root "$MYCNF" ;;
         mysql:grant-option-user) echo "DROP USER IF EXISTS 'kisa_go'@'10.0.0.6';" | my ;;
         mysql:*) : ;;
@@ -411,7 +436,7 @@ case_restore() {
             [ "$CASE" = "passwordcheck-loaded" ] || echo "SHOW shared_preload_libraries;" | pg | grep -q passwordcheck && restart_pg ; : ;;
         postgres:md5-encryption) printf "ALTER SYSTEM RESET password_encryption;\nSELECT pg_reload_conf();\n" | pg >/dev/null; sleep 1 ;;
         postgres:md5-stored-role) echo "DROP ROLE IF EXISTS kisa_md5;" | pg ;;
-        postgres:hba-restricted) cp -p "$WORK/pg_hba.conf.orig" "$PGD/pg_hba.conf"; echo "SELECT pg_reload_conf();" | pg >/dev/null; sleep 1 ;;
+        postgres:hba-restricted|postgres:hba-reject-all|postgres:no-trust) cp -p "$WORK/pg_hba.conf.orig" "$PGD/pg_hba.conf"; echo "SELECT pg_reload_conf();" | pg >/dev/null; sleep 1 ;;
         postgres:conf-perm-644|postgres:conf-perm-600) chmod 600 "$PGD/postgresql.conf" "$PGD/pg_hba.conf"; chown postgres:postgres "$PGD/postgresql.conf" "$PGD/pg_hba.conf" ;;
         postgres:non-admin-owner) echo "DROP TABLE IF EXISTS public.kisa_app_t; DROP ROLE IF EXISTS kisa_app;" | pg ;;
         postgres:collector-off|postgres:collector-on)

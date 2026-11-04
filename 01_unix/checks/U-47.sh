@@ -47,6 +47,16 @@ $access_file 존재 여부: $access_exists"
         fi
     fi
 
+    # 실무 적용 검증 P-03: Exim 은 릴레이를 ACL(acl_smtp_rcpt)·relay_from_hosts 로 제한해 위 설정 파일로 판정할 수 없다.
+    # 예전에는 보지 않아 Exim 서버가 "메일 서비스 미설치"로 GOOD 이었다(U-45 는 Exim 을 확인). 값을 증적으로 남기고 수동 확인.
+    exim_manual=""
+    if command -v exim >/dev/null 2>&1 || command -v exim4 >/dev/null 2>&1; then
+        checked=1; exim_manual=1
+        ev=$(run_to 15 exim -bP relay_from_hosts acl_smtp_rcpt 2>/dev/null || run_to 15 exim4 -bP relay_from_hosts acl_smtp_rcpt 2>/dev/null)
+        evidence="$evidence
+exim -bP relay_from_hosts acl_smtp_rcpt: ${ev:-조회 실패}"
+    fi
+
     if [ "$checked" -eq 0 ]; then
         CHECK_STATUS="GOOD"
         CHECK_DETAIL="메일 서비스가 설치되어 있지 않음"
@@ -54,6 +64,10 @@ $access_file 존재 여부: $access_exists"
     elif [ -z "$violations" ] && [ -n "$unverified" ]; then
         CHECK_STATUS="ERROR"
         CHECK_DETAIL="설정을 조회하지 못해 확인하지 못함: $unverified"
+        CHECK_EVIDENCE="$evidence"
+    elif [ -z "$violations" ] && [ -n "$exim_manual" ]; then
+        CHECK_STATUS="MANUAL"
+        CHECK_DETAIL="Exim 이 설치되어 있음 - 릴레이 제한(relay_from_hosts, acl_smtp_rcpt 의 relay 거부 규칙)을 증적으로 수동 확인 필요"
         CHECK_EVIDENCE="$evidence"
     elif [ -z "$violations" ]; then
         CHECK_STATUS="GOOD"

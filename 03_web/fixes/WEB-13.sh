@@ -15,7 +15,9 @@ run_fix() {
     files=""
     for f in "$TC_FILE" "$(dirname "$TC_FILE")/context.xml"; do
         [ -r "$f" ] || continue
-        [ "$(strip_xml_comments "$f" | grep -cE '<Resource([[:space:]/>]|$)')" -gt 0 ] && files="$files $f"
+        # UserDatabase(인증 저장소)는 DB 연결 정보가 아니라 제외 - 진단과 같은 기준(실무 적용 검증 P-13)
+        [ -n "$(strip_xml_comments "$f" | tr '\n' ' ' | grep -oE '<Resource([[:space:]][^>]*)?/?>' | \
+            grep -v 'org\.apache\.catalina\.UserDatabase')" ] && files="$files $f"
     done
     if [ -z "$files" ]; then
         FIX_STATUS="NA"; FIX_DETAIL="DB 연결 리소스가 설정된 파일이 없음"; FIX_EVIDENCE=""

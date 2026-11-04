@@ -1,4 +1,4 @@
-# D-18 (상) 응용프로그램 또는 DBA 계정의 Role이 Public으로 설정되지 않도록 조정 [Oracle] — 조치 [fix: auto]
+# D-18 (상) 응용프로그램 또는 DBA 계정의 Role이 Public으로 설정되지 않도록 조정 [Oracle] — 조치 [fix: confirm]
 run_fix() {
     out=$(oracle_query "SELECT granted_role FROM dba_role_privs WHERE grantee = 'PUBLIC';")
     if [ -z "$out" ]; then

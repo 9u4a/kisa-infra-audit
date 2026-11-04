@@ -65,5 +65,8 @@
   {"code": "D-14", "engine": "postgres", "name": "conf-perm-644", "expect": "VULN"},
   {"code": "D-20", "engine": "postgres", "name": "non-admin-owner", "expect": "MANUAL"},
   {"code": "D-26", "engine": "postgres", "name": "collector-off", "expect": "VULN"},
-  {"code": "D-26", "engine": "postgres", "name": "collector-on", "expect": "MANUAL"}
+  {"code": "D-26", "engine": "postgres", "name": "collector-on", "expect": "MANUAL"},
+  {"code": "D-01", "engine": "postgres", "name": "no-trust", "expect": "GOOD"},
+  {"code": "D-10", "engine": "mysql", "name": "mask-any-host", "expect": "VULN"},
+  {"code": "D-10", "engine": "postgres", "name": "hba-reject-all", "expect": "GOOD"}
 ]

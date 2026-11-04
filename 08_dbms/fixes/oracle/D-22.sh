@@ -1,4 +1,4 @@
-# D-22 (하) 데이터베이스의 자원 제한 기능을 TRUE로 설정 [Oracle] — 조치 [fix: auto]
+# D-22 (하) 데이터베이스의 자원 제한 기능을 TRUE로 설정 [Oracle] — 조치 [fix: confirm]
 # resource_limit 은 동적 파라미터라 즉시 적용된다(인스턴스 재시작 불필요).
 run_fix() {
     before=$(oracle_query "SELECT value FROM v\$parameter WHERE name = 'resource_limit';" | tr -d ' \r')

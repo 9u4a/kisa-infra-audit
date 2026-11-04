@@ -24,7 +24,15 @@ run_fix() {
         evd="$evd
 $f: $(grep -vE '^[[:space:]]*#' "$f")"
     done
+    # 파일만 고치면 커널의 공유 목록은 그대로라 실제로는 열린 채 재진단만 GOOD 이었다(실무 적용 검증 P-15) - 즉시 반영한다.
+    # 원복(--rollback)은 파일만 되돌리므로 공유를 다시 열려면 exportfs -ra 를 직접 실행해야 한다(F4 고지).
+    if command -v exportfs >/dev/null 2>&1; then
+        if run_to 30 exportfs -ra >/dev/null 2>&1; then reload="exportfs -ra 로 즉시 반영함"
+        else reload="exportfs -ra 실패 - 공유 목록에 아직 반영되지 않았을 수 있음(직접 확인)"; fi
+    else
+        reload="exportfs 명령 없음 - NFS 서버 재시작 전까지 반영되지 않음"
+    fi
     FIX_STATUS="APPLIED"
-    FIX_DETAIL="NFS 설정 파일(${files# }) 권한을 644로 설정하고 전체 공개(* 또는 호스트 생략) 공유 라인을 주석 처리함(허용할 IP를 지정해 다시 활성화 필요)"
+    FIX_DETAIL="NFS 설정 파일(${files# }) 권한을 644로 설정하고 전체 공개(* 또는 호스트 생략) 공유 라인을 주석 처리함(허용할 IP를 지정해 다시 활성화 필요). $reload. 원복 시 파일만 되돌리므로 exportfs -ra 를 다시 실행할 것"
     FIX_EVIDENCE="$evd"
 }

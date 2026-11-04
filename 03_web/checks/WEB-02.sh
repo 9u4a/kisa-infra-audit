@@ -25,11 +25,10 @@ run_check() {
                 CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 를 읽을 수 없음(권한 부족) - 비밀번호 확인 불가"; CHECK_EVIDENCE=""
                 return
             fi
-            mgr_lines=$(strip_xml_comments "$f" | tr '\n' ' ' | \
-                grep -oE '<user([[:space:]]+[A-Za-z_:.-]+[[:space:]]*=[[:space:]]*"[^"]*")*[[:space:]]*/?>' | \
-                grep -E 'roles="[^"]*manager-gui')
+            # 실무 적용 검증 P-04: manager-gui 외 관리 역할·작은따옴표 속성도 본다(lib/common.sh tomcat_admin_user_elems)
+            mgr_lines=$(tomcat_admin_user_elems "$f")
             if [ -z "$mgr_lines" ]; then
-                CHECK_STATUS="GOOD"; CHECK_DETAIL="manager-gui 계정이 없어 해당 없음(관리자 페이지 미사용)"; CHECK_EVIDENCE="$f 확인"
+                CHECK_STATUS="GOOD"; CHECK_DETAIL="관리 역할 계정이 없어 해당 없음(관리자 페이지 미사용)"; CHECK_EVIDENCE="$f 확인"
                 return
             fi
             hashed_realm=""
@@ -43,8 +42,8 @@ run_check() {
 '
             for line in $mgr_lines; do
                 IFS=$old_ifs
-                user=$(printf '%s' "$line" | sed -nE 's/.*[[:space:]]username="([^"]*)".*/\1/p')
-                pass=$(printf '%s' "$line" | sed -nE 's/.*[[:space:]]password="([^"]*)".*/\1/p')
+                user=$(xml_attr "$line" username)
+                pass=$(xml_attr "$line" password)
                 len=${#pass}
                 evidence="$evidence
 계정 $user: 비밀번호 길이=$len"
@@ -65,7 +64,7 @@ run_check() {
             if [ -n "$weak" ]; then
                 CHECK_STATUS="VULN"; CHECK_DETAIL="취약한 비밀번호로 판단되는 관리자 계정 존재:$weak"
             elif [ -z "$plain" ]; then
-                CHECK_STATUS="GOOD"; CHECK_DETAIL="관리자(manager-gui) 계정 비밀번호가 모두 해시(CredentialHandler)로 저장되어 있음"
+                CHECK_STATUS="GOOD"; CHECK_DETAIL="관리 역할 계정 비밀번호가 모두 해시(CredentialHandler)로 저장되어 있음"
             else
                 CHECK_STATUS="MANUAL"; CHECK_DETAIL="비밀번호 길이는 기준을 충족하나 실제 복잡성(문자 조합)은 자동 판정이 제한적임 — 수동 확인 권장"
             fi

@@ -21,23 +21,23 @@ run_check() {
                 CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 를 읽을 수 없음(권한 부족) - 관리자 계정 확인 불가"; CHECK_EVIDENCE=""
                 return
             fi
-            # <user .../> 요소 단위로 잘라 username 속성만 남긴다 - 속성 사이를 통째로 잡으면
-            # password="..." 원문까지 증적에 실려 평문 관리자 비밀번호가 결과물에 남는다.
-            # 요소는 따옴표 속성 단위로 매칭한다(비밀번호에 '>' 가 있어도 요소가 잘리지 않게).
-            mgr_users=$(strip_xml_comments "$f" | tr '\n' ' ' | \
-                grep -oE '<user([[:space:]]+[A-Za-z_:.-]+[[:space:]]*=[[:space:]]*"[^"]*")*[[:space:]]*/?>' | \
-                grep -E 'roles="[^"]*manager-gui' | grep -oE 'username="[^"]*"')
-            if [ -z "$mgr_users" ]; then
-                CHECK_STATUS="GOOD"; CHECK_DETAIL="manager-gui 역할을 가진 계정이 없어 관리자 페이지 미사용"; CHECK_EVIDENCE="$f 확인"
+            # 관리 역할(manager-*/admin-*) <user> 요소에서 username 속성만 남긴다 - 요소를 통째로 남기면 password 원문까지
+            # 증적에 실린다(S5). 작은따옴표 속성·manager-gui 외 관리 역할도 본다(실무 적용 검증 P-04, lib/common.sh).
+            elems=$(tomcat_admin_user_elems "$f")
+            if [ -z "$elems" ]; then
+                CHECK_STATUS="GOOD"; CHECK_DETAIL="관리 역할(manager-gui/script/jmx/status, admin-gui/script)을 가진 계정이 없어 관리자 페이지 미사용"; CHECK_EVIDENCE="$f 확인"
                 return
             fi
-            default_hit=$(printf '%s' "$mgr_users" | grep -iE 'username="(admin|tomcat)"')
+            mgr_users=$(printf '%s\n' "$elems" | while IFS= read -r e; do
+                printf 'username=%s\n' "$(xml_attr "$e" username)"
+            done)
+            default_hit=$(printf '%s\n' "$mgr_users" | grep -ixE 'username=(admin|tomcat)')
             CHECK_EVIDENCE="$f
 $mgr_users"
             if [ -n "$default_hit" ]; then
-                CHECK_STATUS="VULN"; CHECK_DETAIL="Tomcat manager-gui 계정명이 기본값(admin/tomcat)으로 설정됨"
+                CHECK_STATUS="VULN"; CHECK_DETAIL="Tomcat 관리 역할 계정명이 기본값(admin/tomcat)으로 설정됨"
             else
-                CHECK_STATUS="GOOD"; CHECK_DETAIL="Tomcat manager-gui 계정명이 기본값이 아님"
+                CHECK_STATUS="GOOD"; CHECK_DETAIL="Tomcat 관리 역할 계정명이 기본값이 아님"
             fi
             ;;
         *)

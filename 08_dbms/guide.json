@@ -532,11 +532,11 @@
       "guide_page": 648,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "oracle"
       ],
-      "deviation": null
+      "deviation": "1.5.0 운영 안전 재분류(auto→confirm, P-18): 가이드 영향 문구는 \"영향 없음\"이나 PUBLIC 권한 회수는 그 권한에 기대는 응용 프로그램의 쿼리를 실패시킬 수 있다"
     },
     {
       "code": "D-19",
@@ -646,11 +646,11 @@
       "guide_page": 656,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "oracle"
       ],
-      "deviation": null
+      "deviation": "1.5.0 운영 안전 재분류(auto→confirm, P-18): 가이드 영향 문구는 \"영향 없음\"이나 RESOURCE_LIMIT=TRUE 로 바꾸면 이미 프로파일에 지정돼 있던 자원 제한이 즉시 적용되어 운영 중인 세션·배치가 제한값에서 끊길 수 있다"
     },
     {
       "code": "D-23",

@@ -57,7 +57,23 @@ def load_results(paths: list[str]) -> list[dict]:
             continue
         data["_path"] = p
         loaded.append(data)
-    return loaded
+    return dedupe_hosts(loaded)
+
+
+def dedupe_hosts(results: list[dict]) -> list[dict]:
+    """같은 호스트(+카테고리·환경)를 여러 번 진단한 결과가 섞이면 가장 최근(generated_at) 것만 남긴다.
+    예전에는 모두 합산해 호스트 수·항목별 취약 수가 부풀었다(실무 적용 검증 P-22). 뺀 결과는 경고로 알린다."""
+    latest: dict[tuple, dict] = {}
+    for r in results:
+        key = (r.get("host", "unknown"), r.get("category", ""), r.get("env", ""))
+        cur = latest.get(key)
+        if cur is None or str(r.get("generated_at", "")) > str(cur.get("generated_at", "")):
+            if cur is not None:
+                print(f"경고: 같은 호스트의 이전 결과를 제외함: {cur['_path']}", file=sys.stderr)
+            latest[key] = r
+        else:
+            print(f"경고: 같은 호스트의 이전 결과를 제외함: {r['_path']}", file=sys.stderr)
+    return list(latest.values())
 
 
 def write_csv(path: str, results: list[dict], guide_by_code: dict) -> None:
@@ -81,7 +97,8 @@ def per_host_stats(results: list[dict]) -> list[dict]:
         for it in r.get("items", []):
             counts[it["status"]] = counts.get(it["status"], 0) + 1
         base = counts["VULN"] + counts["GOOD"]
-        rate = round(counts["GOOD"] * 100 / base) if base else None
+        # summary.txt·report.html 과 같은 버림 - round() 는 은행가 반올림이라 74.5% 가 74, report.html 은 75 였다(P-22)
+        rate = counts["GOOD"] * 100 // base if base else None
         rows.append({"host": r.get("host", "unknown"), "env": r.get("env", ""), "counts": counts, "rate": rate})
     rows.sort(key=lambda x: (x["rate"] if x["rate"] is not None else -1))
     return rows
@@ -100,7 +117,7 @@ def per_item_stats(results: list[dict], guide_by_code: dict) -> list[dict]:
     rows = []
     for code, a in agg.items():
         meta = guide_by_code.get(code, {})
-        rate = round(a["vuln"] * 100 / a["applicable"]) if a["applicable"] else 0
+        rate = a["vuln"] * 100 // a["applicable"] if a["applicable"] else 0
         rows.append({
             "code": code, "title": meta.get("title", code), "severity": meta.get("severity", ""),
             "vuln": a["vuln"], "applicable": a["applicable"], "vuln_rate": rate,

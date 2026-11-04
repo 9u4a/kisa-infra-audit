@@ -21,7 +21,21 @@ run_check() {
     fi
     if printf '%s\n' "$out" | grep -q "EMPTY"; then
         CHECK_STATUS="VULN"; CHECK_DETAIL="postgres 계정에 비밀번호가 설정되어 있지 않음"
+        return
+    fi
+    # 실무 적용 검증 P-09: 비밀번호가 있어도 pg_hba 의 trust 규칙에 걸리면 비밀번호 없이 postgres 로 접속된다 - 예전에는 보지 않고
+    # GOOD 이었다. 서버가 실제로 읽은 규칙(pg_hba_file_rules, 원격 실행에서도 조회 가능)으로 확인한다.
+    trust=$(psql_query "SELECT type || ' ' || array_to_string(database, ',') || ' ' || array_to_string(user_name, ',') || ' ' || coalesce(address, '(socket)') FROM pg_hba_file_rules WHERE auth_method = 'trust' AND ('all' = ANY(user_name) OR 'postgres' = ANY(user_name));")
+    if [ $? -ne 0 ]; then
+        CHECK_STATUS="MANUAL"; CHECK_DETAIL="postgres 계정에 비밀번호가 설정되어 있으나 pg_hba 규칙(trust 여부)을 조회하지 못함 - 비밀번호 없이 접속되는 규칙이 없는지 수동 확인 필요"
+        return
+    fi
+    CHECK_EVIDENCE="$out${trust:+
+pg_hba trust 규칙(비밀번호 없이 접속):
+$trust}"
+    if [ -n "$trust" ]; then
+        CHECK_STATUS="MANUAL"; CHECK_DETAIL="postgres 계정에 비밀번호는 설정되어 있으나 pg_hba trust 규칙으로 비밀번호 없이 접속할 수 있음 - 규칙의 필요성·범위 확인 필요"
     else
-        CHECK_STATUS="GOOD"; CHECK_DETAIL="postgres 계정에 비밀번호가 설정되어 있음"
+        CHECK_STATUS="GOOD"; CHECK_DETAIL="postgres 계정에 비밀번호가 설정되어 있고 trust(무인증) 접속 규칙이 없음"
     fi
 }

@@ -9,6 +9,15 @@ run_fix() {
         FIX_STATUS="ERROR"; FIX_DETAIL="pwconv 명령을 찾을 수 없음"; FIX_EVIDENCE=""
         return
     fi
+    # 빈 비밀번호 계정(P-02)은 pwconv 로 옮겨도 비밀번호 없는 계정으로 남는다(재진단만 GOOD 이 됨). 비밀번호 설정·잠금은
+    # 계정 사용 여부 판단이 필요해 자동으로 하지 않는다.
+    empty=$(awk -F: '$2 == "" {printf "%s ", $1}' /etc/passwd)
+    if [ -n "$empty" ]; then
+        FIX_STATUS="SKIPPED"
+        FIX_DETAIL="변경 없음 - 비밀번호가 빈 계정(${empty% })은 비밀번호를 설정하거나 잠근(passwd -l) 뒤 pwconv 를 실행해야 함(수동)"
+        FIX_EVIDENCE=""
+        return
+    fi
     fix_backup /etc/passwd
     [ -f /etc/shadow ] && fix_backup /etc/shadow
     _err=$(mktemp 2>/dev/null || echo "/tmp/.u04_err.$$")

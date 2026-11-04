@@ -41,6 +41,8 @@ usage() {
 }
 
 while [ $# -gt 0 ]; do
+    # 값이 필요한 옵션을 값 없이 주면 set -u 오류(parameter not set)로 죽었다(실무 적용 검증 P-24) - 사용법 오류로 끝낸다
+    case "$1" in -i|-g|-e|-o) [ $# -ge 2 ] || { echo "오류: $1 옵션에 값이 필요합니다 (-h 로 사용법 확인)" >&2; exit 2; } ;; esac
     case "$1" in
         -i) ITEM_FILTER=$2; shift 2 ;;
         -g) GROUP_FILTER=$2; shift 2 ;;
@@ -105,7 +107,7 @@ NDJSON="$OUT_DIR/.result.ndjson"
 result_trap_partial "$NDJSON" "$CATEGORY_NAME" OS_FAMILY
 CSV_FILE="$OUT_DIR/result.csv"
 csv_init "$CSV_FILE"
-HOST_NAME=$(hostname 2>/dev/null || echo unknown)
+HOST_NAME=$(host_name)
 
 banner_start "$CATEGORY_NAME" "$TOTAL"
 log_to_file "진단 시작: 환경=$OS_FAMILY 대상=$TOTAL 항목"

@@ -252,7 +252,7 @@ try {
     }
     if ($Category -eq "03_web") {
         Remove-WebApplication -Site "Default Web Site" -Name "kisa_rs_app" -ErrorAction SilentlyContinue
-        Remove-WebVirtualDirectory -Site "Default Web Site" -Application "/" -Name "kisa_rs_vdir" -Force -ErrorAction SilentlyContinue
+        Remove-WebVirtualDirectory -Site "Default Web Site" -Application "/" -Name "kisa_rs_vdir" -ErrorAction SilentlyContinue
         Remove-WebAppPool -Name "kisa_rs_pool" -ErrorAction SilentlyContinue
         Remove-LocalUser -Name "kisa_rs_pool" -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force $iisRoot -ErrorAction SilentlyContinue

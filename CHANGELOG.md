@@ -27,6 +27,39 @@
 - 05_network N-03(P-10): enable secret 이 있어도 `username ... password 0 <평문>` 계정이 있으면 VULN(service
   password-encryption 이 없을 때). 증적 마스킹이 detail 의 "enable secret 또는 ..." 문장을 가리던 문제도 수정.
 - 05_network N-01(P-11): `aaa new-model` + `aaa authentication login default` 장비를 VTY 인증 없음(VULN)으로 오판하던 문제.
+- 01_unix 거짓 양호·판정
+  - U-04(P-02): /etc/passwd 비밀번호 필드가 빈 계정(비밀번호 없이 로그인)을 GOOD 으로 보던 문제 → VULN. 조치는 pwconv 로
+    해소되지 않아 변경 없이 SKIPPED(비밀번호 설정·잠금 안내).
+  - U-47/48(P-03): Exim 만 있는 서버를 "메일 서비스 미설치" GOOD → relay·VRFY/EXPN ACL 을 증적으로 남기고 MANUAL.
+  - U-01(P-14): `PermitRootLogin prohibit-password`·미설정(OpenSSH 기본값)을 MANUAL → VULN(키 인증 root 직접 접속 허용).
+    sshd_config 를 읽지 못하면 ERROR(Rocky 는 600).
+- 03_web
+  - WEB-01/02(P-04): Tomcat 관리 역할을 manager-gui 만, 속성을 큰따옴표만 보던 문제 - manager-script/jmx/status·admin-gui/script,
+    작은따옴표 속성도 판정·조치(lib/common.sh `tomcat_admin_user_elems`·`xml_attr`).
+  - WEB-22 Nginx(P-05): error_page 줄이 하나라도 있으면 GOOD → error_page 가 있는 블록마다 404 지정을 요구(그 블록은 바깥 설정을
+    물려받지 않음). 공식 이미지 기본 default.conf(50x 만)는 VULN, 조치는 그 블록에 `error_page 404` 추가.
+  - WEB-22 Apache 조치(P-26): 인라인 한글 문구가 iso-8859-1 로 나가 깨지던 문제 - ASCII 문구로.
+  - WEB-13 Tomcat(P-13): 기본 UserDatabase Resource 를 DB 연결 정보로 보아 항상 VULN → 제외(기본 상태 NA).
+  - 설정 경로(P-06): 실행 중인 httpd/apache2 `-f`, nginx `-c` 의 설정 파일을 먼저 쓴다.
+  - Tomcat 다중 인스턴스(P-07): run.sh 가 인스턴스 목록과 진단 대상을 경고하고, `CATALINA_BASE` 를 지정하면 그 인스턴스를 진단한다.
+- 08_dbms
+  - MySQL D-10(P-08): `'%'` 만 보던 문제 - `''`·`'%.%'`·`'0.0.0.0/0.0.0.0'` 등 모든 호스트 허용 형태를 VULN.
+  - PostgreSQL D-01(P-09): 비밀번호가 있어도 pg_hba trust 규칙(postgres/all)이 있으면 GOOD 대신 MANUAL. 공식 이미지 기본 trust 로
+    전역 기대값 GOOD → MANUAL.
+  - PostgreSQL D-10(P-12): 전체 대역 `reject` 규칙을 VULN 으로 보던 문제.
+- 조치 안전(P-15·P-16·P-19)
+  - U-40 조치가 `exportfs -ra` 를 하지 않아 공유가 열린 채 재진단만 GOOD 이던 문제 - 즉시 반영, 원복 후 재실행 필요를 고지.
+  - U-52 조치는 텔넷 세션(조상 프로세스 telnetd)에서 실행하면 변경하지 않는다.
+  - 01/03/08 fix.sh 가 HUP(SSH 끊김)을 무시한다 - 진행 중 항목의 재검증·원복이 중간에 끊기지 않게.
+- 운영 편의
+  - sh 진입점 result.csv 에 UTF-8 BOM(P-21, 한글 Excel).
+  - merge.py: 같은 호스트(+카테고리·환경)는 최근 결과만(P-22), 준수율은 summary.txt 와 같은 버림(report.html 도).
+  - 호스트 이름(P-23): sh 는 `host_name`(hostname → uname -n → /proc), 05_network 는 설정의 hostname 줄.
+  - 옵션 값 누락은 사용법 오류(exit 2), 08_dbms DB 접속 실패는 종료 코드 4(audit.sh 가 구분), 05 `run.py -i` 코드 검증(P-24).
+  - README 에 Windows 실행 정책(Unblock-File, `-Scope Process`) 안내(P-20). run_safety_windows.ps1 의 잘못된 `-Force`(P-27).
+### Changed (조치 등급, KNOWN_ISSUES §4)
+- auto → confirm(deviation 기록): U-40·U-42·U-52·U-54(서비스 즉시 중지·공유 차단), U-65(공용 pool.ntp.org 추가), W-21(FTP 중지),
+  D-18·D-22(Oracle PUBLIC 권한 회수·RESOURCE_LIMIT). `--apply --yes` 일괄 적용에서 빠지고 항목별 확인을 받는다.
 
 ## [1.4.1] - 2026-11-02
 ### 조치 등급 일관성 + KNOWN_ISSUES §3 결정 대기(Q-01~Q-06) 처리

@@ -682,7 +682,7 @@
       "guide_page": 207,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -691,7 +691,7 @@
         "win10",
         "win11"
       ],
-      "deviation": null
+      "deviation": "1.5.0 운영 안전 재분류(auto→confirm, P-16): FTP 서비스(FTPSVC)를 즉시 중지·비활성화하므로 파일 전송 업무가 중단될 수 있다"
     },
     {
       "code": "W-22",

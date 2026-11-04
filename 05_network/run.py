@@ -22,6 +22,7 @@ import glob
 import importlib.util
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -87,7 +88,10 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
         return None
 
     vendor_name = args.vendor or detect_vendor(text)
-    host = os.path.splitext(os.path.basename(path))[0]
+    # 장비 설정의 hostname 을 쓰고, 없을 때만 파일 이름으로 대신한다 - 예전에는 항상 파일 이름이라 "running-config" 같은
+    # 이름이 여러 장비에 겹쳐 병합·보고서에서 구분되지 않았다(실무 적용 검증 P-23). 폴더 이름에 쓰므로 안전한 문자만 남긴다.
+    m = re.search(r"^hostname[ \t]+(\S+)", text, re.M)
+    host = re.sub(r"[^A-Za-z0-9._-]", "_", m.group(1)) if m else os.path.splitext(os.path.basename(path))[0]
 
     if not vendor_name:
         print(f"[{host}] 벤더를 자동으로 판별하지 못했습니다. -v 옵션으로 지정하세요(예: -v cisco_ios).", file=sys.stderr)
@@ -103,6 +107,12 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
     all_codes = sorted_codes(by_code)
     if args.items:
         selected = [c.strip() for c in args.items.split(",") if c.strip()]
+        # 가이드에 없는 코드는 건너뛴다 - 코드가 check 파일 경로가 되므로 "../x" 같은 값이 임의 .py 를 불러올 수 있었다
+        # (sh 진입점의 code_is_known 과 같은 처리, 실무 적용 검증 P-24)
+        unknown = [c for c in selected if c not in by_code]
+        for c in unknown:
+            print(f"경고: 알 수 없는 항목 코드라 건너뜀: {c}", file=sys.stderr)
+        selected = [c for c in selected if c in by_code]
     elif args.group:
         selected = [c for c in all_codes if str(by_code[c].get("group_no")) == args.group]
     else:

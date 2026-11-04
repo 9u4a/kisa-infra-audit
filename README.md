@@ -93,6 +93,12 @@ sh 01_unix/fix.sh --rollback output/<host>_01_fix_<시각>/                 # �
 ```
 
 ### Windows Server
+Windows 10/11 의 기본 실행 정책(Restricted)과 인터넷·메일·USB 로 받은 파일 표시(Zone.Identifier) 때문에 `.ps1` 이 실행되지 않을 수 있다.
+시스템 정책을 바꾸지 말고 **그 PowerShell 창에서만** 허용한다(관리자 권한 PowerShell 에서):
+```powershell
+Get-ChildItem -Path .\ -Recurse -Include *.ps1,*.psm1 | Unblock-File   # 받은 파일 표시 제거(도구 폴더에서 1회)
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force          # 현재 창에서만 허용(창을 닫으면 원래대로)
+```
 ```powershell
 .\02_windows\run.ps1 -l                     # 항목 목록 확인
 .\02_windows\run.ps1                        # 전체 진단 (관리자 권한 권장)

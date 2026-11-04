@@ -61,6 +61,12 @@ status_label_ko() {
     esac
 }
 
+# host_name -> 결과물·잠금·대상 확인에 쓰는 호스트 이름. 최소 설치(컨테이너 이미지 등)에는 hostname 명령이 없어 "unknown" 이
+# 되던 문제(실무 적용 검증 P-23) - uname -n, /proc 순으로 대신한다. 진단(run)·조치(fix)가 같은 함수를 써야 X-06 대상 확인이 맞는다.
+host_name() {
+    hostname 2>/dev/null || uname -n 2>/dev/null || cat /proc/sys/kernel/hostname 2>/dev/null || echo unknown
+}
+
 # ---- 로그 -----------------------------------------------------------------
 log_info()  { printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
 log_warn()  { printf '%s[%s] 경고: %s%s\n' "$C_YEL" "$(date '+%H:%M:%S')" "$*" "$C_OFF" >&2; }
@@ -161,7 +167,7 @@ banner_start() {
     _category=$1; _total=$2
     echo "${C_BOLD}=== 주요정보통신기반시설 자동 진단 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VERSION}) ===${C_OFF}"
     echo "카테고리   : $_category"
-    echo "호스트     : $(hostname 2>/dev/null || echo unknown)"
+    echo "호스트     : $(host_name)"
     echo "환경       : ${OS_FAMILY:-unknown}"
     echo "실행 계정  : $(id -un 2>/dev/null) (uid=$(id -u 2>/dev/null))"
     if [ "$(id -u 2>/dev/null)" != "0" ]; then
@@ -241,7 +247,7 @@ _result_partial_flush() {
     run_lock_release
     [ -s "${_RP_ND:-}" ] || return 0
     eval "_rp_env=\${$_RP_ENVVAR:-}"
-    result_finalize "$_RP_ND" "$OUT_DIR/result.partial.json" "$_RP_CAT" "$(hostname 2>/dev/null || echo unknown)" "$_rp_env"
+    result_finalize "$_RP_ND" "$OUT_DIR/result.partial.json" "$_RP_CAT" "$(host_name)" "$_rp_env"
     log_warn "중단됨 - 지금까지 진단한 항목을 $OUT_DIR/result.partial.json 에 저장했습니다."
 }
 
@@ -319,7 +325,9 @@ csv_escape() {
 
 # ---- CSV / summary.txt -----------------------------------------------------
 # csv_init <file>
-csv_init() { printf 'code,severity,group,title,status,detail\n' > "$1"; }
+# UTF-8 BOM 을 붙인다 - 없으면 한글 Windows Excel 이 cp949 로 열어 한글이 깨진다(실무 적용 검증 P-21, Python·PowerShell
+# 진입점은 이미 BOM 을 붙임)
+csv_init() { printf '\357\273\277code,severity,group,title,status,detail\n' > "$1"; }
 
 # csv_add <file> <code> <severity> <group> <title> <status> <detail>
 csv_add() {
@@ -769,8 +777,23 @@ detect_web_engines() {
     WEB_ENGINES=$(printf '%s' "$WEB_ENGINES" | sed -E 's/^ //')
 }
 
-# apache_conf_path — 대표적인 설치 레이아웃(공식 도커/소스, Debian/Ubuntu, RHEL 계열) 순으로 탐색
+# _proc_conf_arg <comm 목록(공백)> <옵션> -> 그 이름으로 실행 중인 프로세스 명령행에서 <옵션> 다음 인자(첫 번째 것)를 출력.
+# 실무 적용 검증 P-06: 운영 서버는 httpd -f /opt/.../httpd.conf, nginx -c /etc/nginx/site.conf 처럼 비표준 설정으로 띄우는
+# 경우가 있다 - 예전에는 고정 경로만 봐 실제로 쓰지 않는(또는 다른) 파일로 판정했다. 절대 경로만 받아들인다.
+_proc_conf_arg() {
+    for _pca_c in $1; do
+        for _pca_p in $(proc_pids_by_comm "$_pca_c"); do
+            _pca_v=$(tr '\000' '\n' 2>/dev/null < "/proc/$_pca_p/cmdline" | awk -v o="$2" 'n { print; exit } $0 == o { n = 1 }')
+            case "$_pca_v" in /*) [ -f "$_pca_v" ] && { printf '%s\n' "$_pca_v"; return 0; } ;; esac
+        done
+    done
+    return 1
+}
+
+# apache_conf_path — 실행 중인 httpd/apache2 의 -f 설정 파일, 없으면 대표적인 설치 레이아웃(공식 도커/소스, Debian/Ubuntu,
+# RHEL 계열) 순으로 탐색
 apache_conf_path() {
+    _proc_conf_arg "httpd apache2" -f && return 0
     for p in /usr/local/apache2/conf/httpd.conf /etc/apache2/apache2.conf /etc/httpd/conf/httpd.conf /usr/local/apache/conf/httpd.conf; do
         [ -f "$p" ] && { echo "$p"; return 0; }
     done
@@ -868,7 +891,9 @@ apache_conf_stream() {
     _apache_walk "$_main" "$(apache_server_root "$_main")"
 }
 
+# nginx_conf_path — 실행 중인 nginx 의 -c 설정 파일(P-06), 없으면 대표 경로
 nginx_conf_path() {
+    _proc_conf_arg nginx -c && return 0
     for p in /etc/nginx/nginx.conf /usr/local/nginx/conf/nginx.conf /usr/local/etc/nginx/nginx.conf /opt/nginx/conf/nginx.conf; do
         [ -f "$p" ] && { echo "$p"; return 0; }
     done
@@ -914,6 +939,24 @@ EOF_NW1
 nginx_extra_confs() {
     _main=$(nginx_conf_path) || return 1
     _nginx_walk "$_main" | awk -v m="$_main" '!s[$0]++ && $0 != m && $0 != "!trunc"'
+}
+
+# nginx_error_page_gaps <설정 파일> -> error_page 가 있는데 404 를 지정하지 않은 블록마다 그 블록의 첫 error_page 줄 번호.
+# nginx 는 한 블록에 error_page 가 하나라도 있으면 바깥 블록의 error_page 를 물려받지 않는다 - 기본 default.conf 처럼
+# server 블록에 "error_page 500 502 503 504" 만 있으면 404 는 기본(버전 노출) 페이지다(실무 적용 검증 P-05: 예전에는
+# error_page 줄이 하나라도 있으면 GOOD). 블록은 중괄호로 구분하고, 한 줄 블록(location / { error_page ...; })은 안쪽으로 본다.
+nginx_error_page_gaps() {
+    awk '
+        { line = $0; sub(/#.*/, "", line)
+          n = gsub(/\{/, "{", line); while (n-- > 0) { stack[++depth] = cur; cur = ++ids }
+          if (match(line, /(^|[ \t;{])error_page[ \t][^;]*/)) {
+              d = substr(line, RSTART, RLENGTH)
+              if (!(cur in first)) first[cur] = FNR
+              if (d ~ /[ \t]404([ \t]|$)/) has404[cur] = 1
+          }
+          n = gsub(/\}/, "}", line); while (n-- > 0 && depth > 0) cur = stack[depth--] }
+        END { for (b in first) if (!(b in has404)) print first[b] }
+    ' "$1" 2>/dev/null | sort -n
 }
 
 # web_conf_files <apache|nginx> -> 실제 로드되는 설정 파일(메인 포함) 목록.
@@ -1057,6 +1100,9 @@ tomcat_pids() {
 # (Debian 은 /var/lib/tomcatN 이 BASE 이고 /usr/share/tomcatN 은 HOME 이라 conf/ 가 없다 - BASE 를 먼저 본다,
 # RHEL 은 /usr/share/tomcat/conf -> /etc/tomcat). conf/ 폴더가 있는 경로만 인정한다(진단 검수 WEB-R4).
 tomcat_home() {
+    # 실무 적용 검증 P-07: 한 서버에 인스턴스가 여러 개면 아래 탐색은 첫 인스턴스만 고른다. 운영자가 CATALINA_BASE 를 지정해
+    # 실행하면(CATALINA_BASE=<경로> sh run.sh -e tomcat) 그 인스턴스를 진단한다 - run.sh 가 인스턴스 목록과 함께 안내한다.
+    [ -n "${CATALINA_BASE:-}" ] && [ -d "$CATALINA_BASE/conf" ] && { echo "$CATALINA_BASE"; return 0; }
     for _th_pid in $(tomcat_pids); do
         _th_b=$(tr '\000' '\n' 2>/dev/null < "/proc/$_th_pid/cmdline" | sed -n 's/^-Dcatalina\.base=//p' | head -n 1)
         [ -n "$_th_b" ] && [ -d "$_th_b/conf" ] && { echo "$_th_b"; return 0; }
@@ -1066,6 +1112,13 @@ tomcat_home() {
         [ -n "$_th_d" ] && [ -d "$_th_d/conf" ] && { echo "$_th_d"; return 0; }
     done
     return 1
+}
+
+# tomcat_instances -> 실행 중인 Tomcat 인스턴스(CATALINA_BASE) 목록(중복 제거). 2개 이상이면 run.sh 가 인스턴스별 재실행을 안내한다.
+tomcat_instances() {
+    for _ti_pid in $(tomcat_pids); do
+        tr '\000' '\n' 2>/dev/null < "/proc/$_ti_pid/cmdline" | sed -n 's/^-Dcatalina\.base=//p' | head -n 1
+    done | awk 'NF && !s[$0]++'
 }
 
 # tomcat_conf_dir -> Tomcat conf 폴더(tomcat_home/conf, 없으면 RHEL·Debian 의 /etc/tomcat*). 못 찾으면 1.
@@ -1145,6 +1198,23 @@ strip_xml_comments() {
         print out
     }
     ' "$1" 2>/dev/null
+}
+
+# Tomcat 관리 화면(manager·host-manager)에 로그인할 수 있는 역할. 실무 적용 검증 P-04: 예전에는 manager-gui 만, 큰따옴표
+# 속성만 봐서 manager-script/admin-gui 계정이나 작은따옴표로 쓴 <user> 요소가 "관리자 계정 없음"(GOOD)이 됐다.
+TOMCAT_ADMIN_ROLE_RE='(manager|admin)-(gui|script|jmx|status)'
+
+# tomcat_admin_user_elems <tomcat-users.xml> -> 관리 역할을 가진 <user> 요소를 한 줄에 하나씩(주석 제외).
+# 요소는 따옴표 속성 단위로 자른다(값에 '>' 가 있어도 잘리지 않게). 큰따옴표·작은따옴표 속성 모두 인정한다.
+tomcat_admin_user_elems() {
+    strip_xml_comments "$1" | tr '\n' ' ' | \
+        grep -oE "<user([[:space:]]+[A-Za-z_:.-]+[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*'))*[[:space:]]*/?>" | \
+        grep -E "[[:space:]]roles[[:space:]]*=[[:space:]]*(\"[^\"]*|'[^']*)$TOMCAT_ADMIN_ROLE_RE"
+}
+
+# xml_attr <요소 문자열> <속성 이름> -> 속성 값(큰따옴표·작은따옴표 모두). 없으면 빈 출력.
+xml_attr() {
+    printf '%s' "$1" | sed -nE "s/.*[[:space:]]$2[[:space:]]*=[[:space:]]*(\"([^\"]*)\"|'([^']*)').*/\\2\\3/p"
 }
 
 # ---- DBMS 공통: 엔진 탐지 (08_dbms) -----------------------------------------
@@ -1627,7 +1697,7 @@ make_private_dir() {
 # prepare_output_dir <base_dir> <category_num>  -> OUT_DIR 에 경로 저장
 prepare_output_dir() {
     _base=$1; _cat_num=$2
-    _host=$(hostname 2>/dev/null || echo unknown-host)
+    _host=$(host_name)
     _ts=$(date '+%Y%m%d-%H%M%S')
     # 같은 초에 두 번 실행해도 결과가 섞이지 않도록 PID 를 붙인다('-' 구분이라 merge.py 규칙과 호환)
     OUT_DIR="${_base}/${_host}_${_cat_num}_${_ts}-$$"
@@ -1741,7 +1811,7 @@ _rt_days() {
 #   넘어가지 않음 - 그 사이 설정이 바뀌었을 수 있어서), 비대화형이면 변경 없이 exit 2. dry-run 은 경고만.
 fix_check_result_target() {
     _rt_json=$1; _rt_cat=$2; _rt_env=${3:-}
-    _rt_this=$(hostname 2>/dev/null || echo unknown)
+    _rt_this=$(host_name)
     _rt_h=$(_rt_field "$_rt_json" host)
     _rt_c=$(_rt_field "$_rt_json" category)
     _rt_e=$(_rt_field "$_rt_json" env)
@@ -1787,7 +1857,7 @@ fix_check_result_target() {
 # fix_prepare_dir <base_dir> <category_num> -> FIX_OUT_DIR/FIX_BACKUP_DIR/FIX_LOG 설정
 fix_prepare_dir() {
     _base=$1; _cat_num=$2
-    _host=$(hostname 2>/dev/null || echo unknown-host)
+    _host=$(host_name)
     _ts=$(date '+%Y%m%d-%H%M%S')
     FIX_OUT_DIR="${_base}/${_host}_${_cat_num}_fix_${_ts}-$$"
     FIX_BACKUP_DIR="$FIX_OUT_DIR/backup"
@@ -2580,7 +2650,7 @@ fix_rollback_all() {
     fi
     # 다른 호스트에서 만든 백업을 이 호스트에 덮어쓰는 사고 방지(폴더 이름 규칙: <host>_<카테고리>_fix_<시각>)
     _rb_host=$(basename "$_run_dir" | sed 's/_[0-9][0-9]_fix_.*$//')
-    _this_host=$(hostname 2>/dev/null || echo unknown-host)
+    _this_host=$(host_name)
     if [ "$_rb_host" != "$_this_host" ]; then
         log_warn "이 백업은 다른 호스트($_rb_host)에서 만든 것으로 보입니다(현재: $_this_host)."
         fix_confirm_tty "그래도 이 호스트에 원복하시겠습니까?" || { echo "원복하지 않았습니다."; return 1; }

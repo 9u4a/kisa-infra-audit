@@ -20,6 +20,14 @@ _u01_check_sshd() {
         CHECK_EVIDENCE=""
         return 0
     fi
+    # Rocky/RHEL 은 sshd_config 가 600 이다 - 읽지 못하면 값이 비어 "미설정 = 기본값 prohibit-password = 취약"으로 보이므로
+    # 확인 못 함(ERROR)으로 둔다(S6, 실무 적용 검증 P-14 로 미설정을 취약으로 바꾸며 드러남)
+    if [ ! -r "$sshd_cfg" ]; then
+        CHECK_STATUS="ERROR"
+        CHECK_DETAIL="$sshd_cfg 를 읽을 수 없음(권한 부족) - PermitRootLogin 을 확인하지 못함"
+        CHECK_EVIDENCE=""
+        return 0
+    fi
     # sshd 는 같은 키워드의 "처음" 값을 쓰고 sshd_config.d 드롭인(Include)도 읽는다 - 예전처럼 본 파일의
     # 마지막 값만 보면 드롭인에서 먼저 지정된 값을 놓친다(lib/common.sh sshd_effective_value).
     sshd_effective_value PermitRootLogin
@@ -36,8 +44,10 @@ _u01_check_sshd() {
                 CHECK_STATUS="GOOD"; CHECK_DETAIL="PermitRootLogin no 가 적용됨"
             fi ;;
         ""|prohibit-password|without-password)
-            CHECK_STATUS="MANUAL"
-            CHECK_DETAIL="PermitRootLogin 이 명시적으로 no 가 아님(값: '${value:-미설정, 기본값}'). 기본 정책 확인 필요" ;;
+            # prohibit-password(OpenSSH 7.0+ 미설정 시 기본값)는 키 인증으로 root 직접 접속을 허용한다 - 가이드 취약 기준
+            # "root 직접 접속을 허용"에 해당한다. 예전에는 MANUAL 이었다(실무 적용 검증 P-14).
+            CHECK_STATUS="VULN"
+            CHECK_DETAIL="PermitRootLogin 이 no 가 아님(값: '${value:-미설정, 기본값 prohibit-password}') - 키 인증으로 root 직접 접속이 허용됨" ;;
         *)
             CHECK_STATUS="VULN"; CHECK_DETAIL="PermitRootLogin ${value} 가 적용되어 root 원격 접속이 허용됨" ;;
     esac
