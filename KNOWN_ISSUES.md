@@ -355,3 +355,44 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
   - 실제 운영자 확인 화면의 문구·흐름은 사람이 따로 점검해야 한다.
   - 특히 업무 영향을 고지하는 문구(F4/F5)가 대상이다.
 - **Windows 테스트 실행 위치**: 02/07 케이스·조치 테스트는 레지스트리를 실제로 바꾸므로 CI 러너에서만 돈다. 개발자 PC에서는 재현할 수 없다.
+
+---
+
+## 4. 실무 적용 검증 — 2026-11-03 (1.4.1 + 1.5.0 C1 기준)
+
+"지금 상태로 고객사 실무 진단에 쓸 수 있는가"를 두 관점으로 따로 평가한 뒤 서로의 지적을 교차 확인했다.
+- 현장 진단 수행자 관점: 순정 Docker 이미지(debian:12, rockylinux 9, httpd, nginx, tomcat, mysql, postgres)에서 그대로 실행해 결과를 봤다.
+- 안전·정확성 감사자 관점: S1~S7·F1~F6 과 가이드 판단기준을 코드로 대조했다.
+- 양쪽이 모두 확인한 것만 남겼고, 유지보수자가 코드를 다시 대조했다(P-01 은 직접 재현).
+
+**결론**: Solaris/AIX/HP-UX(L-03)를 뺀 전 카테고리 "조건부 사용 가능". 진단 결과는 아래 거짓 양호 항목을 수동으로 대조한 뒤 보고서에 쓰고, 조치는 dry-run → 승인 → `-i` 항목별 적용 순서를 지킨다.
+
+| ID | 심각도 | 기준 | 내용 | 상태 |
+|---|---|---|---|---|
+| P-01 | 상(차단) | S5 | N-17: `snmp-server host <IP> vrf <이름> ...` 줄은 마스킹이 vrf 이름을 가리고 community 원문을 남긴다. raw/N-17.txt·result.json·report.html 에 저장됨(재현 확인) | 열림 |
+| P-02 | 상 | S6 | U-04: /etc/passwd 비밀번호 필드가 빈 계정(비밀번호 없이 su 가능)을 GOOD 으로 판정하고, 증적에 "2번째 필드 전부 'x'"라고 남긴다(`length($2) > 0`) | 열림 |
+| P-03 | 상 | S6 | U-47/48: Exim 을 보지 않아 Exim 서버를 "메일 서비스 미설치"로 GOOD 판정(U-45/46 은 Exim 확인) | 열림 |
+| P-04 | 상 | S6 | WEB-01/02(Tomcat): tomcat-users.xml 의 작은따옴표 속성, `manager-script`·`admin-gui` 등 다른 관리 역할 계정을 놓쳐 GOOD | 열림 |
+| P-05 | 중 | S6 | WEB-22(Nginx): `error_page` 줄이 하나라도 있으면 GOOD - 기본 설정(50x 만 지정)에서도 GOOD 이지만 404 기본 페이지가 그대로 나간다 | 열림 |
+| P-06 | 중 | S6 | Apache/Nginx: 설정 파일을 고정 경로에서만 찾는다. 프로세스 `-f`/`-c` 로 다른 설정을 쓰는 서버는 엉뚱한(또는 미사용) 파일로 판정 | 열림 |
+| P-07 | 중 | S6 | Tomcat: 실행 중 인스턴스가 여러 개여도 첫 인스턴스만 진단(`tomcat_home`) | 열림 |
+| P-08 | 상 | S6 | MySQL D-10: `host='%'` 만 본다. `0.0.0.0/0.0.0.0`, `%.%` 등 전체 허용 호스트를 GOOD | 열림 |
+| P-09 | 상 | S6 | PostgreSQL D-01: pg_hba `trust`(비밀번호 없이 접속)를 보지 않고 비밀번호 설정 여부만으로 GOOD | 열림 |
+| P-10 | 상 | S6 | N-03: `username ... password 0 <평문>` 을 보지 않아 enable secret 만 있으면 GOOD. 증적 마스킹이 일반 단어("또는")까지 가린다 | 열림 |
+| P-11 | 중 | 판정 | N-01: AAA 기본 목록(`aaa authentication login default ...`)으로 VTY 를 인증하는 장비를 VULN 으로 판정 | 열림 |
+| P-12 | 하 | 판정 | PostgreSQL D-10: 인증 방식 열을 보지 않아 전체 대역 `reject` 규칙도 VULN | 열림 |
+| P-13 | 하 | 판정 | WEB-13(Tomcat): 기본 UserDatabase Realm 만 있어도 항상 VULN | 열림 |
+| P-14 | 하 | 판정 | U-01: `PermitRootLogin prohibit-password` 를 MANUAL 로 판정(가이드상 root 직접 접속 허용 = 취약) | 열림 |
+| P-15 | 상 | F3·F5 | U-40 조치: 전체 공개 공유를 주석 처리만 하고 `exportfs -ra` 를 하지 않아 실제 공유는 열린 채인데 재진단은 GOOD. 공유 차단은 업무 영향이 있는데 auto 등급 | 열림 |
+| P-16 | 상 | F3·F5 | U-42/52/54, W-21 조치: 서비스를 즉시 중지·프로세스 종료하는데 auto 등급. U-52 는 텔넷으로 접속한 세션을 끊을 수 있다(SSH 사전 확인 없음) | 열림 |
+| P-17 | 중 | F5 | U-65 조치: 서버 설정이 없으면 `pool pool.ntp.org` 를 추가(폐쇄망 부적합) - deviation 기록 없음, auto 등급 | 열림 |
+| P-18 | 중 | F5 | Oracle D-18/D-22 조치: PUBLIC 권한 회수·리소스 제한 즉시 적용(auto). 가이드 영향 문구는 "영향 없음"이나 운영 앱 영향 가능 | 열림 |
+| P-19 | 중 | S7 | 01_unix fix.sh 가 INT/TERM 만 trap - SSH 끊김(HUP) 시 잠금·로그 정리 없이 종료 | 열림 |
+| P-20 | 중 | 운영 | Windows 실행 정책(Restricted 기본값)·`Unblock-File` 안내가 문서에 없다 | 열림 |
+| P-21 | 하 | 운영 | sh 진입점 result.csv 에 BOM 이 없어 한글 Excel 에서 깨진다 | 열림 |
+| P-22 | 하 | 운영 | merge.py: 같은 호스트 결과 중복 제거 없음, 준수율 반올림(은행가 반올림)이 summary 와 다름 | 열림 |
+| P-23 | 하 | 운영 | 호스트명: 05_network 는 입력 파일명, 08_dbms sh 는 `uname -n` 대체 없음 | 열림 |
+| P-24 | 하 | 운영 | `-i` 인자 없이 실행 시 비정상 종료, DB preflight 실패 시 종료 코드 0, dry-run 이 바꿀 값을 보여주지 않음, `audit.sh -h` 에 `set -u` 오류 줄 출력. 05 `run.py -i` 코드 검증 없음 | 열림 |
+| P-25 | 하 | S7 | Windows run.ps1 에 중복 실행 잠금이 없다(sh 는 R-06 에서 해결) | 열림 |
+| P-26 | 하 | 운영 | WEB-22 Apache 조치의 한글 ErrorDocument 문구가 iso-8859-1 로 응답돼 깨진다 | 열림 |
+| P-27 | 하 | 테스트 | `run_safety_windows.ps1:255` `-Force` 매개변수 오류를 무시하고 진행 | 열림 |
