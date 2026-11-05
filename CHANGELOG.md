@@ -42,6 +42,7 @@
   같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
   U-32 VULN 이 나던 하네스 잡음.
 ### Fixed
+- 02_windows 케이스 W-25/W-32: DNS 서비스를 다시 켠 직후 시험용 영역 생성이 "Failed to create zone" 으로 실패하던 일시 오류(CI run 42002313909) - `New-CaseDnsZone`(case_lib.ps1)이 남은 영역 파일을 지우고 3초 간격 5회까지 재시도한다.
 - WEB-22 Apache: ErrorDocument 가 한 줄이라도 있으면 GOOD 이던 것을 404 지정을 요구하도록 고쳤다(1.5.0 C2) - RHEL 기본
   welcome.conf 의 루트 URL 전용 `ErrorDocument 403` 하나로 거짓 GOOD. 조치도 404 가 없으면 추가한다(500 은 없을 때만).
 - WEB-03 조치: RHEL 의 root:tomcat 640 tomcat-users.xml 을 root 600 으로 바꿔 Tomcat(tomcat 계정)이 읽지 못하게 만들던 문제 -
