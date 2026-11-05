@@ -54,6 +54,8 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | 02_windows | Windows Server 2025 Datacenter (10.0.26100, en-US), PowerShell 5.1.26100 | GitHub `windows-2025` 러너 (IIS·FTP·DNS·SNMP 기능 설치) | 49 / 15 |
 | 03_web Apache | Apache httpd 2.4.69 (공식 이미지) | Docker `httpd:2.4` | 16 / 10 |
 | 03_web Apache(Debian 패키지) | apache2 2.4.68-1~deb12u1 | Docker `debian:12` | 16 / 10 |
+| 03_web Apache(RHEL 패키지) | httpd 2.4.62-13.el9_8.9 | Docker `rockylinux/rockylinux:9` (1.5.0) | 전역 vuln/hardened 픽스처·조치 안전·진단 실기 안전 검사(항목별 케이스는 공식 이미지·Debian 기준) |
+| 03_web Tomcat(RHEL 패키지) | tomcat 9.0.120-2.el9_8 | Docker `rockylinux/rockylinux:9` (1.5.0) | 위와 같음, 조치 후 tomcat 계정 읽기 확인 |
 | 03_web Nginx | nginx 1.31.8 | Docker `nginx:latest` | 15 / 11 |
 | 03_web Tomcat | Apache Tomcat 10.1.61 | Docker `tomcat:10` | 18 / 8 |
 | 03_web IIS | IIS 10.0 (Windows Server 2025, URL Rewrite·ARR 포함) | `windows-2025` 러너 | 20 / 6 |

@@ -1,0 +1,8 @@
+# 03_web/tests/Dockerfile.tomcat-rhel — RHEL 계열(Rocky Linux 9) tomcat 패키지 레이아웃 회귀 테스트(1.5.0 C2, KNOWN_ISSUES L-04·WEB-R4).
+# 공식 tomcat:10(/usr/local/tomcat 단일 트리)과 달리 CATALINA_HOME=/usr/share/tomcat, conf → /etc/tomcat, webapps → /var/lib/tomcat/webapps,
+# logs → /var/log/tomcat 이 심볼릭 링크로 나뉜다. 데몬은 띄우지 않는다.
+# 빌드 컨텍스트는 저장소 루트: docker build -f 03_web/tests/Dockerfile.tomcat-rhel -t kisa-web-tomcat-rhel-test .
+FROM rockylinux/rockylinux:9
+RUN dnf -y -q install tomcat tomcat-admin-webapps tomcat-webapps diffutils && dnf clean all
+COPY . /infra
+WORKDIR /infra

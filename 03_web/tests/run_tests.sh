@@ -1,5 +1,5 @@
 #!/bin/sh
-# 03_web/tests/run_tests.sh — Docker(공식 httpd:2.4/nginx:latest/tomcat:10) 기반 회귀 테스트.
+# 03_web/tests/run_tests.sh — Docker(공식 httpd:2.4/nginx:latest/tomcat:10, Debian apache2, Rocky 9 httpd·tomcat) 기반 회귀 테스트.
 # 저장소 루트에서 실행: sh 03_web/tests/run_tests.sh
 #
 # 엔진별로 WEB-04(디렉터리 리스팅)만 명시적으로 vuln/hardened 를 가르고, 나머지 25항목은
@@ -20,13 +20,19 @@ cd "$(dirname "$0")/../.."   # 저장소 루트로 이동
 
 fail=0
 # apache-debian: Debian 12 apache2 패키지 레이아웃(/etc/apache2, ServerRoot 주석, *-enabled Include) - 진단 검수 WEB-R1.
-# run.sh 에는 엔진 이름 apache 로 넘긴다.
-run_engine() { case "$1" in apache-debian) echo apache ;; *) echo "$1" ;; esac; }
-for engine in apache nginx tomcat apache-debian; do
+# apache-rhel/tomcat-rhel(1.5.0 C2): Rocky Linux 9 httpd·tomcat 패키지 레이아웃(KNOWN_ISSUES L-04). run.sh 에는 apache/tomcat 으로 넘긴다.
+run_engine() { case "$1" in apache-debian|apache-rhel) echo apache ;; tomcat-rhel) echo tomcat ;; *) echo "$1" ;; esac; }
+for engine in apache nginx tomcat apache-debian apache-rhel tomcat-rhel; do
     image="kisa-web-${engine}-test"
     run_e=$(run_engine "$engine")
     echo "[1/2] $engine 이미지 빌드..."
     docker build -q -f "03_web/tests/Dockerfile.$engine" -t "$image" . >/dev/null
+    # 배포판 패키지 엔진은 이미지 태그만으로 버전을 알 수 없다 - 이번 실행의 패키지 버전을 남긴다(README 검증 환경 표 근거)
+    case "$engine" in
+        apache-rhel) echo "    패키지: $(docker run --rm "$image" rpm -q httpd)" ;;
+        tomcat-rhel) echo "    패키지: $(docker run --rm "$image" rpm -q tomcat)" ;;
+        apache-debian) echo "    패키지: $(docker run --rm "$image" dpkg-query -W -f '${Package} ${Version}' apache2)" ;;
+    esac
 
     for mode in vuln hardened; do
         echo "[*] $engine/$mode 픽스처 실행..."
@@ -59,6 +65,8 @@ failures = [f"{c}: 기대={e} 실제={actual.get(c)}" for c, e in expected.items
 if "Leak>Check" in raw or "Leak\\u003eCheck" in raw:
     failures.append("tomcat-users.xml 비밀번호 원문이 result.json 에 저장됨")
 # server.xml Connector 의 keystorePass 원문(진단 검수 WEB-R9)
+if "Rh9Leak-Pw" in raw:
+    failures.append("ProxyPass URL 비밀번호 원문이 result.json 에 저장됨")
 if "KsLeak9Pass" in raw:
     failures.append("server.xml keystorePass 원문이 result.json 에 저장됨")
 if failures:
@@ -92,6 +100,9 @@ apache-debian|apache-debian apply|WEB-04,WEB-14,WEB-16,WEB-18,WEB-22|
 apache-debian|apache-debian confirm WEB-04,WEB-08,WEB-12,WEB-14,WEB-16,WEB-18,WEB-21,WEB-22|WEB-04,WEB-08,WEB-12,WEB-14,WEB-16,WEB-18,WEB-22|WEB-21
 apache-debian|apache-debian-opts confirm WEB-04,WEB-12,WEB-19|WEB-04,WEB-12,WEB-19|
 tomcat|tomcat confirm WEB-01,WEB-03,WEB-04,WEB-08,WEB-13,WEB-14,WEB-16,WEB-22,WEB-26|WEB-01,WEB-03,WEB-04,WEB-08,WEB-14,WEB-16,WEB-22,WEB-26|
+apache-rhel|apache-rhel apply|WEB-04,WEB-14,WEB-16,WEB-18,WEB-19,WEB-22|
+apache-rhel|apache-rhel confirm WEB-04,WEB-08,WEB-12,WEB-14,WEB-16,WEB-18,WEB-19,WEB-21,WEB-22|WEB-04,WEB-08,WEB-12,WEB-14,WEB-16,WEB-18,WEB-19,WEB-22|WEB-21
+tomcat-rhel|tomcat-rhel confirm WEB-01,WEB-03,WEB-04,WEB-08,WEB-13,WEB-14,WEB-16,WEB-22,WEB-26|WEB-01,WEB-03,WEB-04,WEB-08,WEB-14,WEB-16,WEB-22|
 tomcat|tomcat-etc confirm WEB-01,WEB-03,WEB-04,WEB-08,WEB-13,WEB-14,WEB-16,WEB-22,WEB-26|WEB-01,WEB-03,WEB-04,WEB-08,WEB-14,WEB-16,WEB-22|'
 n=0
 while IFS='|' read -r img args exp_app exp_fail; do
@@ -111,6 +122,7 @@ while IFS='|' read -r img args exp_app exp_fail; do
     [ "$(kv FAILED_CODES)" = "$exp_fail" ] || why="$why FAILED(기대=$exp_fail)"
     [ "$(kv NOT_ROLLED_BACK)" = 0 ] || why="$why 원복실패"
     [ "$(kv ROLLBACK)" = same ] || why="$why 원복후상태다름"
+    case "$args" in tomcat-rhel*) [ "$(kv RUNUSER_READ)" = ok ] || why="$why 조치후tomcat계정읽기불가" ;; esac
     if [ -z "$why" ]; then
         echo "PASS: fix/$args ($(printf '%s' "$out" | grep -E '^(APPLIED|FAILED)_CODES=' | tr '\n' ' '))"
     else
@@ -131,18 +143,21 @@ fi
 # ---- 진단(run.sh) 운영 안전 실기 검사 (lib/tests/run_safety.sh, 01_unix 와 같은 기준) ---------
 # S1 전후 상태 동일 / S2 제한 시간 / S5 비밀값(tomcat-users.xml 비밀번호·keystorePass, Apache ProxyPass URL 비밀번호,
 # nginx proxy_pass 토큰 - setup.sh vuln 이 심음) 원문이 출력물 어디에도 없음 / S6 일반 사용자 거짓 양호
-for engine in apache nginx tomcat apache-debian; do
+for engine in apache nginx tomcat apache-debian apache-rhel tomcat-rhel; do
     run_e=$(run_engine "$engine")
     rs_dir="rs_web_${engine}_$$"
     docker rm -f "kisa-rs-web-$engine" >/dev/null 2>&1 || true
     docker create --name "kisa-rs-web-$engine" "kisa-web-${engine}-test" sh -c "
         sh 03_web/tests/fixtures/setup.sh $engine vuln >/dev/null 2>&1
-        RUN_CMD='sh 03_web/run.sh -e $run_e' SECRETS='Leak>Check|Pw9Strong|KsLeak9Pass|Px9#Leak!Pw|Nx7-Leak!Tok' sh lib/tests/run_safety.sh
+        RUN_CMD='sh 03_web/run.sh -e $run_e' SECRETS='Leak>Check|Pw9Strong|KsLeak9Pass|Px9#Leak!Pw|Rh9Leak-Pw|Nx7-Leak!Tok' sh lib/tests/run_safety.sh
     " >/dev/null
     docker start -a "kisa-rs-web-$engine" >/dev/null
     docker cp "kisa-rs-web-$engine:/rs" "$rs_dir" >/dev/null 2>&1
     docker rm "kisa-rs-web-$engine" >/dev/null
-    python3 lib/tests/run_safety_check.py "$rs_dir" "web/$engine" || fail=1
+    # Rocky 9 는 하네스의 일반 사용자 전환(su, pam_lastlog)이 /var/log/lastlog 를 갱신한다 - 진단과 무관(01_unix rhel 과 같은 처리)
+    allow=""
+    case "$engine" in *-rhel) allow='^[<>] /var/log/lastlog\|' ;; esac
+    python3 lib/tests/run_safety_check.py "$rs_dir" "web/$engine" ${allow:+--allow-fs "$allow"} || fail=1
     rm -rf "$rs_dir"
 done
 

@@ -13,6 +13,12 @@
     deny=5 GOOD·모듈 없이 faillock.conf 만(VULN, 자동 조치 불가), U-06 Rocky 기본 su 의 required 예시 줄(GOOD)·
     trust 예시 줄만(VULN → required 활성화 → GOOD).
   - 진단 실기 안전 검사(`lib/tests/run_safety.sh`, S1·S2·S5·S6)도 Rocky 에서 vuln/hardened 두 픽스처로 실행.
+- 03_web RHEL 계열 패키지 검증(1.5.0 C2, KNOWN_ISSUES L-04): `Dockerfile.apache-rhel`·`Dockerfile.tomcat-rhel`(Rocky Linux 9 httpd·tomcat 9
+  패키지). 전역 vuln/hardened 픽스처(기대값은 RHEL 기본 설정을 가이드 기준으로 검토해 도출), 조치 안전 3건, 진단 실기 안전 검사.
+  - RHEL 기본 설정의 판정: /var/www/html·/icons/ 의 Indexes(WEB-04), mod_dav 기본 로드(WEB-18), userdir.conf 의
+    `<Directory /home/*/public_html>` Indexes·IncludesNoExec(WEB-04/19 - UserDir disabled 라 실제로 열리지는 않지만 설정이
+    남아 있어 보수적으로 VULN, 조치가 정리한다), Tomcat tomcat-users.xml root:tomcat 640(WEB-03, 가이드 600 기준 VULN).
+  - RHEL Tomcat 은 catalina.sh 가 없어 문법 검사를 Bootstrap configtest 로 한다(깨진 server.xml 에서 1 확인).
 - Windows Server 2022 검증(1.5.0 C3): windows-cases·windows-server job 에 `windows-2022` 러너 matrix(주간 스케줄·수동 실행).
   - 케이스 `expect_os`(+ `note` 사유): Server 2022 에는 보안 센터(SecurityCenter2)가 없어 PC-15 firewall-off 는 ERROR(S6).
   - case_runner: 상태를 만드는 설정(Reg/Sec/Svc/Set) 없이 러너 기본값에 기대는 상태는 `AsIs` 사유를 요구한다 - 2022 에서
@@ -32,6 +38,11 @@
   같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
   U-32 VULN 이 나던 하네스 잡음.
 ### Fixed
+- WEB-22 Apache: ErrorDocument 가 한 줄이라도 있으면 GOOD 이던 것을 404 지정을 요구하도록 고쳤다(1.5.0 C2) - RHEL 기본
+  welcome.conf 의 루트 URL 전용 `ErrorDocument 403` 하나로 거짓 GOOD. 조치도 404 가 없으면 추가한다(500 은 없을 때만).
+- WEB-03 조치: RHEL 의 root:tomcat 640 tomcat-users.xml 을 root 600 으로 바꿔 Tomcat(tomcat 계정)이 읽지 못하게 만들던 문제 -
+  소유자가 root 이고 그룹이 실행 계정 이름이면 소유자를 그 계정으로 넘긴 뒤 600(1.5.0 C2). 조치 안전 테스트가 tomcat 계정 읽기를
+  확인한다(옛 조치로 음성 대조: RUNUSER_READ=fail).
 - W-34: tlntadmn 의 공백 정렬 형식(`Authentication Mechanism      NTLM`)에서 줄 이름 단어까지 인증 방식으로 세어 NTLM 단독도
   VULN 이던 것을 고쳤다(C6 단위 테스트로 발견). 콜론이 없으면 2칸 이상 공백 뒤를 값으로 본다.
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# 03_web/tests/fixtures/setup.sh <apache|apache-debian|nginx|tomcat> <vuln|hardened>
+# 03_web/tests/fixtures/setup.sh <apache|apache-debian|apache-rhel|nginx|tomcat|tomcat-rhel> <vuln|hardened>
 #
 # 데몬 프로세스는 실제로 띄우지 않는다(설정 파일 판정 위주 항목만 다룸 - 01_unix/CLAUDE.md
 # 와 같은 이유로 범위를 제한한다). WEB-04(디렉터리 리스팅)만 명시적으로 다루며, 나머지
@@ -41,6 +41,39 @@ case "$ENGINE" in
             sed -i 's|^</VirtualHost>|\t<IfModule proxy_module>\n\t\tProxyPass "/kisaleak" "http://svc:Px9#Leak!Pw@127.0.0.1:9/"\n\t</IfModule>\n</VirtualHost>|' "$VHOST"
         fi
         ;;
+    apache-rhel)
+        # RHEL 계열 httpd 패키지 레이아웃(1.5.0 C2): 기본값이 /var/www/html 과 /icons/(conf.d/autoindex.conf) 모두 Indexes 라
+        # vuln = 기본값 그대로. hardened = 두 곳의 Indexes 와 함께, RHEL 기본값이 취약으로 판정되는 나머지도 정리한다:
+        #   conf.d/userdir.conf(UserDir disabled 라 실제로는 열리지 않지만 <Directory /home/*/public_html> 에 Indexes·IncludesNoExec 가
+        #   남아 있어 WEB-04/19 는 보수적으로 VULN), conf.modules.d/00-dav.conf(mod_dav 기본 로드 → WEB-18), ErrorDocument 404(WEB-22).
+        CONF=/etc/httpd/conf/httpd.conf
+        if [ "$MODE" = "hardened" ]; then
+            sed -i 's/^\([[:space:]]*\)Options Indexes FollowSymLinks/\1Options FollowSymLinks/' "$CONF"
+            sed -i 's/^\([[:space:]]*\)Options Indexes MultiViews FollowSymlinks/\1Options MultiViews FollowSymlinks/' /etc/httpd/conf.d/autoindex.conf
+            sed -i 's/^\([[:space:]]*\)Options MultiViews Indexes SymLinksIfOwnerMatch IncludesNoExec/\1Options MultiViews SymLinksIfOwnerMatch/' /etc/httpd/conf.d/userdir.conf
+            sed -i 's/^LoadModule dav/#LoadModule dav/' /etc/httpd/conf.modules.d/00-dav.conf
+            printf '\nErrorDocument 404 "Not Found"\nErrorDocument 500 "Error"\n' >> "$CONF"
+        fi
+        if [ "$MODE" = "vuln" ]; then
+            # RHEL 은 mod_proxy 를 기본 로드해 ProxyPass URL 을 실제로 해석한다 - '#' 가 든 URL 은 httpd -t 가 거부하므로 다른 비밀값을 쓴다
+            printf '<IfModule proxy_module>\n    ProxyPass "/kisaleak" "http://svc:Rh9Leak-Pw@127.0.0.1:9/"\n</IfModule>\n' > /etc/httpd/conf.d/kisa-leak.conf
+        fi
+        ;;
+    tomcat-rhel)
+        # RHEL 계열 tomcat 패키지 레이아웃(1.5.0 C2, WEB-R4): CATALINA_HOME=/usr/share/tomcat, conf → /etc/tomcat 링크.
+        # 위 tomcat 과 같은 상태를 /etc/tomcat 에 만든다.
+        WEBXML=/etc/tomcat/web.xml
+        USERS=/etc/tomcat/tomcat-users.xml
+        SERVERXML=/etc/tomcat/server.xml
+        if [ "$MODE" = "vuln" ]; then
+            sed -i '0,/<param-value>false<\/param-value>/s//<param-value>true<\/param-value>/' "$WEBXML"
+            sed -i 's#<Connector port="8080"#<Connector port="8080" maxPostSize="-1" proxyName="px.example.com" keystorePass="KsLeak9Pass"#' "$SERVERXML"
+            sed -i 's#</tomcat-users>#  <user username="tomcat" password="Leak>Check/Pw9" roles="manager-gui"/>\n</tomcat-users>#' "$USERS"
+        else
+            sed -i 's#<Connector port="8080"#<Connector port="8080" maxPostSize="10485760" server="WebServer" keystorePass="KsLeak9Pass"#' "$SERVERXML"
+            sed -i 's#</tomcat-users>#  <user username="ops_admin" password="Leak>CheckPw9Strong" roles="manager-gui"/>\n</tomcat-users>#' "$USERS"
+        fi
+        ;;
     nginx)
         CONF=/etc/nginx/nginx.conf
         if [ "$MODE" = "vuln" ]; then
@@ -74,7 +107,7 @@ case "$ENGINE" in
         fi
         ;;
     *)
-        echo "usage: setup.sh <apache|apache-debian|nginx|tomcat> <vuln|hardened>" >&2
+        echo "usage: setup.sh <apache|apache-debian|apache-rhel|nginx|tomcat|tomcat-rhel> <vuln|hardened>" >&2
         exit 2
         ;;
 esac

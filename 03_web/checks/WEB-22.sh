@@ -8,15 +8,22 @@ run_check() {
     case " $WEB_ENGINES " in *" apache "*)
         checked=1
         if web_load_conf apache; then
-            hit=""
+            hit=""; has404=""
             for f in $WEB_FILES; do
                 l=$(grep -niE '^[^#]*ErrorDocument' "$f" 2>/dev/null)
                 [ -n "$l" ] && hit="$hit
 $f: $l"
+                grep -qiE '^[^#]*ErrorDocument[[:space:]]+404([[:space:]]|$)' "$f" 2>/dev/null && has404=1
             done
             evidence="$evidence
 [Apache] ErrorDocument 검색: ${hit:-없음}"
-            [ -z "$hit" ] && violations="$violations apache"
+            # 1.5.0 C2: RHEL 기본 welcome.conf 는 루트 URL(<LocationMatch "^/+$">) 전용 ErrorDocument 403 하나뿐인데
+            # 예전에는 ErrorDocument 가 한 줄이라도 있으면 GOOD 이었다 - nginx(P-05)와 같이 404 지정을 요구한다
+            if [ -z "$hit" ] || [ -z "$has404" ]; then
+                violations="$violations apache"
+                [ -n "$hit" ] && evidence="$evidence
+[Apache] ErrorDocument 404 지정 없음(다른 상태 코드만 지정됨)"
+            fi
         fi
     esac
 

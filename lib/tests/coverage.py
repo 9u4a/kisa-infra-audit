@@ -68,6 +68,10 @@ def collect(cat: str) -> dict[tuple[str, str], set[str]]:
     fx = os.path.join(ROOT, cat, "tests", "fixtures")
     for p in sorted(glob.glob(os.path.join(fx, "expected*.json"))):
         stem = os.path.basename(p)[len("expected_"):-len(".json")]
+        # 03_web 의 apache-rhel/tomcat-rhel(1.5.0 C2)은 같은 엔진의 다른 배포 레이아웃을 재현하는 층이다 - 01_unix rhel 과 같이
+        # 양방향 집계는 공식 이미지·Debian 기준만 센다(그렇지 않으면 아래 접두어 규칙에서 엔진 없는 파일로 보고 engines[0] 에 섞인다)
+        if "-rhel_" in stem:
+            continue
         engine = engines[0]
         for e in sorted(engines, key=len, reverse=True):  # apache-debian 이 apache 보다 먼저
             if stem.startswith(e + "_"):

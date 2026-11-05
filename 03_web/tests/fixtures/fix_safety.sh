@@ -1,6 +1,6 @@
 #!/bin/sh
 # 03_web/tests/fixtures/fix_safety.sh <engine> <apply|confirm|backupfail> [항목 목록]
-#   engine: apache | apache-debian | apache-debian-opts | nginx | tomcat | tomcat-etc
+#   engine: apache | apache-debian | apache-debian-opts | apache-rhel | nginx | tomcat | tomcat-etc | tomcat-rhel
 # 컨테이너 안에서 실행. 결과를 KEY=VALUE 줄로 출력하고 판정은 run_tests.sh 가 한다.
 #   apply      : 취약 상태 → fix.sh --apply --yes(비대화형이라 confirm 등급은 건너뜀) → 설정 문법 검사 → --rollback
 #                → 설정 폴더 전체(파일 내용·권한·소유자·심볼릭 링크)가 조치 전과 같은지
@@ -13,6 +13,7 @@
 # engine 변형(1.3.3, KNOWN_ISSUES F-R4/F-R5):
 #   apache-debian      : Debian 12 apache2 패키지 레이아웃(sites-enabled 의 Options Indexes, mods-enabled 의 dav 링크)
 #   apache-debian-opts : 위 + Options All / +IncludesNOEXEC +FollowSymLinks / IncludesNOEXEC 를 쓰는 <Directory>(WEB-04/12/19 조치 대상)
+#   apache-rhel / tomcat-rhel : Rocky Linux 9 httpd·tomcat 패키지 레이아웃(1.5.0 C2)
 #   tomcat-etc         : tomcat:10 의 conf 를 /etc/tomcat10 로 옮겨 tomcat_home 에 conf/ 가 없는 배치(조치가 진단과 같은
 #                        tomcat_conf_dir 를 쓰는지)
 set -u
@@ -29,14 +30,22 @@ case "$ENGINE" in
             DIRS="/usr/local/tomcat/conf /usr/local/tomcat/logs /usr/local/tomcat/webapps" ;;
     tomcat-etc) SETUP=tomcat; RUN_E=tomcat; TC_CONF=/etc/tomcat10; TEST=tc_test
             DIRS="/etc/tomcat10 /usr/local/tomcat/logs /usr/local/tomcat/webapps" ;;
-    *) echo "usage: fix_safety.sh <apache|apache-debian|apache-debian-opts|nginx|tomcat|tomcat-etc> <apply|confirm|backupfail> [items]" >&2; exit 2 ;;
+    apache-rhel) SETUP=apache-rhel; RUN_E=apache; DIRS="/etc/httpd /var/log/httpd"; TEST="httpd -t" ;;
+    tomcat-rhel) SETUP=tomcat-rhel; RUN_E=tomcat; TC_CONF=/etc/tomcat; TEST=tc_test
+            DIRS="/etc/tomcat /var/log/tomcat /var/lib/tomcat/webapps" ;;
+    *) echo "usage: fix_safety.sh <apache|apache-debian|apache-debian-opts|apache-rhel|nginx|tomcat|tomcat-etc|tomcat-rhel> <apply|confirm|backupfail> [items]" >&2; exit 2 ;;
 esac
 
-# tc_test -> Tomcat 설정 검사(catalina.sh configtest, 실패 시 0 이 아닌 값)
+# tc_test -> Tomcat 설정 검사(configtest, 실패 시 0 이 아닌 값). RHEL 패키지에는 catalina.sh 가 없어 Bootstrap 을 직접 부른다
+# (깨진 server.xml 에서 1 을 돌려주는 것을 확인함 - 1.5.0 C2)
 tc_test() {
     mkdir -p /tmp/kisa_cb/logs /tmp/kisa_cb/temp /tmp/kisa_cb/work
     ln -sfn "$TC_CONF" /tmp/kisa_cb/conf
-    CATALINA_BASE=/tmp/kisa_cb /usr/local/tomcat/bin/catalina.sh configtest
+    if [ -x /usr/local/tomcat/bin/catalina.sh ]; then
+        CATALINA_BASE=/tmp/kisa_cb /usr/local/tomcat/bin/catalina.sh configtest
+    else
+        java -Dcatalina.home=/usr/share/tomcat -Dcatalina.base=/tmp/kisa_cb             -cp /usr/share/tomcat/bin/bootstrap.jar:/usr/share/tomcat/bin/tomcat-juli.jar org.apache.catalina.startup.Bootstrap configtest
+    fi
 }
 
 sh 03_web/tests/fixtures/setup.sh "$SETUP" vuln >/dev/null 2>&1
@@ -73,6 +82,10 @@ codes() { awk -F '\t' -v r="$1" '$4 ~ r { print $2 }' "$OUT"/*_03_fix_*/changes.
 report() {
     $TEST >/dev/null 2>&1
     echo "SYNTAX_RC=$?"
+    # RHEL Tomcat 은 tomcat 계정으로 구동된다 - 조치 후에도 tomcat-users.xml 을 읽을 수 있어야 한다(1.5.0 C2, WEB-03 root 600 이면 기동 실패)
+    if [ "$ENGINE" = tomcat-rhel ]; then
+        if su -s /bin/sh tomcat -c "test -r $TC_CONF/tomcat-users.xml" 2>/dev/null; then echo "RUNUSER_READ=ok"; else echo "RUNUSER_READ=fail"; fi
+    fi
     echo "APPLIED_CODES=$(codes '^APPLIED$')"
     echo "FAILED_CODES=$(codes '^FAILED_')"
     echo "NOT_ROLLED_BACK=$(awk -F '\t' '$4 == "FAILED_NOT_ROLLED_BACK"' "$OUT"/*_03_fix_*/changes.log 2>/dev/null | wc -l | tr -d ' ')"

@@ -1,5 +1,5 @@
 # WEB-22 (하) 에러 페이지 관리 — 조치 [fix: auto]
-# 변경: Apache: ErrorDocument 404/500 인라인 문구 추가, Nginx: error_page 50x→/50x.html·404→/404.html 추가, Tomcat: web.xml 에 404/500 <error-page> 추가
+# 변경: Apache: ErrorDocument 404(+ 없으면 500) 인라인 문구 추가, Nginx: error_page 50x→/50x.html·404→/404.html 추가, Tomcat: web.xml 에 404/500 <error-page> 추가
 # 별도 에러 페이지 파일을 새로 만들지 않고, 정보 노출이 없는 일반 안내 문구를 인라인으로
 # 반환하도록 설정한다(가이드 취지: "에러 페이지가 별도로 지정됨").
 run_fix() {
@@ -10,15 +10,18 @@ run_fix() {
     case " $WEB_ENGINES " in *" apache "*)
         conf=$(apache_conf_path)
         files="$conf $(apache_extra_confs)"
-        hit=""
+        # 진단과 같이 404 지정 여부로 본다(1.5.0 C2 - RHEL welcome.conf 의 루트 전용 403 만 있으면 조치 대상). 500 은 없을 때만 추가
+        has404=""; has500=""
         for f in $files; do
             [ -f "$f" ] || continue
-            grep -qE '^[^#]*ErrorDocument' "$f" 2>/dev/null && hit=1
+            grep -qiE '^[^#]*ErrorDocument[[:space:]]+404([[:space:]]|$)' "$f" 2>/dev/null && has404=1
+            grep -qiE '^[^#]*ErrorDocument[[:space:]]+500([[:space:]]|$)' "$f" 2>/dev/null && has500=1
         done
-        if [ -z "$hit" ] && [ -f "$conf" ]; then
+        if [ -z "$has404" ] && [ -f "$conf" ]; then
             fix_backup "$conf"
             # 인라인 문구는 Content-Type 이 iso-8859-1 로 나가 한글이 깨진다(실무 적용 검증 P-26) - ASCII 문구를 쓴다
-            printf '\n# KISA WEB-22: 에러 페이지 지정\nErrorDocument 404 "Not Found"\nErrorDocument 500 "Internal Server Error"\n' >> "$conf"
+            printf '\n# KISA WEB-22: 에러 페이지 지정\nErrorDocument 404 "Not Found"\n' >> "$conf"
+            [ -z "$has500" ] && printf 'ErrorDocument 500 "Internal Server Error"\n' >> "$conf"
             applied="$applied apache($conf)"
         fi
     esac
