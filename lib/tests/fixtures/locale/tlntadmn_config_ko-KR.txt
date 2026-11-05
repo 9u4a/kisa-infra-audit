@@ -1,0 +1,6 @@
+다음은 localhost 의 설정입니다.
+
+Telnet 포트                     :23
+인증 메커니즘                   :NTLM, Password
+기본 도메인                     :HOST
+상태                            :실행 중

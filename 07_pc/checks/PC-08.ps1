@@ -21,7 +21,7 @@ if ($rc -ne 0) {
     return New-CheckResult -Code "PC-08" -Status "ERROR" -Detail "bcdedit 실행 실패(exit=$rc) - 관리자 권한으로 다시 실행 필요" -Evidence $out.Trim()
 }
 
-$entries = ([regex]::Matches($out, '(?m)^-{5,}\s*$')).Count
+$entries = Get-BcdEditEntryCount -Text $out
 $loaderCount = [Math]::Max(0, $entries - 1)
 if ($entries -eq 0) {
     return New-CheckResult -Code "PC-08" -Status "ERROR" -Detail "bcdedit 출력 형식을 해석하지 못함 - 시스템 구성(msconfig) 부팅 탭에서 수동 확인 필요" -Evidence $out.Trim()

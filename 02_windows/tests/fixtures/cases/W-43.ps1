@@ -6,7 +6,7 @@
             Set   = { Invoke-CaseIcacls @((Join-Path $env:SystemRoot 'System32\winevt\Logs'), '/grant', '*S-1-1-0:(R)') }
             Check = { if (Test-CaseAclHasSid -Path (Join-Path $env:SystemRoot 'System32\winevt\Logs') -Sid 'S-1-1-0') { $true } else { "Everyone ACE 없음" } }
         }
-        'logs-no-everyone' = @{
+        'logs-no-everyone' = @{ AsIs = 'OS 기본 ACL(로그 폴더에 Everyone 없음) 그대로 - 기본값이 곧 양호 상태';
             Check = { $p = @((Join-Path $env:SystemRoot 'System32\winevt\Logs'), (Join-Path $env:SystemRoot 'System32\config')) | Where-Object { Test-CaseAclHasSid -Path $_ -Sid 'S-1-1-0' }; if (@($p).Count -eq 0) { $true } else { "Everyone ACE: $($p -join ',')" } }
         }
     }

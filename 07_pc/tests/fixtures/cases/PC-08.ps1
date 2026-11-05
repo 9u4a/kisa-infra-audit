@@ -19,7 +19,7 @@
             }
             Check = { $n = ([regex]::Matches(((& bcdedit.exe /enum) -join "`n"), '(?m)^-{5,}\s*$')).Count; if ($n -ge 3) { $true } else { "항목 수 $n" } }
         }
-        'single-loader' = @{
+        'single-loader' = @{ AsIs = '러너는 단일 OS 부팅 - 부트 로더 추가는 BCD 변경이라 만들지 않음(멀티부팅 파싱은 locale_parse_tests)';
             Check = { $n = ([regex]::Matches(((& bcdedit.exe /enum) -join "`n"), '(?m)^-{5,}\s*$')).Count; if ($n -eq 2) { $true } else { "항목 수 $n" } }
         }
     }

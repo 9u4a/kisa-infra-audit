@@ -26,12 +26,12 @@ if ($r.TimedOut -or $r.ExitCode -ne 0) {
 }
 $out = ($r.Output -join "`n").Trim()
 
-$authLine = @($r.Output | Where-Object { $_ -match 'NTLM' }) | Select-Object -First 1
-if (-not $authLine) {
+$auth = ConvertFrom-TlntadmnConfig -Lines $r.Output
+if ($null -eq $auth) {
     return New-CheckResult -Code "W-34" -Status "MANUAL" -Detail "tlntadmn 출력에서 인증 방식 줄을 찾지 못함 — 인증 방식을 수동 확인 필요" -Evidence $out
 }
-$value = if ($authLine -match '[:=]\s*(.+)$') { $Matches[1].Trim() } else { $authLine.Trim() }
-$methods = @($value -split '[,;/\s]+' | Where-Object { $_ })
+$value = $auth.Value
+$methods = @($auth.Methods)
 
 if ($methods.Count -eq 1 -and $methods[0] -ieq 'NTLM') {
     return New-CheckResult -Code "W-34" -Status "GOOD" -Detail "Telnet 서비스가 구동 중이나 인증 방식이 NTLM 으로 제한되어 있음" -Evidence $out

@@ -12,7 +12,7 @@
             Check = { Wait-CaseAdminName 'Administrator' }
         }
         # 러너의 빌트인 관리자는 이미 runneradmin 으로 바뀌어 있다 - 로그온 중인 계정을 다른 이름으로 또 바꾸지 않고 기준 상태를 쓴다
-        'renamed'      = @{
+        'renamed'      = @{ AsIs = '러너 이미지가 내장 Administrator(RID 500) 이름을 이미 바꿔 둠 - 이름 변경은 되돌리기 어려운 계정 조작이라 만들지 않음';
             Check = { $n = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' }).Name; if ($n -and $n -ne 'Administrator') { $true } else { "name=$n" } }
         }
     }

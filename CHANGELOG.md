@@ -13,13 +13,27 @@
     deny=5 GOOD·모듈 없이 faillock.conf 만(VULN, 자동 조치 불가), U-06 Rocky 기본 su 의 required 예시 줄(GOOD)·
     trust 예시 줄만(VULN → required 활성화 → GOOD).
   - 진단 실기 안전 검사(`lib/tests/run_safety.sh`, S1·S2·S5·S6)도 Rocky 에서 vuln/hardened 두 픽스처로 실행.
+- Windows Server 2022 검증(1.5.0 C3): windows-cases·windows-server job 에 `windows-2022` 러너 matrix(주간 스케줄·수동 실행).
+  - 케이스 `expect_os`(+ `note` 사유): Server 2022 에는 보안 센터(SecurityCenter2)가 없어 PC-15 firewall-off 는 ERROR(S6).
+  - case_runner: 상태를 만드는 설정(Reg/Sec/Svc/Set) 없이 러너 기본값에 기대는 상태는 `AsIs` 사유를 요구한다 - 2022 에서
+    W-06(기본 관리자 2명)·MSSQL D-10(1433 허용 규칙 없음) 케이스가 러너 기본값에 숨어 기대고 있던 것이 드러남. 두 케이스는 상태를
+    직접 만들고(W-06 실행 계정 외 구성원 임시 제외, D-10 허용 규칙 생성), 나머지 7개 상태에는 사유를 적었다.
+- 로캘 의존 출력 파싱 단위 테스트(1.5.0 C6, KNOWN_ISSUES L-02): W-40 auditpol /backup·PC-08 bcdedit /enum·W-34 tlntadmn config
+  파싱을 `lib/Common.psm1` 의 `ConvertFrom-AuditPolBackup`·`Get-BcdEditEntryCount`·`ConvertFrom-TlntadmnConfig` 로 분리했다.
+  한글 Windows 11 에서 읽기 전용으로 수집한 실제 출력(ko-KR/en-US, 컴퓨터 이름 치환)을 `lib/tests/fixtures/locale/` 에 두고
+  `lib/tests/locale_parse_tests.ps1` 로 확인한다(CI static-analysis, pwsh 7). 같은 PC 라도 콘솔 코드페이지(chcp 949/437)에 따라
+  명령 출력 언어가 바뀌는 것을 확인했다.
 ### Changed
+- `Get-OsFamily` 가 Windows Server 2025(빌드 26100 이상)를 `server2025` 로 표시한다(예전에는 `server2022`, result.json `env`).
 - 01_unix 케이스가 배포판 기본값 차이에 맞게 상태를 만든다: U-37(Rocky 의 crontab SUID·cron.deny 644 기본값),
   U-55(Rocky 기본 ftp 계정은 쉘만 변경), U-67(기준 초과 로그를 만든 뒤 정리), U-32 는 Debian 전용.
 - 케이스 스냅숏 비교에서 로그인 기록(wtmp·btmp·lastlog)을 제외한다 - Rocky 의 script(가상 터미널)가 매번 기록한다.
 - run_safety: Rocky 는 하네스의 su(pam_lastlog)가 /var/log/lastlog 를 갱신해 rhel 실행에만 `--allow-fs`(08_dbms Oracle Linux 와
   같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
   U-32 VULN 이 나던 하네스 잡음.
+### Fixed
+- W-34: tlntadmn 의 공백 정렬 형식(`Authentication Mechanism      NTLM`)에서 줄 이름 단어까지 인증 방식으로 세어 NTLM 단독도
+  VULN 이던 것을 고쳤다(C6 단위 테스트로 발견). 콜론이 없으면 2칸 이상 공백 뒤를 값으로 본다.
 
 ### Fixed (실무 적용 교차 검증, KNOWN_ISSUES §4)
 - 05_network N-17(P-01, S5): `snmp-server host <IP> vrf <이름> ...` 줄의 community 원문이 결과물에 남던 문제 - 마스킹이

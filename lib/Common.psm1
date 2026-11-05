@@ -36,7 +36,8 @@ function Write-Log {
 }
 
 function Get-OsFamily {
-    <# 결과: server2012r2 | server2016 | server2019 | server2022 | win10 | win11 | unknown #>
+    <# 결과: server2012r2 | server2016 | server2019 | server2022 | server2025 | win10 | win11 | unknown
+       (server2025 는 1.5.0 C3 - 예전에는 2025(빌드 26100)도 server2022 로 표시해 CI 2022/2025 결과를 구분할 수 없었다) #>
     try {
         $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
         $caption = $os.Caption
@@ -45,6 +46,7 @@ function Get-OsFamily {
         return "unknown"
     }
     if ($caption -match "Server") {
+        if ($build -ge 26100) { return "server2025" }
         if ($build -ge 20348) { return "server2022" }
         if ($build -ge 17763) { return "server2019" }
         if ($build -ge 14393) { return "server2016" }
@@ -182,6 +184,48 @@ function Invoke-CimCmdletWithTimeout {
     } finally {
         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
     }
+}
+
+# ---- 로캘 의존 명령 출력 파싱 (C6, KNOWN_ISSUES L-02) ----------------------------
+# 조회(외부 명령 실행)와 파싱을 나눠, 파싱만 한글/영문 실제 출력 샘플(lib/tests/fixtures/locale/)로 단위 테스트한다
+# (lib/tests/locale_parse_tests.ps1, CI static-analysis). 머리글·문구는 OS 표시 언어로 번역되므로 값·구조로만 읽는다.
+
+function ConvertFrom-AuditPolBackup {
+    <# auditpol /backup CSV 의 줄 배열 → 하위 범주 GUID → 설정 값(0~3) 해시. 머리글이 번역되므로(한글판 "하위 범주 GUID",
+       "설정 값") 열 이름이 아니라 위치(4번째 GUID, 7번째 설정 값)로 읽고 첫 줄은 버린다. GUID 모양 + 숫자 값인 행이 하나도
+       없으면 $null(형식 해석 불가 - 호출부가 ERROR) #>
+    param([AllowEmptyCollection()][AllowEmptyString()][string[]]$Lines = @())
+    $rows = @($Lines | Where-Object { "$_".Trim() } | Select-Object -Skip 1 |
+            ConvertFrom-Csv -Header 'C1', 'C2', 'C3', 'Guid', 'C5', 'C6', 'Value')
+    $map = @{}
+    foreach ($r in $rows) {
+        $g = "$($r.Guid)".Trim(); $v = "$($r.Value)".Trim()
+        if ($g -match '^\{[0-9A-Fa-f-]{36}\}$' -and $v -match '^\d+$') { $map[$g.ToUpperInvariant()] = [int]$v }
+    }
+    if ($map.Count -eq 0) { return $null }
+    return $map
+}
+
+function Get-BcdEditEntryCount {
+    <# bcdedit /enum 출력에서 항목 수를 센다. 항목 머리글("Windows Boot Loader" / 한글판 "Windows 부팅 로더")은 번역되므로
+       머리글 바로 아래의 구분선(-----)으로 센다(PC-08). 반환: 항목 수(부팅 관리자 포함), 형식 해석 불가면 0 #>
+    param([AllowEmptyString()][string]$Text = "")
+    return ([regex]::Matches($Text, '(?m)^-{5,}\s*$')).Count
+}
+
+function ConvertFrom-TlntadmnConfig {
+    <# tlntadmn config 출력 줄 배열에서 인증 방식을 찾는다(W-34). 줄 이름("Authentication Mechanism" / 한글판 번역)은
+       번역되므로 값 "NTLM" 이 들어 있는 줄을 찾는다(값 이름 NTLM·Password 는 번역되지 않음). 반환: 줄을 못 찾으면 $null,
+       찾으면 @{ Value = 줄의 값; Methods = 방식 배열 } #>
+    param([AllowEmptyCollection()][AllowEmptyString()][string[]]$Lines = @())
+    $line = @($Lines | Where-Object { $_ -match 'NTLM' }) | Select-Object -First 1
+    if (-not $line) { return $null }
+    # 실제 형식은 "Authentication Mechanism      NTLM, Password"(콜론 없이 공백 정렬) - 예전에는 콜론이 없으면 줄 전체를
+    # 값으로 써서 이름 단어까지 방식으로 세어 NTLM 단독도 VULN 이었다. 콜론/등호 뒤, 없으면 2칸 이상 공백 뒤를 값으로 본다.
+    $value = if ($line -match '[:=]\s*(.+)$') { $Matches[1].Trim() }
+    elseif ($line -match '^\s*\S.*?\s{2,}(\S.*)$') { $Matches[1].Trim() }
+    else { $line.Trim() }
+    return @{ Value = $value; Methods = @($value -split '[,;/\s]+' | Where-Object { $_ }) }
 }
 
 # ---- SID 기반 비교 (W-R2/W-R3/W-R9/W-R15) ----------------------------------------
@@ -1797,4 +1841,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

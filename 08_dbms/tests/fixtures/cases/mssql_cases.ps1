@@ -30,9 +30,11 @@ $MssqlCases = @{
     # D-10 취약: 모든 Windows 방화벽 프로필 비활성(원격 접속 제한 없음)
     "firewall-all-off" = @{
         Probe = 'Write-Output ((Get-NetFirewallProfile | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Enabled)" }) -join " ")'
-        Setup = '@(Get-NetFirewallProfile | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Enabled = "$($_.Enabled)" } }) | ConvertTo-Json | Set-Content -Path (Join-Path $caseTmp "fw.json") -Encoding UTF8; Set-NetFirewallProfile -All -Enabled False'
-        Cleanup = '$f = Join-Path $caseTmp "fw.json"; if (Test-Path $f) { foreach ($p in (Get-Content -Raw $f | ConvertFrom-Json)) { Set-NetFirewallProfile -Name $p.Name -Enabled $p.Enabled }; Remove-Item $f }'
+        Setup = '@(Get-NetFirewallProfile | ForEach-Object { [pscustomobject]@{ Name = $_.Name; Enabled = "$($_.Enabled)" } }) | ConvertTo-Json | Set-Content -Path (Join-Path $caseTmp "fw.json") -Encoding UTF8; Set-NetFirewallProfile -All -Enabled False; New-NetFirewallRule -Name kisa_case_mssql_1433 -DisplayName kisa_case_mssql_1433 -Direction Inbound -Protocol TCP -LocalPort 1433 -Action Allow | Out-Null'
+        Cleanup = '$f = Join-Path $caseTmp "fw.json"; if (Test-Path $f) { foreach ($p in (Get-Content -Raw $f | ConvertFrom-Json)) { Set-NetFirewallProfile -Name $p.Name -Enabled $p.Enabled }; Remove-Item $f }; Remove-NetFirewallRule -Name kisa_case_mssql_1433 -ErrorAction SilentlyContinue'
         Want = '^Domain=False Private=False Public=False$'; Fix = $true; FixExpect = @("MANUAL")
+        # 조치는 켜는 즉시 끊길 포트(1433)에 허용 규칙이 없으면 켜지 않는다(F3) - 예전에는 러너 기본 규칙에 기댔는데 Server 2022 러너엔
+        # 없어 ERROR 였다(C3). 허용 규칙을 케이스가 직접 만든다(규칙이 없을 때 거부하는 경로는 firewall_guard.ps1 이 확인)
         Note = "방화벽을 켠 뒤 허용 IP 범위 적합성은 수동 확인(MANUAL) - 양호 방향은 자동 판정 대상 아님"
     }
     # D-11 취약: public 에 master 의 시스템(ms_shipped) 테이블 SELECT 권한

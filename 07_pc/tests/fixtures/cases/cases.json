@@ -25,7 +25,7 @@
   {"code": "PC-12", "engine": "windows", "name": "unset", "expect": "GOOD"},
   {"code": "PC-13", "engine": "windows", "name": "signatures-removed", "expect": "VULN"},
   {"code": "PC-13", "engine": "windows", "name": "signatures-current", "expect": "GOOD"},
-  {"code": "PC-15", "engine": "windows", "name": "firewall-off", "expect": "VULN"},
+  {"code": "PC-15", "engine": "windows", "name": "firewall-off", "expect": "VULN", "expect_os": {"server2022": "ERROR"}, "note": "Server 2022 에는 보안 센터(WMI SecurityCenter2)가 없어 타사 방화벽 미사용을 확인할 수 없다 - S6 에 따라 ERROR(대상인 Windows 10/11 에는 있음)"},
   {"code": "PC-15", "engine": "windows", "name": "firewall-on", "expect": "GOOD"},
   {"code": "PC-18", "engine": "windows", "name": "local-allow", "expect": "VULN"},
   {"code": "PC-18", "engine": "windows", "name": "local-deny", "expect": "GOOD"},

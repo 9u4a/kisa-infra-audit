@@ -55,7 +55,20 @@ function Add-Fail([string]$m) { [void]$fail.Add($m); Write-Host "  FAIL: $m" -Fo
 # Windows PowerShell 5.1 의 ConvertFrom-Json 은 배열을 객체 하나로 내보낸다 - 파이프로 펼친다
 $cases = @((Get-Content -Raw -Encoding UTF8 (Join-Path $CasesDir "cases.json") | ConvertFrom-Json) | ForEach-Object { $_ })
 $valid = @("GOOD", "VULN", "MANUAL", "NA", "ERROR")
+# C3(1.5.0): 같은 상태라도 OS 차이로 판정이 달라지는 케이스는 "expect_os": {"<Get-OsFamily 값>": "<판정>"} + "note"(사유)로 둔다
+Import-Module (Join-Path $Repo "lib\Common.psm1") -Force
+$OsFamily = Get-OsFamily
+Write-Host "OS: $OsFamily"
 foreach ($c in $cases) {
+    if ($c.expect_os) {
+        if (-not $c.note) { throw "cases.json expect_os 에는 note(사유)가 필요: $($c | ConvertTo-Json -Compress)" }
+        $o = $c.expect_os.$OsFamily
+        if ($o) {
+            if ($valid -notcontains $o) { throw "cases.json expect_os 판정 오류: $($c | ConvertTo-Json -Compress)" }
+            Write-Host "  ($($c.code)/$($c.name): $OsFamily 기대 $o - $($c.note))"
+            $c.expect = $o
+        }
+    }
     if (-not $c.code -or -not $c.name -or $valid -notcontains $c.expect) { throw "cases.json 형식 오류: $($c | ConvertTo-Json -Compress)" }
     if ($c.engine -and $c.engine -ne $Engine) { throw "cases.json 엔진 오류(기대 $Engine): $($c | ConvertTo-Json -Compress)" }
     if (-not $GuideByCode.ContainsKey($c.code)) { throw "guide.json 에 없는 코드: $($c.code)" }
@@ -314,6 +327,12 @@ foreach ($code in $codes) {
     $def = & $file
     $mine = @($cases | Where-Object { $_.code -eq $code })
     foreach ($k in $def.States.Keys) { if (-not ($mine | Where-Object { $_.name -eq $k })) { Add-Fail "${code}: 정의에만 있고 cases.json 에 없는 상태 '$k'" } }
+    # C3(1.5.0): 상태를 만들지 않고 러너 기본값에 기대는 상태는 OS 이미지가 바뀌면 깨진다(Server 2022 W-06: 기본 관리자 2명).
+    # 설정(Reg/Sec/Svc/Set)이 없으면 AsIs = '<기본값에 기대는 이유>' 를 반드시 적게 한다 - 의존을 숨기지 않기 위해
+    foreach ($k in $def.States.Keys) {
+        $s = $def.States[$k]
+        if (-not ($s.Reg -or $s.Sec -or $s.Svc -or $s.Set) -and -not $s.AsIs) { Add-Fail "${code}/${k}: 상태를 만드는 설정이 없음 - 러너 기본값에 기대면 AsIs 사유 필요" }
+    }
     $grade = "$($GuideByCode[$code].fix)"
     $hasFix = (Test-Path (Join-Path $Repo "$Category\fixes\$code.ps1")) -and $grade -in @("auto", "confirm")
     if ($hasFix -and -not $def.Fix -and -not $def.FixSkip -and ($mine | Where-Object { $_.expect -eq "VULN" })) {

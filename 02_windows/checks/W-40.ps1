@@ -19,7 +19,7 @@ $checks = @(
 )
 $label = @{ 0 = "감사 안 함"; 1 = "성공"; 2 = "실패"; 3 = "성공 및 실패" }
 
-$tmp = $null; $rows = $null; $failMsg = ""
+$tmp = $null; $values = $null; $failMsg = ""
 try {
     $tmp = New-PrivateTempFile -FileName "auditpol.csv"
     $r = Invoke-NativeCommand -FilePath (Join-Path $env:SystemRoot "System32\auditpol.exe") -ArgumentList @('/backup', "/file:$tmp") -TimeoutSec 60
@@ -27,10 +27,10 @@ try {
     elseif ($r.ExitCode -ne 0) { $failMsg = "종료 코드 $($r.ExitCode) - 관리자 권한 필요" }
     elseif (-not (Test-Path -LiteralPath $tmp)) { $failMsg = "백업 파일이 생성되지 않음" }
     else {
-        # 머리글도 OS 표시 언어로 번역된다(한글판 실측: "하위 범주 GUID", "설정 값") - 열 이름이 아니라 위치(4번째 GUID,
-        # 7번째 설정 값)로 읽고 첫 줄(머리글)은 버린다. 형식 확인: GUID 모양 + 숫자 값인 행이 있어야 한다.
-        $rows = @(Import-Csv -LiteralPath $tmp -Encoding Default -Header 'C1', 'C2', 'C3', 'Guid', 'C5', 'C6', 'Value' | Select-Object -Skip 1)
-        if (@($rows | Where-Object { $_.Guid -match '^\{[0-9A-Fa-f-]{36}\}$' -and "$($_.Value)".Trim() -match '^\d+$' }).Count -eq 0) {
+        # 머리글도 OS 표시 언어로 번역된다(한글판 실측: "하위 범주 GUID", "설정 값") - 파싱은 ConvertFrom-AuditPolBackup(위치 기준,
+        # C6 한글/영문 샘플 단위 테스트). 파일은 ANSI 코드페이지(한글판 cp949)로 쓰인다.
+        $values = ConvertFrom-AuditPolBackup -Lines @(Get-Content -LiteralPath $tmp -Encoding Default)
+        if ($null -eq $values) {
             $failMsg = "auditpol /backup 출력 형식을 해석하지 못함(하위 범주 GUID/설정 값 열 없음)"
         }
     }
@@ -48,9 +48,7 @@ $evidence = @()
 $violations = @()
 $unknown = @()
 foreach ($c in $checks) {
-    $row = $rows | Where-Object { $_.Guid -eq $c.Guid } | Select-Object -First 1
-    $v = $null
-    if ($row -and "$($row.Value)".Trim() -match '^\d+$') { $v = [int]"$($row.Value)".Trim() }
+    $v = $values[$c.Guid.ToUpperInvariant()]
     if ($null -eq $v) {
         $unknown += $c.Name
         $evidence += "$($c.Name): 확인 불가(백업에 해당 하위 범주 없음)"

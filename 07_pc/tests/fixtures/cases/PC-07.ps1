@@ -3,6 +3,6 @@
     Resources = @(@{ Save = { $null }; Restore = { param($x) Dismount-CaseFatVolume } })
     States    = [ordered]@{
         'fat32-volume' = @{ Set = { Mount-CaseFatVolume }; Check = { $v = Get-CaseNonNtfsFixedVolumes; if ($v.Count -gt 0) { $true } else { "FAT 볼륨 없음" } } }
-        'ntfs-only'    = @{ Check = { $v = Get-CaseNonNtfsFixedVolumes; if ($v.Count -eq 0) { $true } else { "NTFS 아닌 볼륨: $($v -join ',')" } } }
+        'ntfs-only'    = @{ AsIs = '러너 고정 디스크는 모두 NTFS - FAT 볼륨은 러너에서 만들 수 없음'; Check = { $v = Get-CaseNonNtfsFixedVolumes; if ($v.Count -eq 0) { $true } else { "NTFS 아닌 볼륨: $($v -join ',')" } } }
     }
 }

@@ -124,6 +124,11 @@ jobs:
           if ((ConvertFrom-Json $raw).items[0].detail -ne "a</script><b>&c") { Write-Host "FAIL: 값이 바뀜"; exit 1 }
           Write-Host "OK"
 
+      # C6(1.5.0): 로캘 의존 출력(auditpol·bcdedit·tlntadmn) 파싱을 한글/영문 실제 출력 샘플로 확인(KNOWN_ISSUES L-02)
+      - name: 로캘 출력 파싱 단위 테스트(pwsh 7)
+        shell: pwsh
+        run: ./lib/tests/locale_parse_tests.ps1
+
   network:
     # 05_network 는 오프라인 설정파일 분석이라 Docker/실제 장비가 필요 없다 - Cisco IOS
     # vuln/hardened 픽스처 2종으로 38항목 전체 판정 로직을 회귀 테스트한다(05_network/
@@ -193,7 +198,12 @@ jobs:
     # 진단 회귀 + 조치 실적용·원복, Windows 조치 실적용·원복, 방화벽 안전장치. 대상 호스트와 같은
     # Windows PowerShell 5.1(shell: powershell)로 실행한다. 도메인 컨트롤러·한글 로캘은 재부팅이 필요해
     # 이 러너로는 검증할 수 없다.
-    runs-on: windows-latest
+    # 1.5.0 C3: Server 2022 러너(windows-2022)는 주간 스케줄·수동 실행에서만 추가로 돈다(기대값 공용).
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["windows-latest","windows-2022"]' || '["windows-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       # 주의: 여기 run: 블록은 GitHub 가 BOM 없는 UTF-8 .ps1 로 만들어 Windows PowerShell 5.1 이 한글을 깨뜨린다
@@ -274,7 +284,7 @@ jobs:
         if: ${{ always() && github.event.inputs.bootstrap_windows == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: bootstrap-expected-iis-mssql
+          name: bootstrap-expected-iis-mssql-${{ matrix.os }}
           path: |
             03_web/tests/fixtures/expected_iis_*.json
             08_dbms/tests/fixtures/expected_mssql_*.json
@@ -284,11 +294,13 @@ jobs:
     # '양호' 상태 → GOOD 을 실제로 만들어 run.ps1 -i <코드> 로 확인하고, 조치(auto/confirm)는 취약 상태에서 직접 적용 → GOOD →
     # fix.ps1 -Rollback → 취약 상태로 돌아왔는지(실제 값·상태 스냅샷)까지 본다. 상태를 실제로 바꾸므로 휘발성 러너에서만 실행한다.
     # IIS·FTP·DNS·SNMP 케이스용 기능은 첫 단계에서 설치한다(케이스마다 서비스 상태를 명시적으로 만들고 되돌린다).
-    runs-on: windows-latest
+    # 1.5.0 C3: Server 2022 러너는 주간 스케줄·수동 실행에서만 추가(windows-server 와 같은 조건).
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         category: [02_windows, 07_pc]
+        os: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["windows-latest","windows-2022"]' || '["windows-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       # run: blocks below are ASCII only (Windows PowerShell 5.1 reads the generated script without BOM)

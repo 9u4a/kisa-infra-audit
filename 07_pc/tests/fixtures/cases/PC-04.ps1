@@ -14,7 +14,7 @@
         # 조치·케이스가 Server 서비스를 재시작하면 Parameters\Guid 가 새로 써진다 - 항목 시작 값으로(위 재시작 원복보다 먼저 실행)
         @{ Save = { Get-CaseReg 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' 'Guid' }; Restore = { param($g) if ($null -ne $g) { Set-CaseReg 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters' 'Guid' ([byte[]]$g) 'Binary' } } })
     States    = [ordered]@{
-        'default-shares'   = @{ Check = { $s = Get-CaseDefaultShares; if ($s -contains 'ADMIN$') { $true } else { "기본 공유: $($s -join ',')" } } }
+        'default-shares'   = @{ AsIs = 'OS 기본 관리 공유(ADMIN$ 등)가 켜진 상태 그대로'; Check = { $s = Get-CaseDefaultShares; if ($s -contains 'ADMIN$') { $true } else { "기본 공유: $($s -join ',')" } } }
         'no-shares'        = @{
             Reg   = @(@{ P = 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'; N = 'AutoShareServer'; V = 0 }, @{ P = 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'; N = 'AutoShareWks'; V = 0 })
             Set   = { Restart-CaseLanman -NoWait }

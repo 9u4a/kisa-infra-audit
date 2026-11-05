@@ -1,0 +1,12 @@
+The following are the settings on localhost
+
+Alt Key Mapped to 'CTRL+A'      :YES
+Idle session timeout            :1 hours
+Max connections                 :2
+Telnet port                     :23
+Max failed login attempts       :3
+End tasks on disconnect         :YES
+Mode of Operation               :Console
+Authentication Mechanism        :NTLM, Password
+Default Domain                  :HOST
+State                           :Running

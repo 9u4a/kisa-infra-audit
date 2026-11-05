@@ -1,0 +1,3 @@
+Telnet port                     23
+Authentication Mechanism        NTLM
+State                           Running

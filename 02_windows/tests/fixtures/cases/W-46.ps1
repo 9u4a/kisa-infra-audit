@@ -6,7 +6,7 @@
             Set   = { Invoke-CaseIcacls @((Join-Path $env:SystemRoot 'System32\config\SAM'), '/grant', '*S-1-5-32-545:(R)') }
             Check = { if (Test-CaseAclHasSid -Path (Join-Path $env:SystemRoot 'System32\config\SAM') -Sid 'S-1-5-32-545') { $true } else { "Users ACE 없음" } }
         }
-        'default-acl'  = @{
+        'default-acl'  = @{ AsIs = 'OS 기본 SAM ACL(Users 없음) 그대로 - 기본값이 곧 양호 상태';
             Check = { if (-not (Test-CaseAclHasSid -Path (Join-Path $env:SystemRoot 'System32\config\SAM') -Sid 'S-1-5-32-545')) { $true } else { "Users ACE 있음" } }
         }
     }
