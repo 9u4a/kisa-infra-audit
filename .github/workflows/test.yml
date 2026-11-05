@@ -338,13 +338,14 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      # 인라인 run 은 Windows PowerShell 이 임시 .ps1(BOM 없음)을 ANSI 로 읽는다 - run 코드 안에 한글을 쓰지 않는다(1차 실행 파싱 오류)
       - name: SQL Server Express 설치
         shell: powershell
         run: |
           choco install sql-server-express -y --no-progress
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $svc = Get-Service -Name 'MSSQL$SQLEXPRESS'
-          "서비스: $($svc.Name)=$($svc.Status) 계정=$((Get-CimInstance Win32_Service -Filter "Name='MSSQL`$SQLEXPRESS'").StartName)"
+          "service: $($svc.Name)=$($svc.Status) account=$((Get-CimInstance Win32_Service -Filter "Name='MSSQL`$SQLEXPRESS'").StartName)"
       - name: 혼합 인증 활성화
         shell: powershell
         run: |

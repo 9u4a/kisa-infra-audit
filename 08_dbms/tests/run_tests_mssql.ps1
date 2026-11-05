@@ -25,7 +25,10 @@ $expectedDir = if ($inst -like "(localdb)*") { "fixtures" } else { "fixtures\exp
 
 if ($inst -like "(localdb)*") { & SqlLocalDB start (($inst -split "\\")[-1]) | Out-Null }
 function Sql([string]$q) { & sqlcmd -S $inst -E -C -b -h -1 -W -s "|" -Q "SET NOCOUNT ON; $q" }
-Write-Host "인스턴스 $inst 버전: $((Sql 'SELECT @@VERSION') | Select-Object -First 1)"
+$ErrorActionPreference = "Continue"; $ver = Sql 'SELECT @@VERSION' 2>&1 | ForEach-Object { "$_" }; $verRc = $LASTEXITCODE; $ErrorActionPreference = "Stop"
+# 인스턴스에 접속하지 못하면 이후 준비·케이스가 전부 연쇄 실패해 원인이 묻힌다(C4 1차 실행) - 여기서 끝낸다
+if ($verRc -ne 0) { Write-Host "FAIL: mssql - 인스턴스 $inst 접속 실패: $(@($ver) -join ' ')"; exit 1 }
+Write-Host "인스턴스 $inst 버전: $(@($ver) | Select-Object -First 1)"
 
 function Invoke-Diag([string]$Tag, [hashtable]$Env = @{}) {
     $out = Join-Path $env:TEMP "dbms_mssql_$Tag"
