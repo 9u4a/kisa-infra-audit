@@ -327,3 +327,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sh 08_dbms/tests/run_tests.sh oracle
+
+  mssql-express:
+    # 08_dbms MSSQL 정식 인스턴스(SQL Server Express, 1.5.0 C4): LocalDB 는 서비스·서비스 계정·인증 모드·오류 로그 위치가 정식
+    # 인스턴스와 달라(KNOWN_ISSUES L-09 환경 표) 같은 진단 회귀·항목별 케이스·조치·원복·운영 안전을 Express 에서 한 번 더 돌린다.
+    # 설치에 수 분이 걸려 주간 스케줄·수동 실행에서만 돈다. 혼합 인증(LoginMode=2)은 설치 후 레지스트리로 켜고 서비스를 재시작한다
+    # (sa·SQL 인증 로그인을 쓰는 vuln 픽스처·D-16·잘못된 비밀번호 안전 검사에 필요). 조치·원복은 항목별 케이스(win_case_runner)가 본다.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: SQL Server Express 설치
+        shell: powershell
+        run: |
+          choco install sql-server-express -y --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $svc = Get-Service -Name 'MSSQL$SQLEXPRESS'
+          "서비스: $($svc.Name)=$($svc.Status) 계정=$((Get-CimInstance Win32_Service -Filter "Name='MSSQL`$SQLEXPRESS'").StartName)"
+      - name: 혼합 인증 활성화
+        shell: powershell
+        run: |
+          & sqlcmd -S .\SQLEXPRESS -E -C -b -Q "EXEC xp_instance_regwrite N'HKEY_LOCAL_MACHINE', N'Software\Microsoft\MSSQLServer\MSSQLServer', N'LoginMode', REG_DWORD, 2;"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Restart-Service -Name 'MSSQL$SQLEXPRESS' -Force
+          & sqlcmd -S .\SQLEXPRESS -E -C -b -h -1 -Q "SET NOCOUNT ON; SELECT @@VERSION; SELECT 'IsIntegratedSecurityOnly=' + CAST(SERVERPROPERTY('IsIntegratedSecurityOnly') AS varchar(5));"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: MSSQL 진단 회귀 + 케이스 + 운영 안전(08_dbms, Express)
+        if: always()
+        shell: powershell
+        run: |
+          $bootstrap = '${{ github.event.inputs.bootstrap_windows }}' -eq 'true'
+          if ($bootstrap) { .\08_dbms\tests\run_tests_mssql.ps1 -Instance '.\SQLEXPRESS' -Bootstrap } else { .\08_dbms\tests\run_tests_mssql.ps1 -Instance '.\SQLEXPRESS' }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: 진단 운영 안전(08_dbms, Express)
+        if: always()
+        shell: powershell
+        env:
+          KISA_MSSQL_INSTANCE: .\SQLEXPRESS
+        run: |
+          .\lib\tests\run_safety_windows.ps1 -Category 08_dbms
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -11,15 +11,21 @@
 #      판정 → (조치 스크립트가 있으면) 조치 → 재진단 → 원복 → 상태 비교 → 정리 → 상태 비교(lib/tests/win_case_runner.ps1)
 #   ③ 운영 안전: 잘못된 비밀번호로 실행해도 로그인 실패가 접속 시도 1회분만 늘고(항목마다 재시도 하지 않음 - 계정
 #      잠금 방지), DB 조회 항목은 "사전 점검 실패" ERROR 로 남는다
-param([switch]$Bootstrap)
+# -Instance(1.5.0 C4): 기본은 러너 LocalDB. mssql-express job 은 정식 인스턴스(.\SQLEXPRESS, 혼합 인증)로 같은 검사를 돌리고
+#   전역 픽스처 기대값은 fixtures/express/expected_mssql_<mode>.json 을 쓴다(LocalDB 와 다른 값만 다른 게 아니라 파일 전체 -
+#   coverage.py 는 fixtures/ 바로 아래 expected*.json 만 세므로 같은 항목을 이중으로 세지 않는다). 하위 스크립트(케이스·운영 안전)는
+#   $env:KISA_MSSQL_INSTANCE 로 같은 인스턴스를 본다.
+param([switch]$Bootstrap, [string]$Instance = "(localdb)\MSSQLLocalDB")
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
-$inst = "(localdb)\MSSQLLocalDB"
+$inst = $Instance
+$env:KISA_MSSQL_INSTANCE = $inst
+$expectedDir = if ($inst -like "(localdb)*") { "fixtures" } else { "fixtures\express" }
 
-& SqlLocalDB start MSSQLLocalDB | Out-Null
+if ($inst -like "(localdb)*") { & SqlLocalDB start (($inst -split "\\")[-1]) | Out-Null }
 function Sql([string]$q) { & sqlcmd -S $inst -E -C -b -h -1 -W -s "|" -Q "SET NOCOUNT ON; $q" }
-Write-Host "LocalDB 버전: $((Sql 'SELECT @@VERSION') | Select-Object -First 1)"
+Write-Host "인스턴스 $inst 버전: $((Sql 'SELECT @@VERSION') | Select-Object -First 1)"
 
 function Invoke-Diag([string]$Tag, [hashtable]$Env = @{}) {
     $out = Join-Path $env:TEMP "dbms_mssql_$Tag"
@@ -57,7 +63,7 @@ foreach ($mode in @("vuln", "hardened")) {
     Write-Host "[*] mssql/$mode 픽스처: sa $got"
     $r = Invoke-Diag $mode
     $actual = @{}; foreach ($it in $r.Items) { $actual[$it.code] = $it.status }
-    $expectedPath = Join-Path $ScriptDir "fixtures\expected_mssql_$mode.json"
+    $expectedPath = Join-Path $ScriptDir "$expectedDir\expected_mssql_$mode.json"
     if (-not (Test-Path $expectedPath)) { Write-Host "FAIL: mssql/$mode - $expectedPath 가 없음"; $fail = $true; continue }
     $expected = Get-Content -Raw $expectedPath | ConvertFrom-Json
     $failures = @(foreach ($p in $expected.PSObject.Properties) { if ($actual[$p.Name] -ne $p.Value) { "$($p.Name): 기대=$($p.Value) 실제=$($actual[$p.Name])" } })

@@ -3,7 +3,7 @@
 # 로컬 PC 에서 실행 금지. 형식은 lib/tests/win_case_runner.ps1 참고. 기대 판정(cases.json expect)은 guide.json 판단기준에서 정했다.
 
 $MssqlCasePrelude = @'
-$inst = '(localdb)\MSSQLLocalDB'
+$inst = if ($env:KISA_MSSQL_INSTANCE) { $env:KISA_MSSQL_INSTANCE } else { '(localdb)\MSSQLLocalDB' }
 function Sql([string]$q) {
     $ErrorActionPreference = 'Continue'
     $o = & sqlcmd -S $inst -E -C -b -h -1 -W -s '|' -Q "SET NOCOUNT ON; $q" 2>&1 | ForEach-Object { "$_" }
