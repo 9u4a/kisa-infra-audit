@@ -18,7 +18,7 @@ if ($mp -and -not $passive) {
     if ($age -le 7) {
         return New-CheckResult -Code "W-39" -Status "GOOD" -Detail "Windows Defender 백신 엔진/정의가 최근 7일 이내 업데이트됨" -Evidence $evidence
     } else {
-        return New-CheckResult -Code "W-39" -Status "VULN" -Detail "Windows Defender 백신 정의 업데이트가 ${age}일간 이루어지지 않음" -Evidence $evidence
+        return New-CheckResult -Code "W-39" -Status "VULN" -Detail "Windows Defender 백신 $(Get-DefenderSignatureAgeText -Age $age)" -Evidence $evidence
     }
 }
 

@@ -13,7 +13,7 @@ if ($mp -and $mp.AntivirusEnabled -and $mode -notmatch 'Passive|EDR') {
     if ($age -le 7) {
         return New-CheckResult -Code "PC-13" -Status "GOOD" -Detail "Windows Defender 백신이 설치되어 있고 최근 7일 이내 업데이트됨" -Evidence $evidence
     } else {
-        return New-CheckResult -Code "PC-13" -Status "VULN" -Detail "Windows Defender 정의 업데이트가 ${age}일간 이루어지지 않음" -Evidence $evidence
+        return New-CheckResult -Code "PC-13" -Status "VULN" -Detail "Windows Defender $(Get-DefenderSignatureAgeText -Age $age)" -Evidence $evidence
     }
 }
 

@@ -65,6 +65,7 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | 08_dbms PostgreSQL | PostgreSQL 16.15 | Docker `postgres:16` | 5 / 21 |
 | 08_dbms Oracle | Oracle AI Database 26ai Free | Docker `gvenzl/oracle-free:23-slim` (다이제스트 고정, 주간·수동 job) | 14 / 12 |
 | 08_dbms MSSQL | SQL Server 2025 LocalDB 17.0.4025.3 (RTM-CU3) | `windows-2025` 러너 | 5 / 21 |
+| 08_dbms MSSQL(정식 인스턴스) | SQL Server 2022 Express 16.0.1000.6 (RTM, 혼합 인증) | `windows-2025` 러너 + choco `sql-server-express` (1.5.0, 주간·수동 job) | LocalDB 와 같은 판정·케이스 11건·운영 안전 |
 
 - 버전은 위 실행의 job summary에 남은 값입니다. linux-integration job 의 "엔진 버전 기록" 단계가 매 실행마다 남깁니다.
 - Oracle 을 뺀 이미지 태그는 고정하지 않았습니다. 그래서 이후 실행은 더 새로운 마이너 버전으로 돌 수 있고, 실제 버전은 각 실행의 summary 에서 확인할 수 있습니다.
