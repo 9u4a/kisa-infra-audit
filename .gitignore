@@ -23,3 +23,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# mattpocock-skills 설정 (로컬 전용)
+docs/agents/
