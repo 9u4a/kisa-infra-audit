@@ -5,6 +5,8 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+
+## [1.5.0] - 2026-11-06
 ### Added
 - 01_unix rhel 계열 검증(1.5.0 C1): `01_unix/tests/Dockerfile.cases.rhel`(Rocky Linux 9, systemd PID 1, authselect minimal PAM).
   - `run_cases.sh` 에 `CASE_DISTRO=debian|rhel`, 케이스 `distro` 필드. run_tests.sh 가 두 배포판으로 케이스를 돌린다
