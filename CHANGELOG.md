@@ -43,6 +43,8 @@
   - PC-08: `bcdedit /enum OSLOADER` 에는 WinRE 가 함께 나오지만 부팅 메뉴 OS 는 1개 - 판정(GOOD)이 맞음.
   - PC-07: 드라이브 문자 없는 FAT32(EFI 시스템·제조사 복구 파티션)는 제외 - EFI 는 FAT32 가 필수라 맞음.
   - 조치는 실 PC 라 적용하지 않았다(VM 검증은 1.6.0 G-07).
+- 릴리스 체크리스트(1.5.0 D5): `.github/release-checklist.md` - 태그 전 CI 전 job 수동 실행, coverage·조치 등급 검사,
+  VERSION·CHANGELOG·README·KNOWN_ISSUES 갱신, 서명·로컬 전용 파일·실호스트 정보 확인, 태그·릴리스 명령.
 ### Changed
 - README 개편: 맨 위에 한눈에 표(범위·검증·CI 20개 환경·결함 50건)와 만든 이유, 카테고리별 명령은 `docs/USAGE.md` 로 이동,
   로드맵 압축, 1.4.0 결함 수를 "약 45건" 대신 정확한 50건(교차검증 9 + 양방향 검증 41)으로, 검증 환경 표에 Server 2022 행과

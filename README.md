@@ -140,6 +140,8 @@ sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL; Oracle �
 되돌리지 않으므로 로컬 개발자 PC에서 실행하지 마세요** — windows-latest CI 러너(매 job마다
 새로 생성되는 휘발성 VM)에서만 실행하도록 만들어졌습니다.
 
+릴리스 전 확인 항목은 [`.github/release-checklist.md`](.github/release-checklist.md)에 있습니다.
+
 ## 로드맵
 | 버전 | 내용 |
 |---|---|
