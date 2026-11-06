@@ -210,15 +210,25 @@ function global:New-CaseLocalUser {
 }
 
 function global:Wait-CaseAdminName {
-    <# 빌트인 관리자(RID 500) 이름을 진단과 같은 WMI(Win32_UserAccount)로 읽어 기대 이름이 보이면 $true(최대 60초) #>
+    <# 빌트인 관리자(RID 500) 이름을 진단(checks/W-01.ps1)과 같은 순서로 읽어 기대 이름이 보이면 $true(최대 60초).
+       진단은 F-W01(1.4.0)부터 SAM 을 직접 읽는 Get-LocalUser 를 먼저 쓰고 모듈이 없을 때만 WMI 를 쓴다. 예전 이 함수는 WMI 만
+       기다려, 이름 변경 직후 Win32_UserAccount 가 60초 내내 "No mapping between account names and security IDs" 로 실패하면
+       진단은 정상인데도 케이스가 FAIL 이었다(Server 2022, CI run 42141148806). #>
     param([string]$Name)
     $last = ""
+    $useLocal = [bool](Get-Command Get-LocalUser -ErrorAction SilentlyContinue)
     for ($i = 0; $i -lt 30; $i++) {
         try {
-            $u = Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True and SID like 'S-1-5-%-500'" -ErrorAction Stop
-            if ($u -and $u.Name -eq $Name) { return $true }
-            $last = "WMI name=$($u.Name)"
-        } catch { $last = "WMI 조회 실패: $($_.Exception.Message)" }
+            if ($useLocal) {
+                $n = (Get-LocalUser -ErrorAction Stop | Where-Object { $_.SID.Value -like 'S-1-5-*-500' } | Select-Object -First 1).Name
+                $src = 'Get-LocalUser'
+            } else {
+                $n = (Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True and SID like 'S-1-5-%-500'" -ErrorAction Stop).Name
+                $src = 'WMI'
+            }
+            if ($n -eq $Name) { return $true }
+            $last = "$src name=$n"
+        } catch { $last = "관리자 계정 조회 실패: $($_.Exception.Message)" }
         Start-Sleep -Seconds 2
     }
     return $last
