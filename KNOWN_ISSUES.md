@@ -257,7 +257,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | ID | 내용 |
 |---|---|
 | L-01 | **도메인 컨트롤러**: DC 전용 분기(W-01~03 계정 열거 생략, W-16 SYSVOL 제외, W-32 manual)는 코드 검토만 했다. CI 러너는 재부팅이 필요한 DC 승격을 할 수 없다. |
-| L-02 | **한글 Windows**: 러너가 영문(en-US)이라 로캘 의존 출력(W-40 auditpol, W-34 tlntadmn, PC-08 bcdedit)을 러너에서 실측할 수 없다. 1.5.0 C6: 파싱을 `lib/Common.psm1` 함수(ConvertFrom-AuditPolBackup·Get-BcdEditEntryCount·ConvertFrom-TlntadmnConfig)로 분리하고, 한글 Windows 11 에서 읽기 전용으로 수집한 실제 출력(auditpol /backup·bcdedit /enum, `lib/tests/fixtures/locale/`)으로 단위 테스트한다(`lib/tests/locale_parse_tests.ps1`, CI static-analysis). 남은 것: tlntadmn 한글 출력은 Telnet 서버가 2016 이후 없어 합성 샘플뿐, 진단 전체 흐름(run.ps1)의 한글판 실행은 C7(사용자 PC 07_pc 진단)에서 확인. |
+| L-02 | **한글 Windows**: 러너가 영문(en-US)이라 로캘 의존 출력(W-40 auditpol, W-34 tlntadmn, PC-08 bcdedit)을 러너에서 실측할 수 없다. 1.5.0 C6: 파싱을 `lib/Common.psm1` 함수(ConvertFrom-AuditPolBackup·Get-BcdEditEntryCount·ConvertFrom-TlntadmnConfig)로 분리하고, 한글 Windows 11 에서 읽기 전용으로 수집한 실제 출력(auditpol /backup·bcdedit /enum, `lib/tests/fixtures/locale/`)으로 단위 테스트한다(`lib/tests/locale_parse_tests.ps1`, CI static-analysis). 남은 것: tlntadmn 한글 출력은 Telnet 서버가 2016 이후 없어 합성 샘플뿐, 진단 전체 흐름(run.ps1)의 한글판 실행은 1.5.0 C7 에서 확인했다: 한글 Windows 11 Home(ko-KR)에서 07_pc 18항목 오류 0, 콘솔 코드페이지 949(bcdedit 머리글 한글)·65001 결과 동일. 한글 Windows Server 의 02_windows 전체 실행은 G-07. |
 | L-03 | **Solaris/AIX/HP-UX**: 문서 기준 구현이며 실기 검증 불가(결과마다 "미검증" 문구가 붙음). |
 | L-04 | **RHEL Apache/Tomcat 패키지**: 1.5.0 C2 부터 Rocky Linux 9 의 httpd·tomcat 패키지(`apache-rhel`·`tomcat-rhel`)를 전역 vuln/hardened 픽스처, 조치 안전(적용 → 문법 검사 → 원복 동일성, Tomcat 은 조치 후 tomcat 계정이 tomcat-users.xml 을 읽을 수 있는지까지), 진단 실기 안전 검사로 검증한다. 항목별 양방향 케이스와 coverage 집계는 공식 이미지·Debian 기준만 있다(rhel 은 재현 층). RHEL 본체·SELinux enforcing 은 여전히 밖. 01_unix 의 rhel 계열 OS 는 Rocky Linux 9 케이스로 검증한다(1.5.0 C1). |
 | L-05 | **Oracle**: 1.4.0 부터 CI `oracle` job(주간 스케줄·수동 실행, gvenzl/oracle-free 26ai 다이제스트 고정)에서 22항목 양방향 케이스·조치·원복을 돈다 - 매 push 에는 돌지 않는다(이미지 약 2.8GB). 남은 한계: ① D-12(리스너 비밀번호)는 12.2 이상에서 NA(가이드 명시)라 취약/양호 분기(12.1 이하 listener.ora)를 실기로 만들 수 없다(coverage 면제 env-unavailable) ② D-07 취약(Oracle 을 root 로 구동)은 Oracle 이 root 기동을 거부해 root 소유 `ora_pmon_*` 모의 프로세스로 check 의 /proc 판정 경로만 검증한다. |
@@ -310,7 +310,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | 01_unix OS | Debian 12, Rocky Linux 9.8(1.5.0, authselect minimal PAM) | RHEL 본체·Alma, SUSE, SELinux enforcing(컨테이너는 SELinux 비활성). rhel 계열의 전역 vuln/hardened 픽스처 기대값 고정과 coverage 양방향 집계는 Debian 기준만 있다(Rocky 는 같은 케이스 재현 + 전용 케이스) | L-04 |
 | 01_unix 상용 Unix | — | Solaris/AIX/HP-UX 7항목은 문서 기준 구현이다(결과에 "미검증" 표기) | L-03 |
 | 02_windows OS | Server 2025 Datacenter, Server 2022 Datacenter(1.5.0 C3, 주간·수동 실행), en-US, 워크그룹. 한글 출력 파싱은 실제 샘플 단위 테스트(C6) | Server 2016/2019(2012 R2 포함) 의 레지스트리 기본값·기능 차이, 한글 로캘에서의 진단 전체 실행, 도메인 컨트롤러 분기(W-01~03 열거 생략, W-16, W-32, W-60, W-63) | L-01, L-02, L-10 |
-| 07_pc | 서버 OS 위에서 PC 항목 실행 | Windows 10/11 클라이언트 SKU 실기 미검증. 에디션별 정책 차이와 Defender 실시간 감시(PC-14), 클라이언트 전용 기본값이 서버와 다를 수 있다 | L-06 |
+| 07_pc | 서버 OS 위에서 PC 항목 실행, Windows 11 Home 25H2 ko-KR 실 PC 1대 읽기 전용 진단(1.5.0 C7, 판정 18건 독립 대조) | Windows 10, Pro/Enterprise 에디션, 클라이언트에서의 조치 적용(실 PC 라 실행하지 않음). 에디션별 정책 차이와 Defender 실시간 감시(PC-14), 클라이언트 전용 기본값이 서버와 다를 수 있다 | L-06 |
 | 03_web | 공식 이미지 Apache/Nginx/Tomcat, Debian apache2, Rocky 9 httpd·tomcat 9 패키지(1.5.0 C2), IIS 10.0 | RHEL 패키지의 항목별 케이스, SELinux enforcing, IIS 의 다른 OS 버전. Tomcat 9/11·Nginx stable 은 1.5.0 C5 CI `engine-matrix`(주간·수동)로 검증 | L-04 |
 | 08_dbms MSSQL | LocalDB 2025, SQL Server 2022 Express 정식 인스턴스(1.5.0 C4, 서비스 계정 NT Service\MSSQL$SQLEXPRESS, 혼합 인증, 주간·수동 실행) | Standard/Enterprise 전용 기능(SQL Agent 등), TCP 포트를 연 원격 접속 구성, SQL Server 2019 이하, 2012 미만 해시(D-08) | L-09 |
 | 08_dbms Oracle | 26ai Free 단일 인스턴스 | 19c 등 이전 버전, 12.1 이하 리스너 비밀번호(D-12), RAC/ASM. root 구동(D-07 VULN)은 모의 프로세스로만 검증 | L-05 |
@@ -411,7 +411,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | G-04 | 중 | 조치 전·후 비교 산출물이 없다(merge.py 는 호스트 병합만) | `merge.py --diff <전> <후>`: 호스트+코드로 맞춰 조치 완료(VULN→GOOD)·미조치(VULN→VULN)·신규 취약(GOOD/NA→VULN, 맨 위)·확인 필요(MANUAL·ERROR 관련)로 분류 | 열림 |
 | G-05 | 중 | MANUAL 46항목은 보고서 밖에서 손으로 판정·편집해야 한다 | 보고서 화면에서 취약/양호 + 사유를 입력해 `manual_verdicts.json` 으로 저장, merge.py 가 최종·비교 보고서에 반영(result.json 은 불변, 자동/사람 판정 구분 표시) | 열림 |
 | G-06 | 중 | 05_network 조치가 승인 범위와 무관하게 전 항목 명령어를 생성한다 | 장비 직접 적용은 만들지 않는다(콘솔 붙여넣기). 명령어 생성에 G-01 정책 형식을 적용해 승인 항목만 출력 | 열림 |
-| G-07 | 중 | 실제 운영 환경 미검증(§2 L-01·L-02·L-04, 07_pc 클라이언트) | 분석자 PC Hyper-V VM 수동 검증: ① 한글 Windows Server 2022 ② 같은 VM 도메인 컨트롤러 승격 ③ Windows 11(C7 통합) ④ RHEL 9 + SELinux enforcing. 결과는 README 검증 환경 표에 "수동 검증"으로 기록. 실점검 증적 회수는 하지 않는다 | 열림 |
+| G-07 | 중 | 실제 운영 환경 미검증(§2 L-01·L-02·L-04, 07_pc 클라이언트) | 분석자 PC Hyper-V VM 수동 검증: ① 한글 Windows Server 2022 ② 같은 VM 도메인 컨트롤러 승격 ③ Windows 11(C7 에서 실 PC 읽기 전용 진단 완료 - VM 에서는 조치 적용·원복) ④ RHEL 9 + SELinux enforcing. 결과는 README 검증 환경 표에 "수동 검증"으로 기록. 실점검 증적 회수는 하지 않는다 | 열림 |
 | G-08 | 중 | 판정 로직과 테스트 기대값이 같은 가이드 해석에서 나온다(§3-4) | guide.json `deviation` 이 있는 항목을 실무 컨설턴트 1명이 외부 검토 | 열림 |
 
 하지 않기로 한 것: 원격 일괄 실행(SSH/WinRM), 실점검 증적 회수, 네트워크 장비 직접 적용, 엑셀 점검표 양식(HTML·CSV 로 제출).

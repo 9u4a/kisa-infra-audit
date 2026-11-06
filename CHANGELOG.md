@@ -37,6 +37,12 @@
   로 08_dbms·03_web 회귀(원격/전역 픽스처·조치·운영 안전·항목별 케이스)를 돈다. 로컬 실측 6개 조합 전부 기본 태그와 같은 기대값으로 통과.
   - 테스트 이미지 변수: 08 `MYSQL_IMAGE`·`PG_IMAGE`, 03 `WEB_ENGINES`·`HTTPD_IMAGE`·`NGINX_IMAGE`·`TOMCAT_IMAGE`(Dockerfile `ARG BASE_IMAGE`).
   - 버전별로 판정이 정당하게 다르면 `fixtures/expected_<엔진>@<태그>_<모드>.json`(`_note` 에 사유)이 기본 기대값을 덮어쓴다.
+- 실 PC 진단(1.5.0 C7, KNOWN_ISSUES L-02): 한글 Windows 11 Home 25H2(10.0.26200, ko-KR) 1대에서 관리자 권한으로 07_pc 18항목을
+  읽기 전용 진단 - 오류 0, 판정 18건을 독립 명령(net accounts·secedit·Get-SmbShare·bcdedit·Get-MpComputerStatus·
+  Get-NetFirewallProfile 등)으로 대조해 모두 일치. 콘솔 코드페이지 949(bcdedit 머리글 한글)·65001 의 결과가 같았다.
+  - PC-08: `bcdedit /enum OSLOADER` 에는 WinRE 가 함께 나오지만 부팅 메뉴 OS 는 1개 - 판정(GOOD)이 맞음.
+  - PC-07: 드라이브 문자 없는 FAT32(EFI 시스템·제조사 복구 파티션)는 제외 - EFI 는 FAT32 가 필수라 맞음.
+  - 조치는 실 PC 라 적용하지 않았다(VM 검증은 1.6.0 G-07).
 ### Changed
 - README 개편: 맨 위에 한눈에 표(범위·검증·CI 20개 환경·결함 50건)와 만든 이유, 카테고리별 명령은 `docs/USAGE.md` 로 이동,
   로드맵 압축, 1.4.0 결함 수를 "약 45건" 대신 정확한 50건(교차검증 9 + 양방향 검증 41)으로, 검증 환경 표에 Server 2022 행과

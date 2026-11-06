@@ -70,6 +70,7 @@ PC 보안 점검 솔루션의 "점검 → 원클릭 조치 → 재점검" 흐름
 | 03_web IIS | IIS 10.0 (Windows Server 2025, URL Rewrite·ARR 포함) | `windows-2025` 러너 | 20 / 6 |
 | 05_network | Cisco IOS 15.2 형식 running-config 텍스트 (실장비 아님), Python 3.12 | Ubuntu 24.04 러너 | 31 / 7 |
 | 07_pc | PC 18항목을 Windows Server 2025 러너에서 실행 (Windows 10/11 클라이언트 실기는 아님) | `windows-2025` 러너 | 12 / 6 |
+| 07_pc 실 PC(수동) | Windows 11 Home 25H2 (10.0.26200, ko-KR), PowerShell 5.1 | 사용자 PC 1대에서 관리자 권한으로 읽기 전용 진단 (1.5.0 예정 C7, 2026-11-06) | 18항목 오류 0, 판정 18건을 독립 명령으로 대조, 콘솔 코드페이지 949·65001 결과 동일 |
 | 08_dbms MySQL | MySQL 8.4.13 | Docker `mysql:8` | 7 / 19 |
 | 08_dbms PostgreSQL | PostgreSQL 16.15 | Docker `postgres:16` | 5 / 21 |
 | 08_dbms 버전 matrix | MySQL 8.0.46, PostgreSQL 14.24·18.6 | Docker `mysql:8.0`·`postgres:14`·`postgres:18` (1.5.0 예정 C5, 주간·수동 job) | 기본 태그와 같은 기대값으로 원격 픽스처·조치·운영 안전·항목별 케이스 |
@@ -83,7 +84,7 @@ PC 보안 점검 솔루션의 "점검 → 원클릭 조치 → 재점검" 흐름
 
 **위 표에 없는 환경은 코드상 분기는 있어도 실기 검증을 하지 않았습니다**:
 - Unix: RHEL·Alma 등 Rocky 이외의 rhel 계열(같은 패키지 계열이라 차이는 작음), SUSE, Solaris/AIX/HP-UX
-- Windows: Server 2025·2022 이외 버전, 한글 Windows, 도메인 컨트롤러, Windows 10/11 클라이언트 실기
+- Windows: Server 2025·2022 이외 버전, 한글 Windows Server, 도메인 컨트롤러, Windows 10·Pro/Enterprise 에디션(Windows 11 Home 은 수동 1대), 클라이언트에서의 조치 적용
 - DB·Web: SQL Server Standard/Enterprise, 표에 없는 DB·웹 서버 메이저 버전
 - Network: Cisco 실장비 출력
 
