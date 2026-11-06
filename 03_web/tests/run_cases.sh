@@ -18,19 +18,26 @@ cd "$(dirname "$0")/../.."
 PREFIX=${WEB_TEST_PREFIX:-kisa-web}
 JOBS=${WEB_CASES_JOBS:-6}
 CASES_DIR=03_web/tests/fixtures/cases
-ENGINES="apache apache-debian nginx tomcat"
+# 엔진 버전 matrix(1.5.0 C5): run_tests.sh 가 넘기는 WEB_ENGINES 에 든 엔진만, *_IMAGE 기본 이미지로 돈다.
+ENGINES=""
+for e in apache apache-debian nginx tomcat; do
+    case " ${WEB_ENGINES:-apache apache-debian nginx tomcat} " in *" $e "*) ENGINES="$ENGINES $e" ;; esac
+done
+base_image() { case "$1" in apache) echo "${HTTPD_IMAGE:-httpd:2.4}" ;; nginx) echo "${NGINX_IMAGE:-nginx:latest}" ;; tomcat) echo "${TOMCAT_IMAGE:-tomcat:10}" ;; esac; }
 fail=0
+if [ -z "$ENGINES" ]; then echo "cases: WEB_ENGINES 에 케이스가 있는 엔진 없음 - 건너뜀"; exit 0; fi
 
 if [ "${WEB_CASES_BUILD:-0}" = 1 ]; then
     for e in $ENGINES; do
-        docker build -q -f "03_web/tests/Dockerfile.$e" -t "$PREFIX-$e-test" . >/dev/null
+        docker build -q --build-arg BASE_IMAGE="$(base_image "$e")" -f "03_web/tests/Dockerfile.$e" -t "$PREFIX-$e-test" . >/dev/null
     done
 fi
 
 # 대상 케이스 목록 "engine|code|name|expect"
-list=$(python3 - "$CASES_DIR/cases.json" <<'PYEOF'
+# shellcheck disable=SC2086
+list=$(python3 - "$CASES_DIR/cases.json" $ENGINES <<'PYEOF'
 import json, sys
-mine = {"apache", "apache-debian", "nginx", "tomcat"}
+mine = set(sys.argv[2:])
 for c in json.load(open(sys.argv[1], encoding="utf-8")):
     if c.get("engine") in mine:
         print("|".join((c["engine"], c["code"], c["name"], c["expect"])))

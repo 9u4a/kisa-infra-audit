@@ -33,6 +33,10 @@
   를 설치하고 혼합 인증을 켠 뒤 LocalDB 와 같은 진단 회귀·항목별 케이스 11건(조치·원복 포함)·잘못된 비밀번호 안전 검사·진단 운영
   안전을 돈다. 테스트 인스턴스는 `run_tests_mssql.ps1 -Instance` / `KISA_MSSQL_INSTANCE`(기본 LocalDB). 26항목 판정이 LocalDB 와
   모두 같아 기대값 파일을 함께 쓴다.
+- 엔진 버전 matrix(1.5.0 C5): CI `engine-matrix` job(주간 스케줄·수동 실행)이 MySQL 8.0, PostgreSQL 14·18, Tomcat 9·11, Nginx stable
+  로 08_dbms·03_web 회귀(원격/전역 픽스처·조치·운영 안전·항목별 케이스)를 돈다. 로컬 실측 6개 조합 전부 기본 태그와 같은 기대값으로 통과.
+  - 테스트 이미지 변수: 08 `MYSQL_IMAGE`·`PG_IMAGE`, 03 `WEB_ENGINES`·`HTTPD_IMAGE`·`NGINX_IMAGE`·`TOMCAT_IMAGE`(Dockerfile `ARG BASE_IMAGE`).
+  - 버전별로 판정이 정당하게 다르면 `fixtures/expected_<엔진>@<태그>_<모드>.json`(`_note` 에 사유)이 기본 기대값을 덮어쓴다.
 ### Changed
 - `Get-OsFamily` 가 Windows Server 2025(빌드 26100 이상)를 `server2025` 로 표시한다(예전에는 `server2022`, result.json `env`).
 - 01_unix 케이스가 배포판 기본값 차이에 맞게 상태를 만든다: U-37(Rocky 의 crontab SUID·cron.deny 644 기본값),
@@ -42,6 +46,10 @@
   같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
   U-32 VULN 이 나던 하네스 잡음.
 ### Fixed
+- 08_dbms 케이스 하네스: MySQL 8.0 은 `--mysql-native-password` 옵션을 몰라 케이스 서버가 뜨지 않던 것 - 서버가 옵션을 알 때만 넘긴다.
+  PostgreSQL 18 공식 이미지의 PGDATA(`/var/lib/postgresql/18/docker`)를 `$PGDATA` 로 따른다(예전 경로 고정으로 D-01/D-10/D-14 케이스 실패).
+- 08_dbms PostgreSQL D-03 조치에 `# 원복: 일부` 표기 - 원복은 shared_preload_libraries 설정만 되돌리고 불러온 passwordcheck 모듈은
+  재기동 때 내려간다(PostgreSQL 18 의 passwordcheck.min_password_length GUC 로 드러남). 케이스 스냅숏은 설정 파일로 비교한다.
 - 02_windows 케이스 W-25/W-32: DNS 서비스를 다시 켠 직후 시험용 영역 생성이 "Failed to create zone" 으로 실패하던 일시 오류(CI run 42002313909) - `New-CaseDnsZone`(case_lib.ps1)이 남은 영역 파일을 지우고 3초 간격 5회까지 재시도한다.
 - WEB-22 Apache: ErrorDocument 가 한 줄이라도 있으면 GOOD 이던 것을 404 지정을 요구하도록 고쳤다(1.5.0 C2) - RHEL 기본
   welcome.conf 의 루트 URL 전용 `ErrorDocument 403` 하나로 거짓 GOOD. 조치도 404 가 없으면 추가한다(500 은 없을 때만).

@@ -22,11 +22,29 @@ fail=0
 # apache-debian: Debian 12 apache2 패키지 레이아웃(/etc/apache2, ServerRoot 주석, *-enabled Include) - 진단 검수 WEB-R1.
 # apache-rhel/tomcat-rhel(1.5.0 C2): Rocky Linux 9 httpd·tomcat 패키지 레이아웃(KNOWN_ISSUES L-04). run.sh 에는 apache/tomcat 으로 넘긴다.
 run_engine() { case "$1" in apache-debian|apache-rhel) echo apache ;; tomcat-rhel) echo tomcat ;; *) echo "$1" ;; esac; }
-for engine in apache nginx tomcat apache-debian apache-rhel tomcat-rhel; do
+# 엔진 버전 matrix(1.5.0 C5): 공식 이미지 엔진의 기본 이미지와 대상 엔진을 바꿔 같은 검사를 돈다(CI engine-matrix job, 주간·수동).
+#   WEB_ENGINES=tomcat TOMCAT_IMAGE=tomcat:9 sh 03_web/tests/run_tests.sh
+# 버전에 따라 기본값이 달라 판정이 정당하게 바뀌는 항목은 fixtures/expected_<엔진>@<태그>_<모드>.json 을 두고(없으면 기본 파일),
+# 그 차이를 가이드 판단기준으로 검토한 사유를 파일의 "_note" 에 적는다. 배포판 패키지 엔진(-debian/-rhel)은 배포판이 버전을 정한다.
+WEB_ENGINES=${WEB_ENGINES:-apache nginx tomcat apache-debian apache-rhel tomcat-rhel}
+HTTPD_IMAGE=${HTTPD_IMAGE:-httpd:2.4}
+NGINX_IMAGE=${NGINX_IMAGE:-nginx:latest}
+TOMCAT_IMAGE=${TOMCAT_IMAGE:-tomcat:10}
+export WEB_ENGINES HTTPD_IMAGE NGINX_IMAGE TOMCAT_IMAGE   # run_cases.sh 가 같은 값을 쓴다
+base_image() { case "$1" in apache) echo "$HTTPD_IMAGE" ;; nginx) echo "$NGINX_IMAGE" ;; tomcat) echo "$TOMCAT_IMAGE" ;; esac; }
+in_engines() { case " $WEB_ENGINES " in *" $1 "*) return 0 ;; esac; return 1; }
+expected_file() {  # expected_file <엔진> <모드>
+    _tag=$(base_image "$1"); _tag=${_tag##*:}
+    _ef="03_web/tests/fixtures/expected_${1}@${_tag}_${2}.json"
+    { [ -n "$_tag" ] && [ -f "$_ef" ]; } || _ef="03_web/tests/fixtures/expected_${1}_${2}.json"
+    echo "$_ef"
+}
+for engine in $WEB_ENGINES; do
     image="kisa-web-${engine}-test"
     run_e=$(run_engine "$engine")
     echo "[1/2] $engine 이미지 빌드..."
-    docker build -q -f "03_web/tests/Dockerfile.$engine" -t "$image" . >/dev/null
+    docker build -q --build-arg BASE_IMAGE="$(base_image "$engine")" -f "03_web/tests/Dockerfile.$engine" -t "$image" . >/dev/null
+    [ -z "$(base_image "$engine")" ] || echo "    기본 이미지: $(base_image "$engine")"
     # 배포판 패키지 엔진은 이미지 태그만으로 버전을 알 수 없다 - 이번 실행의 패키지 버전을 남긴다(README 검증 환경 표 근거)
     case "$engine" in
         apache-rhel) echo "    패키지: $(docker run --rm "$image" rpm -q httpd)" ;;
@@ -52,7 +70,7 @@ for engine in apache nginx tomcat apache-debian apache-rhel tomcat-rhel; do
             continue
         fi
 
-        if python3 - "$result_file" "03_web/tests/fixtures/expected_${engine}_${mode}.json" "$engine/$mode" <<'PYEOF'
+        if python3 - "$result_file" "$(expected_file "$engine" "$mode")" "$engine/$mode" <<'PYEOF'
 import json, sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -107,6 +125,7 @@ tomcat|tomcat-etc confirm WEB-01,WEB-03,WEB-04,WEB-08,WEB-13,WEB-14,WEB-16,WEB-2
 n=0
 while IFS='|' read -r img args exp_app exp_fail; do
     [ -n "$img" ] || continue
+    in_engines "$img" || continue
     n=$((n + 1))
     cname="kisa-web-fix-$n"
     docker rm "$cname" >/dev/null 2>&1 || true
@@ -131,19 +150,21 @@ while IFS='|' read -r img args exp_app exp_fail; do
 done <<EOF_FIX
 $FIX_CASES
 EOF_FIX
-docker rm kisa-web-fix-backupfail >/dev/null 2>&1 || true
-out=$(docker run --name kisa-web-fix-backupfail --tmpfs /fixout:size=16k -e FIX_OUT=/fixout kisa-web-apache-test sh 03_web/tests/fixtures/fix_safety.sh apache backupfail < /dev/null)
-docker rm kisa-web-fix-backupfail >/dev/null 2>&1
-if printf '%s\n' "$out" | grep -qx 'FIX_RC=3' && printf '%s\n' "$out" | grep -qx 'CONF=unchanged' && printf '%s\n' "$out" | grep -qx 'ABORTED=1'; then
-    echo "PASS: apache/fix-backupfail ($(printf '%s' "$out" | tr '\n' ' '))"
-else
-    echo "FAIL: apache/fix-backupfail - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
+if in_engines apache; then
+    docker rm kisa-web-fix-backupfail >/dev/null 2>&1 || true
+    out=$(docker run --name kisa-web-fix-backupfail --tmpfs /fixout:size=16k -e FIX_OUT=/fixout kisa-web-apache-test sh 03_web/tests/fixtures/fix_safety.sh apache backupfail < /dev/null)
+    docker rm kisa-web-fix-backupfail >/dev/null 2>&1
+    if printf '%s\n' "$out" | grep -qx 'FIX_RC=3' && printf '%s\n' "$out" | grep -qx 'CONF=unchanged' && printf '%s\n' "$out" | grep -qx 'ABORTED=1'; then
+        echo "PASS: apache/fix-backupfail ($(printf '%s' "$out" | tr '\n' ' '))"
+    else
+        echo "FAIL: apache/fix-backupfail - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
+    fi
 fi
 
 # ---- 진단(run.sh) 운영 안전 실기 검사 (lib/tests/run_safety.sh, 01_unix 와 같은 기준) ---------
 # S1 전후 상태 동일 / S2 제한 시간 / S5 비밀값(tomcat-users.xml 비밀번호·keystorePass, Apache ProxyPass URL 비밀번호,
 # nginx proxy_pass 토큰 - setup.sh vuln 이 심음) 원문이 출력물 어디에도 없음 / S6 일반 사용자 거짓 양호
-for engine in apache nginx tomcat apache-debian apache-rhel tomcat-rhel; do
+for engine in $WEB_ENGINES; do
     run_e=$(run_engine "$engine")
     rs_dir="rs_web_${engine}_$$"
     docker rm -f "kisa-rs-web-$engine" >/dev/null 2>&1 || true

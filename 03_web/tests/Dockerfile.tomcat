@@ -1,4 +1,5 @@
 # 03_web/tests/Dockerfile.tomcat — 공식 tomcat:10 이미지 기반 회귀 테스트.
-FROM tomcat:10
+ARG BASE_IMAGE=tomcat:10
+FROM ${BASE_IMAGE}
 COPY . /infra
 WORKDIR /infra
