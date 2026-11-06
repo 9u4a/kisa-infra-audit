@@ -38,6 +38,9 @@
   - 테스트 이미지 변수: 08 `MYSQL_IMAGE`·`PG_IMAGE`, 03 `WEB_ENGINES`·`HTTPD_IMAGE`·`NGINX_IMAGE`·`TOMCAT_IMAGE`(Dockerfile `ARG BASE_IMAGE`).
   - 버전별로 판정이 정당하게 다르면 `fixtures/expected_<엔진>@<태그>_<모드>.json`(`_note` 에 사유)이 기본 기대값을 덮어쓴다.
 ### Changed
+- README 개편: 맨 위에 한눈에 표(범위·검증·CI 20개 환경·결함 50건)와 만든 이유, 카테고리별 명령은 `docs/USAGE.md` 로 이동,
+  로드맵 압축, 1.4.0 결함 수를 "약 45건" 대신 정확한 50건(교차검증 9 + 양방향 검증 41)으로, 검증 환경 표에 Server 2022 행과
+  "1.5.0 예정" 표시. LICENSE 는 MIT 원문만 두고 KISA 출처 문구는 `NOTICE` 로 옮겼다(GitHub 라이선스 인식).
 - `Get-OsFamily` 가 Windows Server 2025(빌드 26100 이상)를 `server2025` 로 표시한다(예전에는 `server2022`, result.json `env`).
 - 01_unix 케이스가 배포판 기본값 차이에 맞게 상태를 만든다: U-37(Rocky 의 crontab SUID·cron.deny 644 기본값),
   U-55(Rocky 기본 ftp 계정은 쉘만 변경), U-67(기준 초과 로그를 만든 뒤 정리), U-32 는 Debian 전용.
