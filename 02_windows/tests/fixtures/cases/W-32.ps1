@@ -6,7 +6,7 @@
         'dynamic-nonsecure' = @{
             Svc   = @{ DNS = 'Running' }
             Set   = {
-                if (-not (Test-CaseDnsZone)) { Add-DnsServerPrimaryZone -Name 'kisa-case.test' -ZoneFile 'kisa-case.test.dns' }
+                New-CaseDnsZone
                 Set-DnsServerPrimaryZone -Name 'kisa-case.test' -DynamicUpdate NonsecureAndSecure
             }
             Check = { $z = Get-CimInstance -Namespace root\MicrosoftDNS -ClassName MicrosoftDNS_Zone -Filter "Name='kisa-case.test'"; if ($z -and $z.AllowUpdate -eq 1) { $true } else { "AllowUpdate=$($z.AllowUpdate)" } }
@@ -14,7 +14,7 @@
         'dynamic-none'      = @{
             Svc   = @{ DNS = 'Running' }
             Set   = {
-                if (-not (Test-CaseDnsZone)) { Add-DnsServerPrimaryZone -Name 'kisa-case.test' -ZoneFile 'kisa-case.test.dns' }
+                New-CaseDnsZone
                 Set-DnsServerPrimaryZone -Name 'kisa-case.test' -DynamicUpdate None
             }
             Check = { $z = Get-CimInstance -Namespace root\MicrosoftDNS -ClassName MicrosoftDNS_Zone -Filter "Name='kisa-case.test'"; if ($z -and $z.AllowUpdate -eq 0) { $true } else { "AllowUpdate=$($z.AllowUpdate)" } }

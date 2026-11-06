@@ -29,6 +29,10 @@
   한글 Windows 11 에서 읽기 전용으로 수집한 실제 출력(ko-KR/en-US, 컴퓨터 이름 치환)을 `lib/tests/fixtures/locale/` 에 두고
   `lib/tests/locale_parse_tests.ps1` 로 확인한다(CI static-analysis, pwsh 7). 같은 PC 라도 콘솔 코드페이지(chcp 949/437)에 따라
   명령 출력 언어가 바뀌는 것을 확인했다.
+- MSSQL 정식 인스턴스 검증(1.5.0 C4, KNOWN_ISSUES L-09): CI `mssql-express` job(주간 스케줄·수동 실행)이 SQL Server 2022 Express
+  를 설치하고 혼합 인증을 켠 뒤 LocalDB 와 같은 진단 회귀·항목별 케이스 11건(조치·원복 포함)·잘못된 비밀번호 안전 검사·진단 운영
+  안전을 돈다. 테스트 인스턴스는 `run_tests_mssql.ps1 -Instance` / `KISA_MSSQL_INSTANCE`(기본 LocalDB). 26항목 판정이 LocalDB 와
+  모두 같아 기대값 파일을 함께 쓴다.
 ### Changed
 - `Get-OsFamily` 가 Windows Server 2025(빌드 26100 이상)를 `server2025` 로 표시한다(예전에는 `server2022`, result.json `env`).
 - 01_unix 케이스가 배포판 기본값 차이에 맞게 상태를 만든다: U-37(Rocky 의 crontab SUID·cron.deny 644 기본값),
@@ -38,6 +42,7 @@
   같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
   U-32 VULN 이 나던 하네스 잡음.
 ### Fixed
+- 02_windows 케이스 W-25/W-32: DNS 서비스를 다시 켠 직후 시험용 영역 생성이 "Failed to create zone" 으로 실패하던 일시 오류(CI run 42002313909) - `New-CaseDnsZone`(case_lib.ps1)이 남은 영역 파일을 지우고 3초 간격 5회까지 재시도한다.
 - WEB-22 Apache: ErrorDocument 가 한 줄이라도 있으면 GOOD 이던 것을 404 지정을 요구하도록 고쳤다(1.5.0 C2) - RHEL 기본
   welcome.conf 의 루트 URL 전용 `ErrorDocument 403` 하나로 거짓 GOOD. 조치도 404 가 없으면 추가한다(500 은 없을 때만).
 - WEB-03 조치: RHEL 의 root:tomcat 640 tomcat-users.xml 을 root 600 으로 바꿔 Tomcat(tomcat 계정)이 읽지 못하게 만들던 문제 -
@@ -45,6 +50,9 @@
   확인한다(옛 조치로 음성 대조: RUNUSER_READ=fail).
 - W-34: tlntadmn 의 공백 정렬 형식(`Authentication Mechanism      NTLM`)에서 줄 이름 단어까지 인증 방식으로 세어 NTLM 단독도
   VULN 이던 것을 고쳤다(C6 단위 테스트로 발견). 콜론이 없으면 2칸 이상 공백 뒤를 값으로 본다.
+- W-39/PC-13 조치: 서명 업데이트가 일시 실패하면("completed with errors", CI 러너 실측) 바로 ERROR 이던 것을 MMPC 경로로 1회 재시도
+  한다(`Invoke-DefenderSignatureUpdate`). 실패 안내도 Defender 가 있는데 "타사 백신이거나 미설치"로 나가던 것을 업데이트 서버 접근
+  문제로 구분한다. 진단은 서명이 없을 때 경과일 4294967295일 대신 "백신 정의가 설치되어 있지 않음"으로 적는다(판정은 같은 VULN).
 
 ### Fixed (실무 적용 교차 검증, KNOWN_ISSUES §4)
 - 05_network N-17(P-01, S5): `snmp-server host <IP> vrf <이름> ...` 줄의 community 원문이 결과물에 남던 문제 - 마스킹이

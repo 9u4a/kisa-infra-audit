@@ -7,6 +7,9 @@
 # 비교가 조용히 통과했다(S6 과 같은 원칙: 확인하지 못한 것을 같다고 하지 않는다).
 
 # 진단(checks)이 실제로 읽는 레지스트리 키. R=하위 키까지, N=그 키의 값만(하위에 DHCP 임대 시각 등 휘발 값이 있는 키)
+# 08_dbms 대상 인스턴스: 기본은 러너 LocalDB, 1.5.0 C4 의 mssql-express job 은 KISA_MSSQL_INSTANCE=.\SQLEXPRESS
+$Script:MssqlTestInstance = if ($env:KISA_MSSQL_INSTANCE) { $env:KISA_MSSQL_INSTANCE } else { "(localdb)\MSSQLLocalDB" }
+
 $Script:WinStateRegKeys = @(
     "R|HKLM:\SOFTWARE\Policies",
     "R|HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies",
@@ -74,7 +77,7 @@ function Get-WinStateSnapshot {
     $s.iis = ($iisFiles | Where-Object { Test-Path $_ } | ForEach-Object { "$_|$((Get-FileHash $_).Hash)" }) -join "`n"
     if ($Category -eq "08_dbms") {
         $q = "SET NOCOUNT ON; SELECT name + '|' + CAST(value_in_use AS varchar(50)) FROM sys.configurations ORDER BY name; SELECT name + '|' + CAST(is_disabled AS varchar(1)) FROM sys.server_principals WHERE type IN ('S','U','G') ORDER BY name; SELECT name FROM sys.server_audits;"
-        $s.mssql = (& sqlcmd -S "(localdb)\MSSQLLocalDB" -E -C -b -h -1 -W -Q $q) -join "`n"
+        $s.mssql = (& sqlcmd -S $Script:MssqlTestInstance -E -C -b -h -1 -W -Q $q) -join "`n"
         if ($LASTEXITCODE -ne 0 -or -not $s.mssql) { $errs += "sqlcmd 조회 실패(rc=$LASTEXITCODE)" }
     }
     # 임시 폴더: 하위 폴더까지(깊이 4). U|=실행 계정 TEMP(진단이 쓰는 곳 - 새 파일은 실패), W|=Windows\Temp(서비스들이 수시로

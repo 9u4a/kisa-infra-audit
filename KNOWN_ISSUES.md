@@ -264,7 +264,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | L-06 | **PC-14 Defender**: 러너에서 켤 수 없어 조치는 "실패 후 원복" 경로만 확인했다. |
 | L-07 | **05_network**: 실제 장비가 아닌 텍스트 픽스처 기반 판정 로직 테스트다. |
 | L-08 | **CI 일시 장애**: PowerShell Gallery 다운로드 실패로 static-analysis 가 실패할 수 있다(재실행으로 해결, 코드 문제 아님). |
-| L-09 | **MSSQL D-08**: SHA-256 미만 비밀번호 해시는 SQL Server 2012 미만에서만 생긴다. 러너 LocalDB(2019 이상)에서 만들 수 없어 양호 방향만 검증한다. |
+| L-09 | **MSSQL D-08**: SHA-256 미만 비밀번호 해시는 SQL Server 2012 미만에서만 생긴다. 러너 LocalDB·Express(2022)에서 만들 수 없어 양호 방향만 검증한다. 정식 인스턴스는 1.5.0 C4 부터 CI `mssql-express`(SQL Server 2022 Express, 주간·수동)로 LocalDB 와 같은 검사를 돈다. |
 | L-10 | **W-34 Telnet 서버**: Windows Server 2016 이상에는 Telnet 서버가 없다(지원 OS 중 2012 R2 만 해당). 러너(Server 2025)에서 구동 상태를 만들 수 없어 미설치 → GOOD 만 검증한다. |
 | L-11 | **W-45 백신 미설치**: Defender 제거·서비스 중지에 재부팅이 필요해 러너에서 미설치 상태를 만들 수 없다. 설치 → GOOD 만 검증한다. |
 
@@ -312,7 +312,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | 02_windows OS | Server 2025 Datacenter, Server 2022 Datacenter(1.5.0 C3, 주간·수동 실행), en-US, 워크그룹. 한글 출력 파싱은 실제 샘플 단위 테스트(C6) | Server 2016/2019(2012 R2 포함) 의 레지스트리 기본값·기능 차이, 한글 로캘에서의 진단 전체 실행, 도메인 컨트롤러 분기(W-01~03 열거 생략, W-16, W-32, W-60, W-63) | L-01, L-02, L-10 |
 | 07_pc | 서버 OS 위에서 PC 항목 실행 | Windows 10/11 클라이언트 SKU 실기 미검증. 에디션별 정책 차이와 Defender 실시간 감시(PC-14), 클라이언트 전용 기본값이 서버와 다를 수 있다 | L-06 |
 | 03_web | 공식 이미지 Apache/Nginx/Tomcat, Debian apache2, Rocky 9 httpd·tomcat 9 패키지(1.5.0 C2), IIS 10.0 | RHEL 패키지의 항목별 케이스, SELinux enforcing, Tomcat 11.x, Nginx stable 계열, IIS 의 다른 OS 버전 | L-04 |
-| 08_dbms MSSQL | LocalDB 2025 | 정식 인스턴스(Express/Standard/Enterprise). 서비스 계정, 네트워크 프로토콜·포트, SQL Agent, 감사 대상 파일 위치가 LocalDB 와 다르다. SQL Server 2019/2022, 2012 미만 해시(D-08) | L-09 |
+| 08_dbms MSSQL | LocalDB 2025, SQL Server 2022 Express 정식 인스턴스(1.5.0 C4, 서비스 계정 NT Service\MSSQL$SQLEXPRESS, 혼합 인증, 주간·수동 실행) | Standard/Enterprise 전용 기능(SQL Agent 등), TCP 포트를 연 원격 접속 구성, SQL Server 2019 이하, 2012 미만 해시(D-08) | L-09 |
 | 08_dbms Oracle | 26ai Free 단일 인스턴스 | 19c 등 이전 버전, 12.1 이하 리스너 비밀번호(D-12), RAC/ASM. root 구동(D-07 VULN)은 모의 프로세스로만 검증 | L-05 |
 | 08_dbms MySQL/PostgreSQL | MySQL 8.4, PostgreSQL 16 | MySQL 8.0/5.7, MariaDB, PostgreSQL 다른 메이저 버전의 시스템 테이블·기본값 차이 | — |
 | 05_network | IOS 15.2 형식 텍스트 픽스처 | 실장비 `show running-config` 출력. IOS-XE·다른 IOS 버전의 문법·기본값 생략 차이 | L-07 |
@@ -396,3 +396,22 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | P-25 | 하 | S7 | Windows run.ps1 에 중복 실행 잠금이 없다(sh 는 R-06 에서 해결) | 해결(1.5.0): run.ps1 4개가 `Enter-RunLock`(카테고리별 Mutex, 비정상 종료 시 자동 해제)을 잡고 이미 실행 중이면 exit 2. run_safety_windows.ps1 S7 이 잠금 중 두 번째 실행을 확인 |
 | P-26 | 하 | 운영 | WEB-22 Apache 조치의 한글 ErrorDocument 문구가 iso-8859-1 로 응답돼 깨진다 | 해결(1.5.0): 인라인 문구를 ASCII(Not Found/Internal Server Error)로 |
 | P-27 | 하 | 테스트 | `run_safety_windows.ps1:255` `-Force` 매개변수 오류를 무시하고 진행 | 해결(1.5.0): Remove-WebVirtualDirectory 에 없는 -Force 제거 |
+
+## 5. 기획 대비 허점 — 2026-11-05 (1.6.0 계획)
+
+초기 기획(인프라 자동 진단 + 자동 조치)과 현재 구현을 비교한 결과다. 전제: 주 사용자는 점검 컨설턴트이고 조치도
+컨설턴트가 직접 실행한다. 호스트별 실행 + 결과 병합(`lib/merge.py`)으로 충분하며 원격 일괄 실행은 만들지 않는다.
+새 환경·벤더 확장 중단(1.2.0)은 유지한다. 1.5.0(C5·C7·D1~D3·D5)을 끝낸 뒤 진행하며, 1.5.0 의 D4(운영 영향표)는 G-02 와 겹쳐 1.6.0 으로 옮긴다.
+
+| ID | 중요도 | 허점 | 계획 | 상태 |
+|---|---|---|---|---|
+| G-01 | 상 | 무인 조치 불가: confirm 등급(85항목)은 `--yes` 로도 항목마다 y/N 을 묻는다 | `fix --policy <파일> --operator <이름>`. 정책 파일은 jq 없이 sh/PowerShell 이 같은 방식으로 읽는 줄 단위 텍스트(머리말 `category=`·`expires=`·`approver=`, 카테고리별 승인 코드, `[host:이름]` 구역의 `-코드` 제외). 설정값은 가이드 값 고정(정책에서 바꾸지 않음). 카테고리 불일치·유효기간 경과·정책에 없는 호스트(`[host:*]` 없음)면 거부, X-06 유지. 실패 항목은 원복 후 계속, 종료 시 실패 목록 요약(백업 실패 exit 3 만 전체 중단) | 열림 |
+| G-02 | 상 | 원복 불가(F4)·업무 중단 가능(F5) 항목이 무인 일괄 적용될 위험 | 정책에 승인돼 있어도 항목별 `:irreversible` 플래그가 있어야 적용. 항목별 분류표(구 D4 운영 영향표)를 함께 작성 | 열림 |
+| G-03 | 중 | 감사 로그(F6)에 실제 실행자가 남지 않는다(root·공용 관리자 계정) | 정책 모드에서 실행자·승인자·정책 파일 SHA-256·실행 시각 기록 | 열림 |
+| G-04 | 중 | 조치 전·후 비교 산출물이 없다(merge.py 는 호스트 병합만) | `merge.py --diff <전> <후>`: 호스트+코드로 맞춰 조치 완료(VULN→GOOD)·미조치(VULN→VULN)·신규 취약(GOOD/NA→VULN, 맨 위)·확인 필요(MANUAL·ERROR 관련)로 분류 | 열림 |
+| G-05 | 중 | MANUAL 46항목은 보고서 밖에서 손으로 판정·편집해야 한다 | 보고서 화면에서 취약/양호 + 사유를 입력해 `manual_verdicts.json` 으로 저장, merge.py 가 최종·비교 보고서에 반영(result.json 은 불변, 자동/사람 판정 구분 표시) | 열림 |
+| G-06 | 중 | 05_network 조치가 승인 범위와 무관하게 전 항목 명령어를 생성한다 | 장비 직접 적용은 만들지 않는다(콘솔 붙여넣기). 명령어 생성에 G-01 정책 형식을 적용해 승인 항목만 출력 | 열림 |
+| G-07 | 중 | 실제 운영 환경 미검증(§2 L-01·L-02·L-04, 07_pc 클라이언트) | 분석자 PC Hyper-V VM 수동 검증: ① 한글 Windows Server 2022 ② 같은 VM 도메인 컨트롤러 승격 ③ Windows 11(C7 통합) ④ RHEL 9 + SELinux enforcing. 결과는 README 검증 환경 표에 "수동 검증"으로 기록. 실점검 증적 회수는 하지 않는다 | 열림 |
+| G-08 | 중 | 판정 로직과 테스트 기대값이 같은 가이드 해석에서 나온다(§3-4) | guide.json `deviation` 이 있는 항목을 실무 컨설턴트 1명이 외부 검토 | 열림 |
+
+하지 않기로 한 것: 원격 일괄 실행(SSH/WinRM), 실점검 증적 회수, 네트워크 장비 직접 적용, 엑셀 점검표 양식(HTML·CSV 로 제출).

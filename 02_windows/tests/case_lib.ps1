@@ -236,6 +236,21 @@ function global:Test-CaseDnsZone {
     try { return [bool](Get-DnsServerZone -Name 'kisa-case.test' -ErrorAction Stop) } catch { return $false }
 }
 
+function global:New-CaseDnsZone {
+    <# 시험용 영역이 없으면 만든다. DNS 서비스를 방금 기동한 직후(W-32 dns-stopped 다음 케이스)에는 서비스가 Running 이어도
+       관리 RPC 가 아직 준비되지 않아 "Failed to create zone" 이 난다(CI run 42002313909) - 3초 간격 5회까지 재시도한다.
+       이전 케이스가 남긴 영역 파일이 있으면 생성이 실패하므로 영역이 없을 때 남은 파일을 먼저 지운다. #>
+    if (Test-CaseDnsZone) { return }
+    $zf = Join-Path $env:SystemRoot 'System32\dns\kisa-case.test.dns'
+    $last = $null
+    for ($i = 1; $i -le 5; $i++) {
+        if (Test-Path -LiteralPath $zf) { Remove-Item -LiteralPath $zf -Force -ErrorAction SilentlyContinue }
+        try { Add-DnsServerPrimaryZone -Name 'kisa-case.test' -ZoneFile 'kisa-case.test.dns' -ErrorAction Stop; return }
+        catch { $last = $_; if (Test-CaseDnsZone) { return }; Start-Sleep -Seconds 3 }
+    }
+    throw "시험용 DNS 영역 생성 5회 실패: $last"
+}
+
 # ---- 이동식이 아닌 FAT32 볼륨(W-61 / PC-07) ---------------------------------------
 function global:Invoke-CaseDiskpart {
     param([string[]]$Lines)

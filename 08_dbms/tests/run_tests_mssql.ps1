@@ -11,15 +11,23 @@
 #      판정 → (조치 스크립트가 있으면) 조치 → 재진단 → 원복 → 상태 비교 → 정리 → 상태 비교(lib/tests/win_case_runner.ps1)
 #   ③ 운영 안전: 잘못된 비밀번호로 실행해도 로그인 실패가 접속 시도 1회분만 늘고(항목마다 재시도 하지 않음 - 계정
 #      잠금 방지), DB 조회 항목은 "사전 점검 실패" ERROR 로 남는다
-param([switch]$Bootstrap)
+# -Instance(1.5.0 C4): 기본은 러너 LocalDB. mssql-express job 은 정식 인스턴스(.\SQLEXPRESS, 혼합 인증)로 같은 검사를 돌리고
+#   기대값은 LocalDB 와 같은 파일을 쓴다(SQL Server 2022 Express 실측에서 26항목·케이스 11건 모두 같은 판정 - CI run 41973430610).
+#   달라지는 항목이 생기면 그 차이가 인스턴스 종류 때문인지 먼저 확인할 것. 하위 스크립트(케이스·운영 안전)는
+#   $env:KISA_MSSQL_INSTANCE 로 같은 인스턴스를 본다.
+param([switch]$Bootstrap, [string]$Instance = "(localdb)\MSSQLLocalDB")
 $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
-$inst = "(localdb)\MSSQLLocalDB"
+$inst = $Instance
+$env:KISA_MSSQL_INSTANCE = $inst
 
-& SqlLocalDB start MSSQLLocalDB | Out-Null
+if ($inst -like "(localdb)*") { & SqlLocalDB start (($inst -split "\\")[-1]) | Out-Null }
 function Sql([string]$q) { & sqlcmd -S $inst -E -C -b -h -1 -W -s "|" -Q "SET NOCOUNT ON; $q" }
-Write-Host "LocalDB 버전: $((Sql 'SELECT @@VERSION') | Select-Object -First 1)"
+$ErrorActionPreference = "Continue"; $ver = Sql 'SELECT @@VERSION' 2>&1 | ForEach-Object { "$_" }; $verRc = $LASTEXITCODE; $ErrorActionPreference = "Stop"
+# 인스턴스에 접속하지 못하면 이후 준비·케이스가 전부 연쇄 실패해 원인이 묻힌다(C4 1차 실행) - 여기서 끝낸다
+if ($verRc -ne 0) { Write-Host "FAIL: mssql - 인스턴스 $inst 접속 실패: $(@($ver) -join ' ')"; exit 1 }
+Write-Host "인스턴스 $inst 버전: $(@($ver) | Select-Object -First 1)"
 
 function Invoke-Diag([string]$Tag, [hashtable]$Env = @{}) {
     $out = Join-Path $env:TEMP "dbms_mssql_$Tag"

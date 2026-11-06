@@ -16,7 +16,7 @@ $Repo = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation
 . (Join-Path $PSScriptRoot "win_state_snapshot.ps1")
 $runPs1 = Join-Path $Repo "$Category\run.ps1"
 $extra = @()
-if ($Category -eq "08_dbms") { $extra = @("-SqlHost", "(localdb)\MSSQLLocalDB") }
+if ($Category -eq "08_dbms") { $extra = @("-SqlHost", $Script:MssqlTestInstance) }
 $LimitSec = 900
 $fail = @(); $notes = @()
 
@@ -115,11 +115,11 @@ try {
         New-Item -Path "$dsnRoot\ODBC Data Sources" -Force -ErrorAction SilentlyContinue | Out-Null
         Set-ItemProperty -Path "$dsnRoot\ODBC Data Sources" -Name "KisaRsDsn" -Value "SQL Server" -Type String
         New-Item -Path "$dsnRoot\KisaRsDsn" -Force | Out-Null
-        Set-ItemProperty -Path "$dsnRoot\KisaRsDsn" -Name "Server" -Value "(localdb)\MSSQLLocalDB" -Type String
+        Set-ItemProperty -Path "$dsnRoot\KisaRsDsn" -Name "Server" -Value $Script:MssqlTestInstance -Type String
         Set-ItemProperty -Path "$dsnRoot\KisaRsDsn" -Name "PWD" -Value $sec.dsn -Type String
         $controls += @{ Code = "D-13"; Pattern = 'KisaRsDsn'; Why = "비밀번호가 든 ODBC DSN 을 열거했어야 함" }
         # SQL 인증 로그인(두 번째 실행에서 DB_PASSWORD 로 넘긴다 - 진단이 실제로 쓰는 비밀값)
-        & sqlcmd -S "(localdb)\MSSQLLocalDB" -E -C -b -Q "IF SUSER_ID('$sqlLogin') IS NULL CREATE LOGIN [$sqlLogin] WITH PASSWORD = '$($sec.sql)', CHECK_POLICY = OFF; ALTER SERVER ROLE sysadmin ADD MEMBER [$sqlLogin];" | Out-Null
+        & sqlcmd -S $Script:MssqlTestInstance -E -C -b -Q "IF SUSER_ID('$sqlLogin') IS NULL CREATE LOGIN [$sqlLogin] WITH PASSWORD = '$($sec.sql)', CHECK_POLICY = OFF; ALTER SERVER ROLE sysadmin ADD MEMBER [$sqlLogin];" | Out-Null
         if ($LASTEXITCODE -ne 0) { $fail += "S5 준비: SQL 로그인 생성 실패(rc=$LASTEXITCODE)" }
     }
 
@@ -149,7 +149,7 @@ try {
         Remove-Item -Recurse -Force $sqlOut -ErrorAction SilentlyContinue
         $env:DB_PASSWORD = $sec.sql
         try {
-            $p2 = Start-Process powershell -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "`"$runPs1`"", "-OutBase", "`"$sqlOut`"", "-SqlHost", "(localdb)\MSSQLLocalDB", "-SqlUser", $sqlLogin) `
+            $p2 = Start-Process powershell -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "`"$runPs1`"", "-OutBase", "`"$sqlOut`"", "-SqlHost", $Script:MssqlTestInstance, "-SqlUser", $sqlLogin) `
                 -NoNewWindow -PassThru -RedirectStandardOutput "$sqlOut.stdout.txt" -RedirectStandardError "$sqlOut.stderr.txt" -RedirectStandardInput $emptyIn
             if (-not $p2.WaitForExit($LimitSec * 1000)) { $p2.Kill(); $fail += "S2: SQL 인증 진단이 ${LimitSec}초 안에 끝나지 않음" }
         } finally { Remove-Item Env:DB_PASSWORD -ErrorAction SilentlyContinue }
@@ -278,7 +278,7 @@ try {
     if ($Category -eq "08_dbms") {
         Remove-ItemProperty -Path "$dsnRoot\ODBC Data Sources" -Name "KisaRsDsn" -ErrorAction SilentlyContinue
         Remove-Item -Path "$dsnRoot\KisaRsDsn" -Recurse -Force -ErrorAction SilentlyContinue
-        & sqlcmd -S "(localdb)\MSSQLLocalDB" -E -C -Q "IF SUSER_ID('$sqlLogin') IS NOT NULL DROP LOGIN [$sqlLogin];" 2>$null | Out-Null
+        & sqlcmd -S $Script:MssqlTestInstance -E -C -Q "IF SUSER_ID('$sqlLogin') IS NOT NULL DROP LOGIN [$sqlLogin];" 2>$null | Out-Null
     }
 }
 
