@@ -338,7 +338,7 @@
         "oracle",
         "mssql"
       ],
-      "deviation": "Oracle 대상: 가이드 원문의 정적 예외 목록(내장 롤 이름 나열)이 Oracle 19c/21c/23c 이후 추가된 내장 롤을 포함하지 못해 대량 오탐이 발생함을 Docker(gvenzl/oracle-free 23ai) 실기 테스트로 확인. dba_users.oracle_maintained='N' 조건으로 대체해 버전에 관계없이 동작하도록 수정(같은 취지: DBA 외 일반 사용자 계정의 시스템 테이블 접근 차단)."
+      "deviation": "Oracle 대상: 가이드 원문의 정적 예외 목록(내장 롤 이름 나열)이 Oracle 19c/21c/23c 이후 추가된 내장 롤을 포함하지 못해 대량 오탐이 발생함을 Docker(gvenzl/oracle-free 23ai) 실기 테스트로 확인. dba_users.oracle_maintained='N' 조건으로 대체해 버전에 관계없이 동작하도록 수정(같은 취지: DBA 외 일반 사용자 계정의 시스템 테이블 접근 차단). grantee 는 oracle_maintained='N' 인 계정과 사용자 정의 롤(dba_roles)로 본다(원문도 내장 롤 외 role 이 나타나면 취약, 외부 검수 A16). MSSQL 대상: public 은 SQL Server 가 sys 카탈로그 뷰·일부 확장 프로시저 권한을 기본 부여해 배포하므로(원문 Step 2 의 카탈로그 뷰 경유 접근) public 은 sys 스키마가 아닌 ms_shipped 객체와 시스템 기본 테이블만, guest 는 모든 시스템 객체를 본다(외부 검수 A15)."
     },
     {
       "code": "D-12",

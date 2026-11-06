@@ -44,6 +44,20 @@ $MssqlCases = @{
         Cleanup = 'Sql "USE master; REVOKE SELECT ON dbo.MSreplication_options FROM public;" | Out-Null'
         Want = '^public_select_MSreplication_options=1$'; Fix = $true
     }
+    # D-11 취약(A15): guest 에 sys 스키마 시스템 객체(카탈로그 뷰, 음수 object_id) 권한 - 예전 sys.objects 조인은 이 행을 보지 못해 GOOD
+    "guest-catalog-view" = @{
+        Probe = 'Write-Output ("guest_select_sql_logins=" + (Sql "SELECT COUNT(*) FROM master.sys.database_permissions p JOIN master.sys.all_objects o ON p.major_id = o.object_id JOIN master.sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE o.name = ''sql_logins'' AND dp.name = ''guest'' AND p.permission_name = ''SELECT'' AND p.state = ''G'';")[0])'
+        Setup = 'Sql "USE master; GRANT SELECT ON sys.sql_logins TO guest;" | Out-Null'
+        Cleanup = 'Sql "USE master; REVOKE SELECT ON sys.sql_logins FROM guest;" | Out-Null'
+        Want = '^guest_select_sql_logins=1$'; Fix = $true
+    }
+    # D-11 취약(A15): public 에 master 시스템 테이블 SELECT 를 WITH GRANT OPTION(state W)으로 부여 - 예전에는 state G 만 봐서 GOOD
+    "public-with-grant-option" = @{
+        Probe = 'Write-Output ("public_state_MSreplication_options=" + (Sql "SELECT ISNULL(MAX(p.state), ''-'') FROM master.sys.database_permissions p JOIN master.sys.objects o ON p.major_id = o.object_id JOIN master.sys.database_principals dp ON p.grantee_principal_id = dp.principal_id WHERE o.name = ''MSreplication_options'' AND dp.name = ''public'';")[0])'
+        Setup = 'Sql "USE master; GRANT SELECT ON dbo.MSreplication_options TO public WITH GRANT OPTION;" | Out-Null'
+        Cleanup = 'Sql "USE master; REVOKE SELECT ON dbo.MSreplication_options FROM public CASCADE;" | Out-Null'
+        Want = '^public_state_MSreplication_options=W$'; Fix = $true
+    }
     # D-13 수동: 시스템 ODBC 데이터 소스가 등록돼 있음(필요성은 업무 판단 - manual-by-design)
     "odbc-system-dsn" = @{
         Probe = '$k = "HKLM:\SOFTWARE\ODBC\ODBC.INI\ODBC Data Sources"; $v = if (Test-Path $k) { (Get-ItemProperty $k -ErrorAction SilentlyContinue).KisaCaseDsn } else { $null }; Write-Output ("dsn=" + [bool]$v + " keyExists=" + (Test-Path $k))'
