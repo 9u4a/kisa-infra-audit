@@ -10,9 +10,9 @@ KISA 「주요정보통신기반시설 기술적 취약점 분석·평가 방법
 | 범위 | Unix 67 · Windows 64 · Network 38 · Web 26 · DBMS 26 · PC 18 = **239개 항목** |
 | 대상 무설치 | 대상 서버는 OS 기본 도구만 사용합니다 (POSIX sh / PowerShell 5.1) |
 | 진단과 조치 분리 | `run`은 읽기만 하고, `fix`는 dry-run 기본 → `--apply` → `--rollback` 순서로 동작합니다 |
-| 검증 | 카테고리×엔진×항목 421개 조합 중 **266개 양방향 확인**, 155개 사유 기록 후 면제, **누락 0** |
+| 검증 | 카테고리×엔진×항목 421개 조합 중 **265개 양방향 확인**, 156개 사유 기록 후 면제, **누락 0** |
 | CI | GitHub Actions **20개 환경**(매 push 15 + 주간 5)에서 회귀 테스트 — [검증된 실행 환경](#검증된-실행-환경) |
-| 결함 수정 | 양방향 검증(1.4.0)으로 판정·조치 결함 **50건** 수정(교차검증 9 + 양방향 검증 41) — [KNOWN_ISSUES](KNOWN_ISSUES.md) §1-8 |
+| 결함 수정 | 양방향 검증(1.4.0)으로 판정·조치 결함 **50건**(교차검증 9 + 양방향 검증 41), 진단 신뢰성 검수(1.5.0)로 **35건**(거짓 양호 24 · 거짓 취약 1 · 중단·보안 10) 수정 — [KNOWN_ISSUES](KNOWN_ISSUES.md) §1-8·§6 |
 
 ## 왜 만들었나
 PC 보안 점검 솔루션의 "점검 → 원클릭 조치 → 재점검" 흐름을 쓰면서,
@@ -21,7 +21,6 @@ PC 보안 점검 솔루션의 "점검 → 원클릭 조치 → 재점검" 흐름
 
 > ⚠️ 운영 서버에 쓰기 전에 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)(알려진 문제·미검증 범위·검증 환경 한계)를 확인하세요.
 > 진단은 root/관리자 권한으로 실행해야 합니다. 권한이 없으면 확인하지 못한 항목은 양호가 아니라 ERROR 로 표시됩니다.
-> 현재 릴리스는 v1.4.1 이며, 아래 표의 "1.5.0 예정" 항목은 main 에 반영됐지만 아직 릴리스 전입니다.
 
 ## 핵심 원칙
 1. **가이드 원문 우선** — 항목명·판단기준·조치방법은 가이드 원문 그대로 사용, 자동화에 꼭 필요한
@@ -57,26 +56,26 @@ PC 보안 점검 솔루션의 "점검 → 원클릭 조치 → 재점검" 흐름
 | 카테고리 | 검증한 대상(버전) | 실행 위치 | 양방향 확인 / 면제 |
 |---|---|---|---|
 | 01_unix | Debian 12.15, OpenSSH 9.2p1 (POSIX sh) | Docker `debian:12` | 58 / 9 |
-| 01_unix rhel 계열 | Rocky Linux 9.8 (authselect minimal PAM, OpenSSH 9.9p1, cronie, systemd 252) | Docker `rockylinux/rockylinux:9` (1.5.0 예정) | Debian 과 같은 케이스 54건 + rhel 전용 5건(authselect faillock·su wheel), 진단 실기 안전 검사 |
+| 01_unix rhel 계열 | Rocky Linux 9.8 (authselect minimal PAM, OpenSSH 9.9p1, cronie, systemd 252) | Docker `rockylinux/rockylinux:9` | Debian 과 같은 케이스 + rhel 전용(authselect faillock·su wheel) 총 82건, 진단 실기 안전 검사 |
 | 02_windows | Windows Server 2025 Datacenter (10.0.26100, en-US), PowerShell 5.1.26100 | GitHub `windows-2025` 러너 (IIS·FTP·DNS·SNMP 기능 설치) | 49 / 15 |
-| 02_windows Server 2022 | Windows Server 2022 Datacenter (en-US), PowerShell 5.1 | GitHub `windows-2022` 러너 (1.5.0 예정, 주간·수동 job) | 02_windows·07_pc 같은 케이스(OS 차이는 케이스 `expect_os` 에 사유 기록) |
+| 02_windows Server 2022 | Windows Server 2022 Datacenter (en-US), PowerShell 5.1 | GitHub `windows-2022` 러너 (주간·수동 job) | 02_windows·07_pc 같은 케이스(OS 차이는 케이스 `expect_os` 에 사유 기록) |
 | 03_web Apache | Apache httpd 2.4.69 (공식 이미지) | Docker `httpd:2.4` | 16 / 10 |
 | 03_web Apache(Debian 패키지) | apache2 2.4.68-1~deb12u1 | Docker `debian:12` | 16 / 10 |
-| 03_web Apache(RHEL 패키지) | httpd 2.4.62-13.el9_8.9 | Docker `rockylinux/rockylinux:9` (1.5.0 예정) | 전역 vuln/hardened 픽스처·조치 안전·진단 실기 안전 검사(항목별 케이스는 공식 이미지·Debian 기준) |
-| 03_web Tomcat(RHEL 패키지) | tomcat 9.0.120-2.el9_8 | Docker `rockylinux/rockylinux:9` (1.5.0 예정) | 위와 같음, 조치 후 tomcat 계정 읽기 확인 |
+| 03_web Apache(RHEL 패키지) | httpd 2.4.62-13.el9_8.9 | Docker `rockylinux/rockylinux:9` | 전역 vuln/hardened 픽스처·조치 안전·진단 실기 안전 검사(항목별 케이스는 공식 이미지·Debian 기준) |
+| 03_web Tomcat(RHEL 패키지) | tomcat 9.0.120-2.el9_8 | Docker `rockylinux/rockylinux:9` | 위와 같음, 조치 후 tomcat 계정 읽기 확인 |
 | 03_web Nginx | nginx 1.31.8 | Docker `nginx:latest` | 15 / 11 |
 | 03_web Tomcat | Apache Tomcat 10.1.61 | Docker `tomcat:10` | 18 / 8 |
-| 03_web 버전 matrix | Tomcat 9.0.123·11.0.27, nginx 1.30.6(stable) | Docker `tomcat:9`·`tomcat:11`·`nginx:stable` (1.5.0 예정 C5, 주간·수동 job) | 기본 태그와 같은 기대값으로 전역 픽스처·조치·운영 안전·항목별 케이스 |
-| 03_web IIS | IIS 10.0 (Windows Server 2025, URL Rewrite·ARR 포함) | `windows-2025` 러너 | 20 / 6 |
+| 03_web 버전 matrix | Tomcat 9.0.123·11.0.27, nginx 1.30.6(stable) | Docker `tomcat:9`·`tomcat:11`·`nginx:stable` (주간·수동 job) | 기본 태그와 같은 기대값으로 전역 픽스처·조치·운영 안전·항목별 케이스 |
+| 03_web IIS | IIS 10.0 (Windows Server 2025, URL Rewrite·ARR 포함) | `windows-2025` 러너 | 19 / 7 |
 | 05_network | Cisco IOS 15.2 형식 running-config 텍스트 (실장비 아님), Python 3.12 | Ubuntu 24.04 러너 | 31 / 7 |
 | 07_pc | PC 18항목을 Windows Server 2025 러너에서 실행 (Windows 10/11 클라이언트 실기는 아님) | `windows-2025` 러너 | 12 / 6 |
-| 07_pc 실 PC(수동) | Windows 11 Home 25H2 (10.0.26200, ko-KR), PowerShell 5.1 | 사용자 PC 1대에서 관리자 권한으로 읽기 전용 진단 (1.5.0 예정 C7, 2026-11-06) | 18항목 오류 0, 판정 18건을 독립 명령으로 대조, 콘솔 코드페이지 949·65001 결과 동일 |
+| 07_pc 실 PC(수동) | Windows 11 Home 25H2 (10.0.26200, ko-KR), PowerShell 5.1 | 사용자 PC 1대에서 관리자 권한으로 읽기 전용 진단 (2026-11-06) | 18항목 오류 0, 판정 18건을 독립 명령으로 대조, 콘솔 코드페이지 949·65001 결과 동일 |
 | 08_dbms MySQL | MySQL 8.4.13 | Docker `mysql:8` | 7 / 19 |
 | 08_dbms PostgreSQL | PostgreSQL 16.15 | Docker `postgres:16` | 5 / 21 |
-| 08_dbms 버전 matrix | MySQL 8.0.46, PostgreSQL 14.24·18.6 | Docker `mysql:8.0`·`postgres:14`·`postgres:18` (1.5.0 예정 C5, 주간·수동 job) | 기본 태그와 같은 기대값으로 원격 픽스처·조치·운영 안전·항목별 케이스 |
+| 08_dbms 버전 matrix | MySQL 8.0.46, PostgreSQL 14.24·18.6 | Docker `mysql:8.0`·`postgres:14`·`postgres:18` (주간·수동 job) | 기본 태그와 같은 기대값으로 원격 픽스처·조치·운영 안전·항목별 케이스 |
 | 08_dbms Oracle | Oracle AI Database 26ai Free | Docker `gvenzl/oracle-free:23-slim` (다이제스트 고정, 주간·수동 job) | 14 / 12 |
 | 08_dbms MSSQL | SQL Server 2025 LocalDB 17.0.4025.3 (RTM-CU3) | `windows-2025` 러너 | 5 / 21 |
-| 08_dbms MSSQL(정식 인스턴스) | SQL Server 2022 Express 16.0.1000.6 (RTM, 혼합 인증) | `windows-2025` 러너 + choco `sql-server-express` (1.5.0 예정, 주간·수동 job) | LocalDB 와 같은 판정·케이스 11건·운영 안전 |
+| 08_dbms MSSQL(정식 인스턴스) | SQL Server 2022 Express 16.0.1000.6 (RTM, 혼합 인증) | `windows-2025` 러너 + choco `sql-server-express` (주간·수동 job) | LocalDB 와 같은 판정·케이스 11건·운영 안전 |
 
 - 버전은 위 실행의 job summary에 남은 값입니다. linux-integration job 의 "엔진 버전 기록" 단계가 매 실행마다 남깁니다.
 - Oracle 을 뺀 이미지 태그는 고정하지 않았습니다. 그래서 이후 실행은 더 새로운 마이너 버전으로 돌 수 있고, 실제 버전은 각 실행의 summary 에서 확인할 수 있습니다.
@@ -154,7 +153,7 @@ sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL; Oracle �
 | 1.2.1 ~ 1.3.3 ✅ | 운영 안전 기준(진단 S1~S7, 조치 F1~F6), 진단 실행 검수 하네스, 전 파일 코드 대조(약 130건 수정), 거짓 PASS 경로 16건 수정 |
 | 1.4.0 ✅ | 전 항목 양방향 판정 검증(누락 0), 판정·조치 결함 50건 수정(교차검증 X-01~X-09 9건 + 양방향 검증 41건) |
 | 1.4.1 ✅ | 조치 등급·조치 스크립트 일관성 검사, 결정 대기 항목(Q-01~Q-06) 처리 |
-| 1.5.0 🚧 | Rocky 9·RHEL 패키지·Server 2022·MSSQL Express·엔진 버전 matrix·한글 출력 파싱 검증 |
+| 1.5.0 ✅ | Rocky 9·RHEL 패키지·Server 2022·MSSQL Express·엔진 버전 matrix·한글 출력 파싱·변이 검증, 진입점 lib 화, 진단 신뢰성 전체 검수(35건 수정) |
 | 1.6.0 📋 | 정책 파일 기반 조치, 조치 전후 비교 보고서 |
 
 ## 라이선스 · 출처
