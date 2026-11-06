@@ -104,6 +104,8 @@
     run_safety_windows.ps1 이 잠금 중 두 번째 실행을 검사. run.ps1 준수율도 sh·merge.py 와 같은 버림.
 - `Remove-FixAclIdentity`(W-22/43/46/58, IIS WEB-03/14/26 조치)가 설명과 달리 거부(Deny) ACE 까지 지우던 문제 - "Everyone 거부"
   같은 보호 설정이 사라져 접근이 오히려 넓어질 수 있었다. 허용 ACE 만 제거(P-24 머리말 작성 중 발견).
+- 08_dbms 케이스 러너(db_case_runner.py): 원복·조치 직후 스냅샷에 서버 재기동 중 접속 오류(ERROR 2013 등)가 섞이면 "원복 후
+  상태 다름"으로 FAIL 하던 일시 실패(CI run 42144941623, mysql D-07) - 접속 오류가 보이면 서버 준비를 기다려 한 번 더 찍는다.
 ### Changed (조치 등급, KNOWN_ISSUES §4)
 - auto → confirm(deviation 기록): U-40·U-42·U-52·U-54(서비스 즉시 중지·공유 차단), U-65(공용 pool.ntp.org 추가), W-21(FTP 중지),
   D-18·D-22(Oracle PUBLIC 권한 회수·RESOURCE_LIMIT). `--apply --yes` 일괄 적용에서 빠지고 항목별 확인을 받는다.

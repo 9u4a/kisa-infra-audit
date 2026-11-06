@@ -18,6 +18,7 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -33,6 +34,21 @@ def sh(container: str, *args: str, timeout: int = 900) -> tuple[int, str]:
     p = subprocess.run(["docker", "exec", "-u", "0", container, "sh", CASES_SH, *args], capture_output=True,
                        timeout=timeout, env=env)
     return p.returncode, p.stdout.decode("utf-8", "replace") + p.stderr.decode("utf-8", "replace")
+
+
+# 스냅샷 직전에 서버가 재기동 중이면(조치·원복·감독 루프의 재기동) 클라이언트 접속 오류가 상태 차이로 보인다 - CI run 42144941623
+# mysql D-07 원복 직후 "ERROR 2013 Lost connection to MySQL server during query" 가 "원복 후 상태 다름"으로 FAIL 했다.
+CONN_ERR = re.compile(r"ERROR 20(02|03|06|13)|Lost connection|could not connect|Connection refused|server closed the connection|ORA-(12514|12541|01033|01034)")
+
+
+def snapshot(container: str, engine: str) -> tuple[int, str]:
+    """스냅샷에 접속 오류가 섞이면 서버 준비를 기다려 한 번 더 찍는다(상태 차이 자체는 그대로 드러난다).
+    매번 미리 기다리지 않는다 - root 빈 비밀번호 같은 케이스 상태에서는 준비 확인(root 비밀번호 로그인)이 일부러 실패한다."""
+    rc, out = sh(container, engine, "snapshot")
+    if CONN_ERR.search(out):
+        sh(container, engine, "ready", "600" if engine == "oracle" else "120")
+        rc, out = sh(container, engine, "snapshot")
+    return rc, out
 
 
 def kv(text: str) -> dict[str, str]:
@@ -59,7 +75,7 @@ def main() -> int:
     if not cases:
         print(f"FAIL: {engine}/cases - cases.json 에 {engine} 케이스가 없음")
         return 1
-    rc, base = sh(container, engine, "snapshot")
+    rc, base = snapshot(container, engine)
     if rc != 0 or not base.strip():
         print(f"FAIL: {engine}/cases - 기준 상태 스냅샷 실패\n{base[-800:]}")
         return 1
@@ -91,7 +107,7 @@ def main() -> int:
             executed += 1
             if meta.get("FIX") == "1" and expect == "VULN" and not problems:
                 n_fix += 1
-                _, pre = sh(container, engine, "snapshot")
+                _, pre = snapshot(container, engine)
                 rc, out = sh(container, engine, name, "fix", code)
                 r = kv(out)
                 want = meta.get("FIXEXPECT", "GOOD")
@@ -106,7 +122,7 @@ def main() -> int:
                     if rb.get("RB_IRREV") != "1":
                         problems.append(f"원복 불가 항목인데 원복 결과에 '원복 불가' 기록이 없음({out.strip()[:200]})")
                 else:
-                    _, post = sh(container, engine, "snapshot")
+                    _, post = snapshot(container, engine)
                     if rb.get("RB_RC") != "0":
                         problems.append(f"원복 실패 RB_RC={rb.get('RB_RC')}")
                     if post != pre:
@@ -115,7 +131,7 @@ def main() -> int:
             rc, out = sh(container, engine, name, "restore")
             if rc != 0:
                 problems.append(f"restore 실패(rc={rc}): {out.strip()[-300:]}")
-            _, now = sh(container, engine, "snapshot")
+            _, now = snapshot(container, engine)
             if now != base:
                 problems.append("restore 후 상태가 기준선과 다름(다음 케이스 오염):\n      " + diff(base, now))
         dt = time.time() - t0
