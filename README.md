@@ -58,11 +58,13 @@ Unix/Windows/Web/Network/PC/DBMS 6개 카테고리를 자동 진단하고 보고
 | 03_web Tomcat(RHEL 패키지) | tomcat 9.0.120-2.el9_8 | Docker `rockylinux/rockylinux:9` (1.5.0) | 위와 같음, 조치 후 tomcat 계정 읽기 확인 |
 | 03_web Nginx | nginx 1.31.8 | Docker `nginx:latest` | 15 / 11 |
 | 03_web Tomcat | Apache Tomcat 10.1.61 | Docker `tomcat:10` | 18 / 8 |
+| 03_web 버전 matrix | Tomcat 9.0.123·11.0.27, nginx 1.30.6(stable) | Docker `tomcat:9`·`tomcat:11`·`nginx:stable` (1.5.0 C5, 주간·수동 job) | 기본 태그와 같은 기대값으로 전역 픽스처·조치·운영 안전·항목별 케이스 |
 | 03_web IIS | IIS 10.0 (Windows Server 2025, URL Rewrite·ARR 포함) | `windows-2025` 러너 | 20 / 6 |
 | 05_network | Cisco IOS 15.2 형식 running-config 텍스트 (실장비 아님), Python 3.12 | Ubuntu 24.04 러너 | 31 / 7 |
 | 07_pc | PC 18항목을 Windows Server 2025 러너에서 실행 (Windows 10/11 클라이언트 실기는 아님) | `windows-2025` 러너 | 12 / 6 |
 | 08_dbms MySQL | MySQL 8.4.13 | Docker `mysql:8` | 7 / 19 |
 | 08_dbms PostgreSQL | PostgreSQL 16.15 | Docker `postgres:16` | 5 / 21 |
+| 08_dbms 버전 matrix | MySQL 8.0.46, PostgreSQL 14.24·18.6 | Docker `mysql:8.0`·`postgres:14`·`postgres:18` (1.5.0 C5, 주간·수동 job) | 기본 태그와 같은 기대값으로 원격 픽스처·조치·운영 안전·항목별 케이스 |
 | 08_dbms Oracle | Oracle AI Database 26ai Free | Docker `gvenzl/oracle-free:23-slim` (다이제스트 고정, 주간·수동 job) | 14 / 12 |
 | 08_dbms MSSQL | SQL Server 2025 LocalDB 17.0.4025.3 (RTM-CU3) | `windows-2025` 러너 | 5 / 21 |
 | 08_dbms MSSQL(정식 인스턴스) | SQL Server 2022 Express 16.0.1000.6 (RTM, 혼합 인증) | `windows-2025` 러너 + choco `sql-server-express` (1.5.0, 주간·수동 job) | LocalDB 와 같은 판정·케이스 11건·운영 안전 |

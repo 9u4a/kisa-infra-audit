@@ -145,13 +145,15 @@ EOF
             # 소유자가 달라진다 - 원복 비교에서 뺀다(내용은 다음 기동 때 다시 덤프됨).
             find /var/lib/mysql -xdev -user 0 ! -name ib_buffer_pool 2>/dev/null | sort ;;
         postgres)
+            # passwordcheck.* 는 모듈이 메모리에 올라 있는 동안만 보이는 GUC(18 부터 min_password_length) - D-03 원복은
+            # 설정(postgresql.auto.conf, 아래 file_state)만 되돌리고 모듈은 재기동 때 내려간다("# 원복: 일부"). 설정 파일로 비교한다.
             pg <<'EOF'
 SELECT rolname, rolsuper, rolcanlogin, rolvaliduntil, rolpassword IS NULL, left(rolpassword, 5) FROM pg_authid ORDER BY rolname;
-SELECT name, setting FROM pg_settings WHERE context NOT IN ('postmaster', 'internal') ORDER BY name;
+SELECT name, setting FROM pg_settings WHERE context NOT IN ('postmaster', 'internal') AND name NOT LIKE 'passwordcheck.%' ORDER BY name;
 SELECT grantee, count(*) FROM information_schema.role_table_grants WHERE table_schema = 'pg_catalog' GROUP BY 1 ORDER BY 1;
 SELECT line_number, type, database, user_name, address, auth_method FROM pg_hba_file_rules ORDER BY 1;
 EOF
-            _d=/var/lib/postgresql/data
+            _d=$PGD
             file_state "$_d/postgresql.conf" "$_d/pg_hba.conf" "$_d/postgresql.auto.conf" ;;
         oracle)
             ora_pdb <<'EOF'
@@ -242,7 +244,8 @@ meta() {
 }
 
 MYCNF=/etc/my.cnf
-PGD=/var/lib/postgresql/data
+# 공식 이미지 ENV PGDATA(18 부터 /var/lib/postgresql/<major>/docker - C5 postgres:18 실측), 없으면 예전 기본 경로
+PGD=${PGDATA:-/var/lib/postgresql/data}
 case_setup() {
     case "$ENGINE:$CASE" in
         # MySQL ---------------------------------------------------------------------------------

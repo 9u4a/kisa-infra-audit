@@ -3,7 +3,8 @@
 # util-linux(script): confirm 등급 조치(fix.sh 가 /dev/tty 에서 y/N 을 읽음)를 가상 터미널로 시험하기 위함
 # (run_tests.sh 조치 회귀 테스트 - postgres:16 이미지에는 처음부터 들어 있음).
 # diffutils·procps-ng: lib/tests/run_safety.sh 가 쓰는 diff·pkill·sysctl(없으면 전후 비교가 빈 결과가 되어 거짓 통과).
-FROM mysql:8
+ARG BASE_IMAGE=mysql:8
+FROM ${BASE_IMAGE}
 RUN microdnf install -y util-linux diffutils procps-ng && microdnf clean all
 COPY . /infra
 WORKDIR /infra

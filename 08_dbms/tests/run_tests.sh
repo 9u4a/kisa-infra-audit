@@ -33,6 +33,20 @@ mkdir -p "$TMPW"
 trap 'rm -f "$TMPW"/dbsafety_* "$TMPW"/fix_*.out 2>/dev/null; rmdir "$TMPW" 2>/dev/null' EXIT
 trap 'exit 130' INT TERM
 
+# 엔진 버전 matrix(1.5.0 C5): 서버·클라이언트 이미지를 바꿔 같은 검사를 돈다(CI engine-matrix job, 주간·수동).
+#   MYSQL_IMAGE=mysql:8.0 sh 08_dbms/tests/run_tests.sh mysql
+# 버전에 따라 기본값이 달라 판정이 정당하게 바뀌는 항목은 fixtures/expected_<엔진>@<태그>_<모드>.json 을 두고(없으면 기본 파일),
+# 그 차이를 가이드 판단기준으로 검토한 사유를 파일의 "_note" 에 적는다.
+MYSQL_IMAGE=${MYSQL_IMAGE:-mysql:8}
+PG_IMAGE=${PG_IMAGE:-postgres:16}
+srv_image() { case "$1" in mysql) echo "$MYSQL_IMAGE" ;; postgres) echo "$PG_IMAGE" ;; esac; }
+expected_file() {  # expected_file <엔진> <모드>
+    _tag=$(srv_image "$1"); _tag=${_tag##*:}
+    _ef="08_dbms/tests/fixtures/expected_${1}@${_tag}_${2}.json"
+    [ -f "$_ef" ] || _ef="08_dbms/tests/fixtures/expected_${1}_${2}.json"
+    echo "$_ef"
+}
+
 ENGINES=${*:-mysql postgres}
 for _e in $ENGINES; do
     case "$_e" in mysql|postgres|oracle) ;; *) echo "usage: run_tests.sh [mysql] [postgres] [oracle]" >&2; exit 2 ;; esac
@@ -46,7 +60,7 @@ fail=0
 for engine in $SQL_ENGINES; do
     image="kisa-dbms-${engine}-test"
     echo "[빌드] $engine 클라이언트 이미지..."
-    docker build -q -f "08_dbms/tests/Dockerfile.$engine" -t "$image" . >/dev/null
+    docker build -q --build-arg BASE_IMAGE="$(srv_image "$engine")" -f "08_dbms/tests/Dockerfile.$engine" -t "$image" . >/dev/null
 
     for mode in vuln hardened; do
         echo "[*] $engine/$mode 픽스처 실행..."
@@ -54,9 +68,9 @@ for engine in $SQL_ENGINES; do
         docker network create "$net" >/dev/null
 
         if [ "$engine" = "mysql" ]; then
-            db_cid=$(docker run -d --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! mysql:8)
+            db_cid=$(docker run -d --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! "$MYSQL_IMAGE")
         else
-            db_cid=$(docker run -d --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! postgres:16)
+            db_cid=$(docker run -d --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! "$PG_IMAGE")
         fi
 
         # DB 가 접속을 받을 때까지 대기(최대 60초)
@@ -129,7 +143,7 @@ PYEOF
             if [ ! -f "$result_file" ]; then
                 echo "FAIL: $engine/$mode - 컨테이너에서 result.json 을 꺼내지 못함"
                 fail=1
-            elif python3 - "$result_file" "08_dbms/tests/fixtures/expected_${engine}_${mode}.json" "$engine/$mode" <<'PYEOF'
+            elif python3 - "$result_file" "$(expected_file "$engine" "$mode")" "$engine/$mode" <<'PYEOF'
 import json, sys
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -163,10 +177,10 @@ for engine in $SQL_ENGINES; do
     net="kisa-dbms-net-$$-$engine-safety"
     docker network create "$net" >/dev/null
     if [ "$engine" = "mysql" ]; then
-        db_cid=$(docker run -d --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! mysql:8)
+        db_cid=$(docker run -d --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! "$MYSQL_IMAGE")
         dbuser="root"
     else
-        db_cid=$(docker run -d --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! postgres:16)
+        db_cid=$(docker run -d --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! "$PG_IMAGE")
         dbuser="postgres"
     fi
     ready=0; i=0
@@ -258,9 +272,9 @@ for engine in $SQL_ENGINES; do
     cli="kisa-db-safety-cli-$$-$engine"
     docker network create "$net" >/dev/null
     if [ "$engine" = "mysql" ]; then
-        docker run -d --name "$srv" --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! mysql:8 >/dev/null; dbuser="root"
+        docker run -d --name "$srv" --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! "$MYSQL_IMAGE" >/dev/null; dbuser="root"
     else
-        docker run -d --name "$srv" --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! postgres:16 \
+        docker run -d --name "$srv" --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! "$PG_IMAGE" \
             -c logging_collector=on -c log_destination=csvlog -c log_directory=/tmp/kisa_pglog -c log_filename=pg.log \
             -c log_statement=all >/dev/null; dbuser="postgres"
     fi
@@ -458,9 +472,9 @@ for engine in $SQL_ENGINES; do
     srv="kisa-db-fix-srv-$$-$engine"
     docker network create "$net" >/dev/null
     if [ "$engine" = "mysql" ]; then
-        docker run -d --name "$srv" --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! mysql:8 >/dev/null
+        docker run -d --name "$srv" --network "$net" --network-alias dbhost -e MYSQL_ROOT_PASSWORD=TestRoot123! "$MYSQL_IMAGE" >/dev/null
     else
-        docker run -d --name "$srv" --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! postgres:16 >/dev/null
+        docker run -d --name "$srv" --network "$net" --network-alias dbhost -e POSTGRES_PASSWORD=TestRoot123! "$PG_IMAGE" >/dev/null
     fi
     ready=0; i=0
     while [ "$i" -lt 30 ]; do
@@ -558,10 +572,17 @@ for engine in $ENGINES; do
     srv="kisa-db-case-$$-$engine"
     t0=$(date +%s)
     echo "[*] $engine 항목별 케이스(로컬 모드)..."
-    docker build -q -f "08_dbms/tests/Dockerfile.$engine" -t "$image" . >/dev/null
+    docker build -q --build-arg BASE_IMAGE="$(srv_image "$engine")" -f "08_dbms/tests/Dockerfile.$engine" -t "$image" . >/dev/null
     case "$engine" in
-        mysql) docker run -d --name "$srv" -e MYSQL_ROOT_PASSWORD=TestRoot123! --entrypoint sh "$image" \
-                   /infra/08_dbms/tests/fixtures/db_supervisor.sh mysql --mysql-native-password=ON >/dev/null ;;
+        mysql)
+            # 8.4 부터 mysql_native_password 가 기본 비활성이라 켜야 하고, 8.0 은 내장 플러그인이라 이 옵션 자체를 모른다
+            # (unknown variable 로 기동 실패 - C5 mysql:8.0 실측). 서버가 옵션을 알 때만 넘긴다.
+            native_opt=""
+            docker run --rm --entrypoint mysqld "$image" --verbose --help 2>/dev/null | grep -q '^ *--mysql-native-password\[=' \
+                && native_opt="--mysql-native-password=ON"
+            # shellcheck disable=SC2086
+            docker run -d --name "$srv" -e MYSQL_ROOT_PASSWORD=TestRoot123! --entrypoint sh "$image" \
+                   /infra/08_dbms/tests/fixtures/db_supervisor.sh mysql $native_opt >/dev/null ;;
         postgres) docker run -d --name "$srv" -e POSTGRES_PASSWORD=TestRoot123! --entrypoint sh "$image" \
                    /infra/08_dbms/tests/fixtures/db_supervisor.sh postgres >/dev/null ;;
         oracle) docker run -d --name "$srv" -e ORACLE_PASSWORD=TestRoot123 "$image" >/dev/null ;;

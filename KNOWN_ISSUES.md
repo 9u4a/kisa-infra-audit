@@ -311,10 +311,10 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | 01_unix 상용 Unix | — | Solaris/AIX/HP-UX 7항목은 문서 기준 구현이다(결과에 "미검증" 표기) | L-03 |
 | 02_windows OS | Server 2025 Datacenter, Server 2022 Datacenter(1.5.0 C3, 주간·수동 실행), en-US, 워크그룹. 한글 출력 파싱은 실제 샘플 단위 테스트(C6) | Server 2016/2019(2012 R2 포함) 의 레지스트리 기본값·기능 차이, 한글 로캘에서의 진단 전체 실행, 도메인 컨트롤러 분기(W-01~03 열거 생략, W-16, W-32, W-60, W-63) | L-01, L-02, L-10 |
 | 07_pc | 서버 OS 위에서 PC 항목 실행 | Windows 10/11 클라이언트 SKU 실기 미검증. 에디션별 정책 차이와 Defender 실시간 감시(PC-14), 클라이언트 전용 기본값이 서버와 다를 수 있다 | L-06 |
-| 03_web | 공식 이미지 Apache/Nginx/Tomcat, Debian apache2, Rocky 9 httpd·tomcat 9 패키지(1.5.0 C2), IIS 10.0 | RHEL 패키지의 항목별 케이스, SELinux enforcing, Tomcat 11.x, Nginx stable 계열, IIS 의 다른 OS 버전 | L-04 |
+| 03_web | 공식 이미지 Apache/Nginx/Tomcat, Debian apache2, Rocky 9 httpd·tomcat 9 패키지(1.5.0 C2), IIS 10.0 | RHEL 패키지의 항목별 케이스, SELinux enforcing, IIS 의 다른 OS 버전. Tomcat 9/11·Nginx stable 은 1.5.0 C5 CI `engine-matrix`(주간·수동)로 검증 | L-04 |
 | 08_dbms MSSQL | LocalDB 2025, SQL Server 2022 Express 정식 인스턴스(1.5.0 C4, 서비스 계정 NT Service\MSSQL$SQLEXPRESS, 혼합 인증, 주간·수동 실행) | Standard/Enterprise 전용 기능(SQL Agent 등), TCP 포트를 연 원격 접속 구성, SQL Server 2019 이하, 2012 미만 해시(D-08) | L-09 |
 | 08_dbms Oracle | 26ai Free 단일 인스턴스 | 19c 등 이전 버전, 12.1 이하 리스너 비밀번호(D-12), RAC/ASM. root 구동(D-07 VULN)은 모의 프로세스로만 검증 | L-05 |
-| 08_dbms MySQL/PostgreSQL | MySQL 8.4, PostgreSQL 16 | MySQL 8.0/5.7, MariaDB, PostgreSQL 다른 메이저 버전의 시스템 테이블·기본값 차이 | — |
+| 08_dbms MySQL/PostgreSQL | MySQL 8.4·8.0, PostgreSQL 16·14·18(8.0/14/18 은 1.5.0 C5 CI `engine-matrix`, 주간·수동) | MySQL 5.7, MariaDB(확장 중단), PostgreSQL 15·17 등 matrix 밖 메이저 버전 | — |
 | 05_network | IOS 15.2 형식 텍스트 픽스처 | 실장비 `show running-config` 출력. IOS-XE·다른 IOS 버전의 문법·기본값 생략 차이 | L-07 |
 
 ### 3-3. 자동 판정 대신 사람이 판단해야 하는 항목
