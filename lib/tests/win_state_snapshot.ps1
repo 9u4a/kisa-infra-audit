@@ -66,8 +66,10 @@ function Get-WinStateSnapshot {
         @(Get-NetFirewallRule | Sort-Object Name | ForEach-Object { "rule|$($_.Name)|$($_.Enabled)|$($_.Action)|$($_.Direction)|$($_.Profile)" }) +
         @(Get-NetFirewallPortFilter -All | ForEach-Object { "port|$($_.InstanceID)|$($_.Protocol)|$($_.LocalPort -join ',')|$($_.RemotePort -join ',')" } | Sort-Object) +
         @(Get-NetFirewallAddressFilter -All | ForEach-Object { "addr|$($_.InstanceID)|$($_.LocalAddress -join ',')|$($_.RemoteAddress -join ',')" } | Sort-Object)) -join "`n"
+    # 관리 공유(ADMIN$·C$ 등 Special)는 이름·경로만 비교한다. 그 접근 권한은 OS 가 관리하고, Server 서비스 재시작 직후에는
+    # Get-SmbShareAccess 결과가 비었다가 다시 나온다(CI run 42146025845 W-23 원복 비교에서 ADMIN$/C$/D$ 권한 줄만 새로 생김).
     $s.shares = (@(Get-SmbShare | ForEach-Object { "$($_.Name)|$($_.Path)" }) +
-        @(Get-SmbShare | Get-SmbShareAccess | ForEach-Object { "$($_.Name)|$($_.AccountName)|$($_.AccessRight)" }) | Sort-Object) -join "`n"
+        @(Get-SmbShare | Where-Object { -not $_.Special } | Get-SmbShareAccess | ForEach-Object { "$($_.Name)|$($_.AccountName)|$($_.AccessRight)" }) | Sort-Object) -join "`n"
     $s.accounts = ((Get-LocalUser | ForEach-Object { "$($_.Name)|$($_.Enabled)" }) +
         (Get-LocalGroupMember -SID S-1-5-32-544 | ForEach-Object { "admin|$($_.Name)" })) -join "`n"
     $s.tasks = (Get-ScheduledTask | Sort-Object TaskPath, TaskName | ForEach-Object { "$($_.TaskPath)$($_.TaskName)|$($_.State)" } |
