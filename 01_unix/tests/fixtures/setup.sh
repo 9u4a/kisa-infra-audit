@@ -1,7 +1,7 @@
 #!/bin/sh
 # 01_unix/tests/fixtures/setup.sh <vuln|hardened> — Dockerfile이 빌드 중 호출해 컨테이너를
 # 의도적으로 취약/강화된 상태로 만든다. 모든 항목을 다 다루지는 않는다(초기 범위: 계정·파일
-# 권한 위주 ~20항목 + 서비스 2종) - 01_unix/CLAUDE.md "테스트 커버리지" 절 참고, 이후 세션에서
+# 권한 위주 ~20항목 + 서비스 2종) - 이후
 # 계속 넓혀갈 것.
 set -eu
 MODE=$1

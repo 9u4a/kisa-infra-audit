@@ -2,7 +2,7 @@
 # 변경: DNS 서비스 구동 중이면 AllowUpdate≠0 인 영역의 동적 업데이트를 0(없음)으로 변경(WMI, 자동 원복 불가)
 # checks/W-32.ps1: 취약 = AllowUpdate != 0 인 영역 존재. 가이드 권고값(0=없음)으로 설정한다.
 # W-25 와 동일하게 MicrosoftDNS_Zone 은 CIM(WMI) 클래스라 Restore-FixItem 표준 원복 대상에
-# 포함되지 않는다(02_windows/CLAUDE.md 참고).
+# 포함되지 않는다.
 
 $svc = Get-Service -Name "DNS" -ErrorAction SilentlyContinue
 if (-not $svc -or $svc.Status -ne "Running") {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """05_network/tests/run_tests.py — Cisco IOS 픽스처 회귀 테스트 (분석자 PC/CI 전용).
 
-05_network/CLAUDE.md가 예고해둔 "실제 장비 출력을 검증한 것이 아니라 실제 Cisco IOS 문법에
+"실제 장비 출력을 검증한 것이 아니라 실제 Cisco IOS 문법에
 맞게 작성한 대표 입력값으로 판정 로직을 단위 테스트한 것" 수준의 테스트를 영구 픽스처로 고정한다.
 지금까지는 세션 중 임시로만 만들고 버렸던 vuln/hardened 두 running-config를 fixtures/ 에
 커밋해두고, 각 항목의 "기대 판정"을 expected_<tag>.json 과 비교한다 - run.py 출력이 하나라도

@@ -5,7 +5,7 @@
 # Need 기준이 "Failure"만 요구하는 경우도 있으나 "Success and Failure"가 상위 호환이다).
 # auditpol 설정은 레지스트리가 아닌 감사 정책 저장소(SecEdit 와 별도)에 저장되어 표준
 # 레지스트리 헬퍼로 백업할 수 없다 - 변경 전 상태를 changes.log 증적에만 남기고, 표준
-# Restore-FixItem 원복 대상에는 포함하지 않는다(02_windows/CLAUDE.md 참고).
+# Restore-FixItem 원복 대상에는 포함하지 않는다.
 
 $subcats = @(
     "{0CCE923A-69AE-11D9-BED3-505054503030}",

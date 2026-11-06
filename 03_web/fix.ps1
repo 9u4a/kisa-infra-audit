@@ -11,7 +11,7 @@
 #
 # **실제 검증 범위(0.9.1, 사용자 확인)**: 실제 IIS가 설치된 호스트가 없어(0.8.1 IIS 진단과 동일한
 # 이유) 문법 파싱·BOM·정적분석까지만 확인했다. WebAdministration cmdlet 자체의 실제 동작은
-# 검증하지 못했다. 03_web/CLAUDE.md 참고.
+# 검증하지 못했다.
 
 [CmdletBinding()]
 param(

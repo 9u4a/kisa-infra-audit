@@ -131,9 +131,8 @@ jobs:
 
   network:
     # 05_network 는 오프라인 설정파일 분석이라 Docker/실제 장비가 필요 없다 - Cisco IOS
-    # vuln/hardened 픽스처 2종으로 38항목 전체 판정 로직을 회귀 테스트한다(05_network/
-    # CLAUDE.md "실제 장비 출력을 검증한 게 아니라 판정 로직을 단위 테스트한 것"임을 그대로
-    # 승계 - 영구 픽스처로 고정했을 뿐 검증 엄밀성 수준 자체는 바뀌지 않는다).
+    # vuln/hardened 픽스처 2종으로 38항목 전체 판정 로직을 회귀 테스트한다(실제 장비
+    # 출력을 검증한 게 아니라 판정 로직을 단위 테스트한 것 - 영구 픽스처로 고정했을 뿐 검증 엄밀성 수준 자체는 바뀌지 않는다).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -143,7 +142,7 @@ jobs:
   linux-integration:
     # Docker(Debian 12)로 01_unix 를 회귀 테스트한다 - vuln/hardened 두 픽스처로 ~20개 항목은
     # 명시적으로 취약/강화 상태를 주입하고, 나머지는 이 베이스 이미지의 있는 그대로의 기본값을
-    # 반영한다(완전한 전수 강화 검증이 아님 - 01_unix/CLAUDE.md "테스트 커버리지" 참고).
+    # 반영한다(완전한 전수 강화 검증이 아님).
     # rhel 계열(Rocky Linux 9)은 1.5.0 부터 항목별 케이스·진단 실기 안전 검사로 같이 돈다(run_tests.sh, Dockerfile.cases.rhel).
     runs-on: ubuntu-latest
     steps:
@@ -169,7 +168,7 @@ jobs:
     # windows-latest(매 job마다 새로 생성되는 휘발성 VM)에서 02_windows/07_pc 를 실제로
     # 레지스트리까지 바꿔가며 회귀 테스트한다 - 이전까지는 Windows 레지스트리/보안정책을 실제로
     # 바꾸는 Docker 동급 격리 환경이 없어 "파싱/BOM/PSScriptAnalyzer만, 실제 --Apply 미실행"
-    # 수준으로만 검증했는데(02_windows·07_pc/CLAUDE.md "실제 검증 범위" 참고), windows-latest
+    # 수준으로만 검증했는데, windows-latest
     # Actions 러너가 그 역할을 대신할 수 있다 - 휘발성이라 끝나면 버려지므로 로컬 개발자 PC에서는
     # 절대 이 스크립트(fixtures/apply.ps1)를 직접 실행하지 말 것. 02_windows는 W-15(개인키
     # 암호 보호), 07_pc는 PC-12(자동 로그인)만 명시적으로 vuln/hardened를 가르고 나머지는 이

@@ -1,7 +1,7 @@
 #!/bin/sh
 # 03_web/tests/fixtures/setup.sh <apache|apache-debian|apache-rhel|nginx|tomcat|tomcat-rhel> <vuln|hardened>
 #
-# 데몬 프로세스는 실제로 띄우지 않는다(설정 파일 판정 위주 항목만 다룸 - 01_unix/CLAUDE.md
+# 데몬 프로세스는 실제로 띄우지 않는다(설정 파일 판정 위주 항목만 다룸 - 01_unix
 # 와 같은 이유로 범위를 제한한다). WEB-04(디렉터리 리스팅)만 명시적으로 다루며, 나머지
 # 항목은 각 공식 이미지의 있는 그대로의 기본값을 반영한다.
 #

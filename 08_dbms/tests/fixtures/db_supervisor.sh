@@ -1,7 +1,7 @@
 #!/bin/sh
 # 08_dbms/tests/fixtures/db_supervisor.sh <mysql|postgres> [서버 추가 인자...]
 # 항목별 케이스 테스트(run_tests.sh case 단계)용 DB 서버 컨테이너의 PID 1. 공식 이미지는 DB 서버 자신이 PID 1 이라
-# 재기동하면 컨테이너가 끝난다(08_dbms/CLAUDE.md "Docker 단일 프로세스 컨테이너" 참고). 실제 서버의 systemd 처럼
+# 재기동하면 컨테이너가 끝난다. 실제 서버의 systemd 처럼
 # 서버가 내려가면 다시 띄우는 감독 루프를 PID 1 로 두고, 재기동 수단으로 service 명령(svc_shim.sh)을 /usr/sbin/service 로 설치한다 -
 # 재기동이 필요한 조치(mysql D-07, postgres D-03/D-26)를 lib/common.sh db_restart_server 의 실제 경로(service
 # <유닛> status/restart)로 끝까지 시험하기 위함. 테스트 전용이며 진단·조치 코드에는 영향이 없다.

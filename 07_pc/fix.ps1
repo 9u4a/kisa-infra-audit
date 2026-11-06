@@ -11,7 +11,7 @@
 #
 # **실제 검증 범위(0.8.2, 사용자 확인)**: 문법 파싱·BOM·정적분석까지만 확인했고, 실제 Windows 11
 # 호스트에서 --Apply 로 레지스트리/서비스/보안정책을 실제로 바꾸는 시험은 수행하지 않았다
-# (02_windows/fix.ps1 과 동일한 이유·범위). 07_pc/CLAUDE.md 참고.
+# (02_windows/fix.ps1 과 동일한 이유·범위).
 
 [CmdletBinding()]
 param(

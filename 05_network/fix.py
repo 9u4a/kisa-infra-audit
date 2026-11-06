@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """05_network/fix.py — 네트워크 장비 조치 명령어 스크립트 생성 (분석자 PC 전용, Python 3.10+).
 
-05_network/CLAUDE.md "조치는 실제 장비에 접속해 변경하지 않고, 벤더별 조치 명령어 스크립트만
-생성한다"를 그대로 구현한다. 다른 카테고리의 fix.sh/fix.ps1 과 달리 --apply/--rollback 이 없다
+조치는 실제 장비에 접속해 변경하지 않고, 벤더별 조치 명령어 스크립트만
+생성한다. 다른 카테고리의 fix.sh/fix.ps1 과 달리 --apply/--rollback 이 없다
 — 이 스크립트는 장비에 아무것도 적용하지 않고, 사람이 검토 후 직접 입력할 명령어 텍스트
 파일(remediation_<host>.txt)만 만든다.
 

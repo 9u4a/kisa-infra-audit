@@ -7,7 +7,7 @@
 # 영역 전송이 끊기므로 confirm 등급으로 사람이 확인한다.
 #
 # MicrosoftDNS_Zone 은 CIM(WMI) 클래스라 레지스트리 헬퍼로 백업/원복할 수 없다 - 이 항목은
-# Restore-FixItem 의 표준 원복 대상에 포함되지 않는 알려진 한계다(02_windows/CLAUDE.md 참고).
+# Restore-FixItem 의 표준 원복 대상에 포함되지 않는 알려진 한계다.
 
 $svc = Get-Service -Name "DNS" -ErrorAction SilentlyContinue
 if (-not $svc -or $svc.Status -ne "Running") {

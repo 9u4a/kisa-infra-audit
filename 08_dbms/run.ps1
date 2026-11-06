@@ -1,7 +1,7 @@
 ﻿# 08_dbms/run.ps1 — MSSQL 진단 진입점 (PowerShell 5.1 호환)
 #
 # 옵션 문자는 전 카테고리와 통일한다: -l(목록) -i(항목) -g(분류) -o(출력) -h(도움말).
-# MSSQL은 단일 엔진이라 -e 는 생략한다 (루트 CLAUDE.md "CLI 옵션 문자 통일" 참고).
+# MSSQL은 단일 엔진이라 -e 는 생략한다(옵션 문자는 전 카테고리 공통).
 # 접속 정보는 -SqlHost/-SqlPort/-SqlUser/-SqlDb 로 지정한다. 비밀번호는 인자로 절대 넘기지
 # 않고 DB_PASSWORD 환경변수로만 전달한다(내부적으로 SQLCMDPASSWORD 로 매핑, sqlcmd 표준 방식).
 #
