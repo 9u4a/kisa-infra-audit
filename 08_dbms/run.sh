@@ -62,16 +62,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-ALL_CODES=$(guide_list_codes "$GUIDE_JSON")
-
 if [ "$LIST_ONLY" -eq 1 ]; then
-    printf '%-8s %-4s %-8s %s\n' "코드" "중요도" "분류" "항목명"
-    for code in $ALL_CODES; do
-        title=$(guide_field "$GUIDE_JSON" "$code" "title")
-        sev=$(guide_field "$GUIDE_JSON" "$code" "severity")
-        gno=$(guide_field "$GUIDE_JSON" "$code" "group_no")
-        printf '%-8s %-4s %-8s %s\n' "$code" "$sev" "$gno" "$title"
-    done
+    run_list_items
     exit 0
 fi
 
@@ -119,34 +111,9 @@ trap 'exit 130' INT TERM
 
 export DB_HOST DB_PORT DB_USER DB_NAME DB_SOCKET DB_ERR_FILE DBMS_ENGINE
 
-SELECTED=""
-if [ -n "$ITEM_FILTER" ]; then
-    # IFS=, 를 건 채로 code_is_known 을 부르면 그 안의 $(echo $2) 가 줄바꿈으로 나뉘지 않아 모든 코드가 "알 수 없음"이
-    # 됐다(Oracle 실기 중 -i 로 발견) - 콤마를 공백으로 바꿔 기본 IFS 로 돈다.
-    for code in $(printf '%s' "$ITEM_FILTER" | tr ',' ' '); do if code_is_known "$code" "$ALL_CODES"; then SELECTED="$SELECTED $code"; else log_warn "알 수 없는 항목 코드라 건너뜀: $code"; fi; done
-elif [ -n "$GROUP_FILTER" ]; then
-    for code in $ALL_CODES; do
-        gno=$(guide_field "$GUIDE_JSON" "$code" "group_no")
-        [ "$gno" = "$GROUP_FILTER" ] && SELECTED="$SELECTED $code"
-    done
-else
-    SELECTED="$ALL_CODES"
-fi
+run_select_codes
 
-TOTAL=$(echo "$SELECTED" | wc -w | tr -d ' ')
-if [ "$TOTAL" -eq 0 ]; then
-    log_error "대상 항목이 없습니다."
-    exit 2
-fi
-
-run_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
-prepare_output_dir "$OUT_BASE" "$CATEGORY_NUM"
-NDJSON="$OUT_DIR/.result.ndjson"
-: > "$NDJSON"
-result_trap_partial "$NDJSON" "$CATEGORY_NAME" DBMS_ENGINE
-CSV_FILE="$OUT_DIR/result.csv"
-csv_init "$CSV_FILE"
-HOST_NAME=$(host_name)
+run_begin_output DBMS_ENGINE
 
 echo "${C_BOLD}=== 주요정보통신기반시설 자동 진단 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VERSION}) ===${C_OFF}"
 [ "$(id -u 2>/dev/null)" != "0" ] && log_warn "root 권한이 아닙니다. DB 설정 파일·프로세스 기반 항목은 읽지 못하면 ERROR 로 표시됩니다(DB 서버 호스트에서 root 실행 권장)."
@@ -176,55 +143,14 @@ else
 fi
 echo "----------------------------------------------------------------------"
 
-N_VULN=0; N_MANUAL=0; N_ERROR=0; N_NA=0; N_GOOD=0
-_n=0
-for code in $SELECTED; do
-    _n=$((_n + 1))
-    title=$(guide_field "$GUIDE_JSON" "$code" "title")
-    sev=$(guide_field "$GUIDE_JSON" "$code" "severity")
-    gno=$(guide_field "$GUIDE_JSON" "$code" "group_no")
-    check_file="$SCRIPT_DIR/checks/$DBMS_ENGINE/$code.sh"
+# 항목 후처리: check 가 있는 항목만 접속 계정 권한 제한(db_privilege_apply)을 반영한다
+db_item_post() {
+    [ -f "$RUN_CHECK_FILE" ] && db_privilege_apply "$1"
+    return 0
+}
+run_items "$SCRIPT_DIR/checks/$DBMS_ENGINE" NA "이 항목은 $DBMS_ENGINE 대상이 아니거나 아직 구현되지 않음" db_item_post
 
-    CHECK_STATUS="NA"
-    CHECK_DETAIL="이 항목은 $DBMS_ENGINE 대상이 아니거나 아직 구현되지 않음"
-    CHECK_EVIDENCE=""
-
-    if [ -f "$check_file" ]; then
-        CHECK_STATUS="ERROR"
-        CHECK_DETAIL="check 스크립트 오류"
-        run_check_isolated "$check_file"
-        db_privilege_apply "$code"
-    fi
-
-    progress_show "$_n" "$TOTAL" "$code" "$title" "$CHECK_STATUS"
-    log_to_file "$code [$CHECK_STATUS] $CHECK_DETAIL"
-    result_add "$NDJSON" "$code" "$CHECK_STATUS" "$CHECK_DETAIL" "$CHECK_EVIDENCE"
-    csv_add "$CSV_FILE" "$code" "$sev" "$gno" "$title" "$CHECK_STATUS" "$CHECK_DETAIL"
-    if [ -n "$CHECK_EVIDENCE" ]; then
-        printf '%s\n' "$CHECK_EVIDENCE" > "$OUT_DIR/raw/$code.txt"
-    fi
-
-    case "$CHECK_STATUS" in
-        VULN) N_VULN=$((N_VULN + 1)) ;;
-        MANUAL) N_MANUAL=$((N_MANUAL + 1)) ;;
-        ERROR) N_ERROR=$((N_ERROR + 1)) ;;
-        NA) N_NA=$((N_NA + 1)) ;;
-        GOOD) N_GOOD=$((N_GOOD + 1)) ;;
-    esac
-done
-
-RESULT_JSON="$OUT_DIR/result.json"
-result_finalize "$NDJSON" "$RESULT_JSON" "$CATEGORY_NAME" "$HOST_NAME" "$DBMS_ENGINE"
-rm -f "$NDJSON"
-run_lock_release
-
-render_report_html "$LIB_DIR" "$GUIDE_JSON" "$RESULT_JSON" "$OUT_DIR/report.html"
-write_summary "$OUT_DIR/summary.txt" "$CATEGORY_NAME" "$HOST_NAME" "$DBMS_ENGINE" "$N_VULN" "$N_MANUAL" "$N_ERROR" "$N_NA" "$N_GOOD"
-
-echo "----------------------------------------------------------------------"
-cat "$OUT_DIR/summary.txt"
-echo "----------------------------------------------------------------------"
-echo "결과 경로: $OUT_DIR"
+run_finish "$DBMS_ENGINE"
 # 결과물은 만들었지만 DB 에 접속하지 못해 DB 조회 항목이 전부 ERROR 다 - 예전에는 종료 코드 0 이라 스크립트·일괄 실행에서
 # 정상 진단과 구분되지 않았다(실무 적용 검증 P-24). 4 = "완료, 단 DB 접속 실패"(audit.sh 가 구분해 알린다).
 if [ -n "${DB_PREFLIGHT_FAILED:-}" ]; then

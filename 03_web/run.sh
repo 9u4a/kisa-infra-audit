@@ -53,16 +53,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-ALL_CODES=$(guide_list_codes "$GUIDE_JSON")
-
 if [ "$LIST_ONLY" -eq 1 ]; then
-    printf '%-8s %-4s %-8s %s\n' "코드" "중요도" "분류" "항목명"
-    for code in $ALL_CODES; do
-        title=$(guide_field "$GUIDE_JSON" "$code" "title")
-        sev=$(guide_field "$GUIDE_JSON" "$code" "severity")
-        gno=$(guide_field "$GUIDE_JSON" "$code" "group_no")
-        printf '%-8s %-4s %-8s %s\n' "$code" "$sev" "$gno" "$title"
-    done
+    run_list_items
     exit 0
 fi
 
@@ -95,34 +87,9 @@ web_unsupported_note() {
     esac
 }
 
-SELECTED=""
-if [ -n "$ITEM_FILTER" ]; then
-    # IFS=, 상태로 code_is_known 을 부르면 그 안의 $(echo $2) 가 콤마로만 갈라져 모든 코드가 "알 수 없음"이 됐다 -
-    # 콤마를 공백으로 바꿔 기본 IFS 로 나눈다.
-    for code in $(printf '%s' "$ITEM_FILTER" | tr ',' ' '); do if code_is_known "$code" "$ALL_CODES"; then SELECTED="$SELECTED $code"; else log_warn "알 수 없는 항목 코드라 건너뜀: $code"; fi; done
-elif [ -n "$GROUP_FILTER" ]; then
-    for code in $ALL_CODES; do
-        gno=$(guide_field "$GUIDE_JSON" "$code" "group_no")
-        [ "$gno" = "$GROUP_FILTER" ] && SELECTED="$SELECTED $code"
-    done
-else
-    SELECTED="$ALL_CODES"
-fi
+run_select_codes
 
-TOTAL=$(echo "$SELECTED" | wc -w | tr -d ' ')
-if [ "$TOTAL" -eq 0 ]; then
-    log_error "대상 항목이 없습니다."
-    exit 2
-fi
-
-run_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
-prepare_output_dir "$OUT_BASE" "$CATEGORY_NUM"
-NDJSON="$OUT_DIR/.result.ndjson"
-: > "$NDJSON"
-result_trap_partial "$NDJSON" "$CATEGORY_NAME" WEB_ENGINES
-CSV_FILE="$OUT_DIR/result.csv"
-csv_init "$CSV_FILE"
-HOST_NAME=$(host_name)
+run_begin_output WEB_ENGINES
 
 echo "${C_BOLD}=== 주요정보통신기반시설 자동 진단 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VERSION}) ===${C_OFF}"
 [ "$(id -u 2>/dev/null)" != "0" ] && log_warn "root 권한이 아닙니다. 읽지 못한 설정·로그 파일 관련 항목은 ERROR 로 표시됩니다(root 실행 권장)."
@@ -142,51 +109,10 @@ echo "시작 시각  : $(date '+%Y-%m-%d %H:%M:%S')"
 echo "----------------------------------------------------------------------"
 log_to_file "진단 시작: 엔진=${WEB_ENGINES:-없음} 대상=$TOTAL 항목"
 
-N_VULN=0; N_MANUAL=0; N_ERROR=0; N_NA=0; N_GOOD=0
-_n=0
-for code in $SELECTED; do
-    _n=$((_n + 1))
-    title=$(guide_field "$GUIDE_JSON" "$code" "title")
-    sev=$(guide_field "$GUIDE_JSON" "$code" "severity")
-    gno=$(guide_field "$GUIDE_JSON" "$code" "group_no")
-    check_file="$SCRIPT_DIR/checks/$code.sh"
-
-    CHECK_STATUS="ERROR"
-    CHECK_DETAIL="check 스크립트 없음 (미구현 항목)"
-    CHECK_EVIDENCE=""
-
-    if [ -f "$check_file" ]; then
-        run_check_isolated "$check_file"
-    fi
-    web_unsupported_note "$code"
+web_item_post() {
     nonroot_unverified
+    web_unsupported_note "$1"
+}
+run_items "$SCRIPT_DIR/checks" ERROR "check 스크립트 없음 (미구현 항목)" web_item_post
 
-    progress_show "$_n" "$TOTAL" "$code" "$title" "$CHECK_STATUS"
-    log_to_file "$code [$CHECK_STATUS] $CHECK_DETAIL"
-    result_add "$NDJSON" "$code" "$CHECK_STATUS" "$CHECK_DETAIL" "$CHECK_EVIDENCE"
-    csv_add "$CSV_FILE" "$code" "$sev" "$gno" "$title" "$CHECK_STATUS" "$CHECK_DETAIL"
-    if [ -n "$CHECK_EVIDENCE" ]; then
-        printf '%s\n' "$CHECK_EVIDENCE" > "$OUT_DIR/raw/$code.txt"
-    fi
-
-    case "$CHECK_STATUS" in
-        VULN) N_VULN=$((N_VULN + 1)) ;;
-        MANUAL) N_MANUAL=$((N_MANUAL + 1)) ;;
-        ERROR) N_ERROR=$((N_ERROR + 1)) ;;
-        NA) N_NA=$((N_NA + 1)) ;;
-        GOOD) N_GOOD=$((N_GOOD + 1)) ;;
-    esac
-done
-
-RESULT_JSON="$OUT_DIR/result.json"
-result_finalize "$NDJSON" "$RESULT_JSON" "$CATEGORY_NAME" "$HOST_NAME" "${WEB_ENGINES:-none}"
-rm -f "$NDJSON"
-run_lock_release
-
-render_report_html "$LIB_DIR" "$GUIDE_JSON" "$RESULT_JSON" "$OUT_DIR/report.html"
-write_summary "$OUT_DIR/summary.txt" "$CATEGORY_NAME" "$HOST_NAME" "${WEB_ENGINES:-none}" "$N_VULN" "$N_MANUAL" "$N_ERROR" "$N_NA" "$N_GOOD"
-
-echo "----------------------------------------------------------------------"
-cat "$OUT_DIR/summary.txt"
-echo "----------------------------------------------------------------------"
-echo "결과 경로: $OUT_DIR"
+run_finish "${WEB_ENGINES:-none}"

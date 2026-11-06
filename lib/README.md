@@ -9,10 +9,10 @@
 
 | 파일 | 대상 | 역할 |
 |---|---|---|
-| `common.sh` | Unix 계열 카테고리(01, 03의 Unix 엔진, 08의 Unix DBMS) | 로그, 색상, 진행 표시, `uname`/`os-release` 기반 환경 감지, `guide.json` 조회(`guide_field`/`guide_list_codes`), 결과 JSON(NDJSON→최종 JSON)/CSV/`summary.txt` 생성, `report.html` 렌더링 |
+| `common.sh` | Unix 계열 카테고리(01, 03의 Unix 엔진, 08의 Unix DBMS) | 로그, 색상, 진행 표시, `uname`/`os-release` 기반 환경 감지, `guide.json` 조회(`guide_field`/`guide_list_codes`), 결과 JSON(NDJSON→최종 JSON)/CSV/`summary.txt` 생성, `report.html` 렌더링, 진단 진입점 공통 흐름(`run_list_items`→`run_select_codes`→`run_begin_output`→`run_items`→`run_finish`) |
 | `common_web.sh` | 03_web(Unix 엔진) — `common.sh` 가 source | 웹 엔진 자동 탐지·설정 경로 조회, XML 주석 제거·속성 파싱 |
 | `common_db.sh` | 08_dbms(Unix DBMS) — `common.sh` 가 source | 엔진 탐지, 운영 안전장치(시간 제한·계정 잠금 방지), 원격 판별, 권한 사전 확인, MySQL/PostgreSQL/Oracle 접속·쿼리, DB 재기동·Oracle 정적 파라미터 복구, SQL 원복 큐 |
-| `common_fix.sh` | 01/03/08 `fix.sh` — `common.sh` 가 source | 자동 조치 공통: 백업·원복·감사 로그, 설정 파일 편집(F2), 비밀번호 직접 입력, 진입점 가드(F1·F6), 서비스·권한 조치, 전체 원복 |
+| `common_fix.sh` | 01/03/08 `fix.sh` — `common.sh` 가 source | 자동 조치 공통: 백업·원복·감사 로그, 설정 파일 편집(F2), 비밀번호 직접 입력, 진입점 가드(F1·F6), 서비스·권한 조치, 전체 원복, 조치 진입점 공통 흐름(`fix_select_vuln_codes`→`fix_items`→`fix_print_summary`) |
 | `Common.psm1` | Windows 계열 카테고리(02, 03의 IIS, 07, 08의 MSSQL) | 위와 동일한 기능의 PowerShell 5.1 구현 (`Write-Log`, `Get-OsFamily`, `Show-Progress`, `Save-ResultJson`, `New-ReportHtml` 등) |
 | `extract_guide.py` | 분석자 PC 전용 | 가이드 PDF → 카테고리별 `guide.json`/`guide.md` 추출·정리. **이후 모든 check/fix 구현의 유일한 기준**을 만드는 선행 작업 |
 | `report/head.html`, `mid.html`, `tail.html` | 진단 대상/분석자 공용 | 오프라인 단일 파일 보고서 템플릿. `cat head.html <카테고리>/guide.json mid.html result.json tail.html > report.html` 로 결합하며, 파싱은 전부 브라우저 내 JS가 수행 (Python 불필요) |

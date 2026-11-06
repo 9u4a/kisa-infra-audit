@@ -949,6 +949,117 @@ run_check_isolated() {
     rm -rf "$_rci_dir"
 }
 
+# ---- 진단 진입점 공통 흐름 (1.5.0 D2) ---------------------------------------------------------------
+# 01_unix·03_web·08_dbms run.sh 가 똑같이 복붙하던 목록 출력·대상 선정·출력 준비·항목 루프·마무리를 한 곳에 둔다.
+# 진입점은 옵션 해석·환경(엔진) 감지·배너처럼 카테고리마다 다른 부분만 남기고, 아래 순서로 부른다:
+#   run_list_items(-l) → run_select_codes → run_begin_output → (배너) → run_items → run_finish
+# 진입점이 정해 두어야 하는 전역: GUIDE_JSON, LIB_DIR, OUT_BASE, CATEGORY_NUM, CATEGORY_NAME, ITEM_FILTER, GROUP_FILTER.
+
+# run_list_items -- -l: 항목 목록만 출력
+run_list_items() {
+    printf '%-8s %-4s %-8s %s\n' "코드" "중요도" "분류" "항목명"
+    for _rl_code in $(guide_list_codes "$GUIDE_JSON"); do
+        printf '%-8s %-4s %-8s %s\n' "$_rl_code" "$(guide_field "$GUIDE_JSON" "$_rl_code" severity)" \
+            "$(guide_field "$GUIDE_JSON" "$_rl_code" group_no)" "$(guide_field "$GUIDE_JSON" "$_rl_code" title)"
+    done
+}
+
+# run_select_codes -- -i/-g 로 SELECTED·TOTAL 을 정한다. 대상이 없으면 exit 2.
+# -i 는 콤마를 공백으로 바꿔 기본 IFS 로 나눈다(IFS=, 를 건 채 code_is_known 을 부르면 모든 코드가 "알 수 없음"이 됐다).
+run_select_codes() {
+    ALL_CODES=$(guide_list_codes "$GUIDE_JSON")
+    SELECTED=""
+    if [ -n "$ITEM_FILTER" ]; then
+        for _rs_code in $(printf '%s' "$ITEM_FILTER" | tr ',' ' '); do
+            if code_is_known "$_rs_code" "$ALL_CODES"; then SELECTED="$SELECTED $_rs_code"; else log_warn "알 수 없는 항목 코드라 건너뜀: $_rs_code"; fi
+        done
+    elif [ -n "$GROUP_FILTER" ]; then
+        for _rs_code in $ALL_CODES; do
+            [ "$(guide_field "$GUIDE_JSON" "$_rs_code" group_no)" = "$GROUP_FILTER" ] && SELECTED="$SELECTED $_rs_code"
+        done
+    else
+        SELECTED="$ALL_CODES"
+    fi
+    TOTAL=$(echo "$SELECTED" | wc -w | tr -d ' ')
+    if [ "$TOTAL" -eq 0 ]; then
+        log_error "대상 항목이 없습니다."
+        exit 2
+    fi
+}
+
+# run_begin_output <환경 변수 이름> -- 잠금·출력 폴더·NDJSON(중단 시 부분 결과 보존)·CSV 를 준비한다.
+# 인자는 result_trap_partial 이 중단 시점에 읽을 환경 변수 "이름"이다(OS_FAMILY / WEB_ENGINES / DBMS_ENGINE).
+run_begin_output() {
+    run_lock_acquire "$OUT_BASE" "$CATEGORY_NUM"
+    prepare_output_dir "$OUT_BASE" "$CATEGORY_NUM"
+    NDJSON="$OUT_DIR/.result.ndjson"
+    : > "$NDJSON"
+    result_trap_partial "$NDJSON" "$CATEGORY_NAME" "$1"
+    CSV_FILE="$OUT_DIR/result.csv"
+    csv_init "$CSV_FILE"
+    HOST_NAME=$(host_name)
+}
+
+# run_items <check 폴더> <파일 없을 때 상태> <파일 없을 때 detail> [후처리 함수]
+#   SELECTED 의 항목마다 <check 폴더>/<코드>.sh 를 run_check_isolated 로 실행하고, 후처리 함수(<코드> 인자, 예:
+#   nonroot_unverified·append_unverified_note·db_privilege_apply 묶음)를 부른 뒤 결과를 기록한다. 후처리 함수는
+#   RUN_CHECK_FILE 로 check 파일 경로를 볼 수 있다. N_VULN..N_GOOD 를 센다.
+run_items() {
+    _ri_dir=$1; _ri_mstatus=$2; _ri_mdetail=$3; _ri_hook=${4:-}
+    N_VULN=0; N_MANUAL=0; N_ERROR=0; N_NA=0; N_GOOD=0
+    _ri_n=0
+    for _ri_code in $SELECTED; do
+        _ri_n=$((_ri_n + 1))
+        _ri_title=$(guide_field "$GUIDE_JSON" "$_ri_code" "title")
+        _ri_sev=$(guide_field "$GUIDE_JSON" "$_ri_code" "severity")
+        _ri_gno=$(guide_field "$GUIDE_JSON" "$_ri_code" "group_no")
+        RUN_CHECK_FILE="$_ri_dir/$_ri_code.sh"
+
+        CHECK_STATUS=$_ri_mstatus
+        CHECK_DETAIL=$_ri_mdetail
+        CHECK_EVIDENCE=""
+        if [ -f "$RUN_CHECK_FILE" ]; then
+            run_check_isolated "$RUN_CHECK_FILE"
+        fi
+        if [ -n "$_ri_hook" ]; then "$_ri_hook" "$_ri_code"; fi
+
+        progress_show "$_ri_n" "$TOTAL" "$_ri_code" "$_ri_title" "$CHECK_STATUS"
+        log_to_file "$_ri_code [$CHECK_STATUS] $CHECK_DETAIL"
+        result_add "$NDJSON" "$_ri_code" "$CHECK_STATUS" "$CHECK_DETAIL" "$CHECK_EVIDENCE"
+        csv_add "$CSV_FILE" "$_ri_code" "$_ri_sev" "$_ri_gno" "$_ri_title" "$CHECK_STATUS" "$CHECK_DETAIL"
+        if [ -n "$CHECK_EVIDENCE" ]; then
+            printf '%s\n' "$CHECK_EVIDENCE" > "$OUT_DIR/raw/$_ri_code.txt"
+        fi
+
+        case "$CHECK_STATUS" in
+            VULN) N_VULN=$((N_VULN + 1)) ;;
+            MANUAL) N_MANUAL=$((N_MANUAL + 1)) ;;
+            ERROR) N_ERROR=$((N_ERROR + 1)) ;;
+            NA) N_NA=$((N_NA + 1)) ;;
+            GOOD) N_GOOD=$((N_GOOD + 1)) ;;
+        esac
+    done
+}
+
+# run_finish <환경 표기> -- result.json·report.html·summary.txt 를 만들고 잠금을 푼 뒤 요약을 출력한다.
+run_finish() {
+    RESULT_JSON="$OUT_DIR/result.json"
+    result_finalize "$NDJSON" "$RESULT_JSON" "$CATEGORY_NAME" "$HOST_NAME" "$1"
+    rm -f "$NDJSON"
+    run_lock_release
+
+    render_report_html "$LIB_DIR" "$GUIDE_JSON" "$RESULT_JSON" "$OUT_DIR/report.html"
+    write_summary "$OUT_DIR/summary.txt" "$CATEGORY_NAME" "$HOST_NAME" "$1" "$N_VULN" "$N_MANUAL" "$N_ERROR" "$N_NA" "$N_GOOD"
+
+    echo "----------------------------------------------------------------------"
+    cat "$OUT_DIR/summary.txt"
+    echo "----------------------------------------------------------------------"
+    echo "결과 경로: $OUT_DIR"
+    echo "  - result.json / result.csv  (기계 판독·표계산용)"
+    echo "  - report.html                (브라우저로 열람)"
+    echo "  - summary.txt / run.log      (요약 · 실행 로그)"
+}
+
 # ---- 분할 모듈 로드 (1.5.0 D3) ----------------------------------------------------------------------
 # 웹·DBMS·조치 헬퍼는 같은 폴더의 common_web.sh / common_db.sh / common_fix.sh 에 있다. 대상 호스트에는 lib/ 폴더를
 # 통째로 둔다. 호출부는 LIB_DIR 을 정한 뒤 이 파일을 source 하고, 테스트 일부는 저장소 루트에서 ". lib/common.sh" 로 부른다.
