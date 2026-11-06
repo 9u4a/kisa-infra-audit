@@ -353,7 +353,7 @@ jobs:
     # 변이 검증(1.5.0 D1, lib/tests/mutation.py): 카테고리의 check 를 전부 "항상 GOOD" / "항상 VULN" 스텁으로 바꾼 사본에서
     # 그 카테고리 테스트를 돌려, 기대값이 있는 항목마다 실패가 실제로 나오는지(= 테스트가 check 결과를 보는지) 확인한다.
     # 생존 변이(잡히지 않은 항목)가 있으면 FAIL. 테스트 묶음을 변이마다 한 번씩 더 돌리므로 주간 스케줄·수동 실행에서만 돈다.
-    # Windows 계열(02/07, 03 IIS, 08 MSSQL)은 D1 2차.
+    # Windows 계열(02/07, 03 IIS, 08 MSSQL)은 아래 mutation-windows job.
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -372,6 +372,50 @@ jobs:
       - run: python3 lib/tests/mutation.py ${{ matrix.args }} --log-dir "$RUNNER_TEMP" | tee -a "$GITHUB_STEP_SUMMARY"
         shell: bash -o pipefail {0}
       - name: 변이 실행 로그 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ matrix.name }}
+          path: ${{ runner.temp }}/mutation_*.log
+          if-no-files-found: ignore
+
+  mutation-windows:
+    # 변이 검증 Windows 계열(1.5.0 D1 2차): 02_windows·07_pc(케이스 + 전역 픽스처), 03_web IIS, 08_dbms MSSQL(LocalDB).
+    # 테스트가 레지스트리·서비스를 실제로 바꾸므로 휘발성 러너에서만 돈다. 준비 단계는 windows-cases·windows-server job 과 같다.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: 02_windows, args: "02_windows" }
+          - { name: 07_pc, args: "07_pc" }
+          - { name: 03_web-iis, args: "03_web --engines iis" }
+          - { name: 08_dbms-mssql, args: "08_dbms --engines mssql" }
+    name: mutation (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+      # run: blocks below are ASCII only (Windows PowerShell 5.1 reads the generated script without BOM)
+      - name: features for 02_windows cases (IIS, FTP, DNS, SNMP)
+        if: matrix.name == '02_windows'
+        shell: powershell
+        run: |
+          Install-WindowsFeature Web-Server, Web-Ftp-Server, Web-Scripting-Tools, Web-Mgmt-Console, DNS, SNMP-Service -IncludeManagementTools | Format-Table -AutoSize
+          try { (Invoke-WebRequest http://localhost/ -UseBasicParsing -TimeoutSec 60).StatusCode } catch { $_.Exception.Message }
+      - name: IIS + ARR + URL Rewrite
+        if: matrix.name == '03_web-iis'
+        shell: powershell
+        run: |
+          Install-WindowsFeature Web-Server, Web-Mgmt-Tools, Web-Scripting-Tools, Web-DAV-Publishing, Web-Includes, Web-Http-Redirect, Web-Filtering, Web-ISAPI-Ext, Web-ISAPI-Filter, Web-CGI | Format-Table -AutoSize
+          choco install urlrewrite iis-arr -y --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: mutation
+        shell: bash
+        run: |
+          set -o pipefail
+          python lib/tests/mutation.py ${{ matrix.args }} --log-dir "$RUNNER_TEMP" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:

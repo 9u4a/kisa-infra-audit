@@ -50,26 +50,47 @@ EXTRA_ENGINES = {"01_unix": ["rhel"], "03_web": ["apache-rhel", "tomcat-rhel"]}
 CODE_FILE = re.compile(r"^(?:U|W|WEB|N|PC|D)-\d{2}\.(sh|py|ps1)$")
 
 
-def runner(cat: str, engines: list[str]) -> tuple[list[str], dict]:
+def ps(script: str, *args: str) -> list[str]:
+    """Windows PowerShell 5.1 로 저장소 .ps1 실행. 출력은 UTF-8 로(기본 OEM 코드페이지면 한글이 깨진다 - 코드는 ASCII 라 판정엔 무관)."""
+    inner = "[Console]::OutputEncoding = [Text.Encoding]::UTF8; & '" + script + "' " + " ".join(args) + "; exit $LASTEXITCODE"
+    return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", inner]
+
+
+WIN_ENGINES = {"iis", "mssql"}
+
+
+def runners(cat: str, engines: list[str]) -> tuple[list[list[str]], dict]:
+    """(차례로 실행할 명령들, 추가 환경 변수). 명령 하나라도 실패하면 러너 실패로 본다."""
     env = {}
     if cat == "01_unix":
-        return ["sh", "01_unix/tests/run_tests.sh"], env
+        return [["sh", "01_unix/tests/run_tests.sh"]], env
     if cat == "03_web":
-        if engines:
-            env["WEB_ENGINES"] = " ".join(engines)
-        return ["sh", "03_web/tests/run_tests.sh"], env
+        if engines == ["iis"]:
+            return [ps(".\\03_web\\tests\\run_tests_iis.ps1")], env
+        if "iis" in engines:
+            raise SystemExit("오류: 03_web iis 는 따로 돌린다(--engines iis, Windows 러너)")
+        env["WEB_ENGINES"] = " ".join(engines)
+        return [["sh", "03_web/tests/run_tests.sh"]], env
     if cat == "05_network":
-        return [sys.executable, "05_network/tests/run_tests.py"], env
+        return [[sys.executable, "05_network/tests/run_tests.py"]], env
     if cat == "08_dbms":
-        return ["sh", "08_dbms/tests/run_tests.sh", *engines], env
-    raise SystemExit(f"오류: {cat} 은 아직 지원하지 않음(Windows 계열은 D1 2차)")
+        if engines == ["mssql"]:
+            return [ps(".\\08_dbms\\tests\\run_tests_mssql.ps1")], env
+        if "mssql" in engines:
+            raise SystemExit("오류: 08_dbms mssql 은 따로 돌린다(--engines mssql, Windows 러너)")
+        return [["sh", "08_dbms/tests/run_tests.sh", *engines]], env
+    if cat in ("02_windows", "07_pc"):
+        # 항목별 케이스(case_runner.ps1) + 전역 vuln/hardened 픽스처(run_tests.ps1) - 둘 다 레지스트리를 실제로 바꾼다(CI 러너 전용).
+        # run_tests.ps1 은 픽스처 상태를 되돌리지 않으므로 기준선 스냅샷을 찍는 케이스 러너를 먼저 돌린다.
+        return [ps(".\\02_windows\\tests\\case_runner.ps1", "-Category", cat), ps(f".\\{cat}\\tests\\run_tests.ps1")], env
+    raise SystemExit(f"오류: 알 수 없는 카테고리 {cat}")
 
 
 def default_engines(cat: str) -> list[str]:
     if cat == "03_web":
-        return [e for e in coverage.ENGINES[cat] if e != "iis"]
+        return [e for e in coverage.ENGINES[cat] if e != "iis"]  # iis 는 --engines iis(Windows)
     if cat == "08_dbms":
-        return ["mysql", "postgres"]  # oracle 은 --engines oracle 로 따로(이미지가 무거움), mssql 은 Windows
+        return ["mysql", "postgres"]  # oracle 은 --engines oracle 로 따로(이미지가 무거움), mssql 은 --engines mssql(Windows)
     return list(coverage.ENGINES[cat])
 
 
@@ -119,7 +140,8 @@ def engine_token(line: str, names: list[str]) -> str | None:
 def killed_from(output: str, cat: str, engines: list[str]) -> set[tuple[str, str]]:
     names = list(coverage.ENGINES[cat]) + EXTRA_ENGINES.get(cat, [])
     code_re = re.compile(rf"(?<![\w-]){PREFIX[cat]}-\d{{2}}(?!\d)")
-    default = engines[0] if len(coverage.ENGINES[cat]) == 1 else None
+    # 엔진 하나만 돌릴 때(단일 엔진 카테고리, --engines nginx, iis/mssql 전용 러너)는 엔진 이름이 없는 줄도 그 엔진이다
+    default = engines[0] if len(engines) == 1 else None
     ctx = default
     killed: set[tuple[str, str]] = set()
     for raw in output.splitlines():
@@ -184,14 +206,17 @@ def run_one(cat: str, engines: list[str], status: str, keep: bool, log_dir: str,
     try:
         copy_repo(tmp)
         n = mutate(tmp, cat, status)
-        cmd, extra = runner(cat, engines)
+        cmds, extra = runners(cat, engines)
         env = dict(os.environ, **extra)
-        print(f"[mutation] {cat} 변이={status} check {n}개 → {' '.join(cmd)} (엔진 {' '.join(engines)})", flush=True)
         t0 = time.time()
-        p = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True)
-        out = p.stdout.decode("utf-8", errors="replace") + p.stderr.decode("utf-8", errors="replace")
-        open(log, "w", encoding="utf-8").write(f"# rc={p.returncode}\n" + out)
-        return report(cat, engines, status, out, p.returncode, f"{time.time() - t0:.0f}초, 로그 {log}")
+        out, rc = "", 0
+        for cmd in cmds:
+            print(f"[mutation] {cat} 변이={status} check {n}개 → {' '.join(cmd)} (엔진 {' '.join(engines)})", flush=True)
+            p = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True)
+            out += p.stdout.decode("utf-8", errors="replace") + p.stderr.decode("utf-8", errors="replace")
+            rc = rc or p.returncode  # 모든 러너가 성공(rc=0)했을 때만 0 - 그게 곧 "아무것도 못 잡음"
+        open(log, "w", encoding="utf-8").write(f"# rc={rc}\n" + out)
+        return report(cat, engines, status, out, rc, f"{time.time() - t0:.0f}초, 로그 {log}")
     finally:
         if keep:
             print(f"[mutation] 사본 유지: {tmp}")
@@ -201,7 +226,7 @@ def run_one(cat: str, engines: list[str], status: str, keep: bool, log_dir: str,
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="check 변이 검증(항상 GOOD / 항상 VULN 스텁으로 바꿔 테스트가 잡는지)")
-    ap.add_argument("category", choices=["01_unix", "03_web", "05_network", "08_dbms"])
+    ap.add_argument("category", choices=sorted(PREFIX))
     ap.add_argument("--engines", nargs="+", help="대상 엔진(기본: 03 은 IIS 제외 전부, 08 은 mysql postgres)")
     ap.add_argument("--mutant", choices=["GOOD", "VULN", "both"], default="both")
     ap.add_argument("--keep", action="store_true", help="임시 사본을 지우지 않음")
