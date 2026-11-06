@@ -115,13 +115,18 @@ DB 클라이언트 연결만 영향을 주고 이 스크립트를 실행한 OS �
 ## Network (Cisco IOS, 오프라인 설정파일 분석)
 ```sh
 python 05_network/run.py -f running-config.txt              # 벤더 자동 판별 후 전체 분석
-python 05_network/run.py -f running-config.txt -v cisco_ios  # 벤더 수동 지정
+python 05_network/run.py -f running-config.txt -e cisco_ios  # 벤더 수동 지정(예전 -v 도 같은 뜻)
 python 05_network/run.py -d configs/                         # 디렉터리 내 다수 장비 일괄 분석
 python 05_network/run.py -f running-config.txt -i N-01,N-06  # 특정 항목만
 python 05_network/run.py -l                                  # 항목 목록 확인 (38항목 전체)
 ```
 다른 카테고리와 달리 대상 장비에는 아무것도 배치하지 않습니다 — 미리 `show running-config` 등으로
 수집한 설정 텍스트 파일을 분석자 PC에서 Python으로 분석합니다.
+- 입력은 Cisco IOS 설정 전체(마지막 `end` 줄까지)여야 합니다. NX-OS·ASA·IOS XR 설정은 `-e cisco_ios` 로 지정해도
+  분석하지 않고 오류로 끝냅니다. `end` 줄이 없는 잘린 설정은 분석하되 양호/해당없음 판정을 모두 `오류`로 바꿉니다
+  (빠진 뒷부분에 설정이 있을 수 있어 "설정 없음"을 근거로 양호라고 할 수 없음).
+- 종료 코드: 모든 파일을 분석하면 0, 읽기·벤더 판별·입력 검증에 실패한 파일이 하나라도 있으면 1(`-d` 에서는 나머지
+  파일은 계속 분석).
 
 조치도 장비에 직접 적용하지 않고, 검토용 명령어 텍스트 파일만 생성합니다(`--apply`/`--rollback`
 없음):

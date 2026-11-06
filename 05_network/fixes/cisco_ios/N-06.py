@@ -19,8 +19,9 @@ def _free_acl_num(ctx) -> str:
 
 
 def generate(ctx):
-    vty_blocks = ctx.line_block_text("vty")
-    missing = [b for b in vty_blocks if "access-class" not in b]
+    # 진단과 같은 기준(access-class 없음 + 참조 ACL 미정의/any 허용, 외부 검수 A13). 기존 ACL 은 다른 곳에서도 쓰일 수
+    # 있어 고치지 않고, 새 번호의 ACL 을 만들어 해당 라인의 access-class 를 바꾼다.
+    missing = [b for b, _problem in cio.vty_acl_problems(ctx)]
     if not missing:
         return []
     _ACL_NUM = _free_acl_num(ctx)

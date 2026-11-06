@@ -1,0 +1,16 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+enable secret 9 $9$CaseEnableHash
+aaa new-model
+aaa authentication login default group tacacs+ none
+!
+line vty 0 4
+ transport input ssh
+!
+end

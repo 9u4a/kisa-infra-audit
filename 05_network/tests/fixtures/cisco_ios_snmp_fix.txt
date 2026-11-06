@@ -10,6 +10,8 @@ hostname SnmpFixRouter
 ip access-list standard V6ACL
  permit 10.1.1.0 0.0.0.255
 !
+access-list 10 permit 10.1.1.5
+!
 snmp-server community Fx7#ViewComm01 view v1 RW
 snmp-server community Fx7#Ipv6Comm02 RW ipv6 V6ACL 10
 snmp-server community Fx7#Ipv6Comm03 ipv6 V6ACL

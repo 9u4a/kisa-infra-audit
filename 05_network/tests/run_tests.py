@@ -74,7 +74,7 @@ def run_one(fixture_file: str, expected_file: str) -> list[str]:
 
     with tempfile.TemporaryDirectory() as out_dir:
         proc = subprocess.run(
-            [sys.executable, os.path.join(NETWORK_DIR, "run.py"), "-f", fixture_path, "-v", "cisco_ios", "-o", out_dir],
+            [sys.executable, os.path.join(NETWORK_DIR, "run.py"), "-f", fixture_path, "-e", "cisco_ios", "-o", out_dir],
             capture_output=True, text=True, encoding="utf-8",
         )
         if proc.returncode != 0:
@@ -101,7 +101,7 @@ def run_one(fixture_file: str, expected_file: str) -> list[str]:
 
 def _run_py(fixture_path: str, out_dir: str, items: str) -> dict:
     proc = subprocess.run(
-        [sys.executable, os.path.join(NETWORK_DIR, "run.py"), "-f", fixture_path, "-v", "cisco_ios", "-o", out_dir, "-i", items],
+        [sys.executable, os.path.join(NETWORK_DIR, "run.py"), "-f", fixture_path, "-e", "cisco_ios", "-o", out_dir, "-i", items],
         capture_output=True, text=True, encoding="utf-8",
     )
     paths = glob.glob(os.path.join(out_dir, "*", "result.json"))
@@ -358,7 +358,7 @@ def _fix_and_recheck(fixture: str, codes: list[str] | None, tmp: str, label: str
     def run(path, out):
         if items:
             return _run_py(path, out, items)
-        proc = subprocess.run([sys.executable, os.path.join(NETWORK_DIR, "run.py"), "-f", path, "-v", "cisco_ios", "-o", out],
+        proc = subprocess.run([sys.executable, os.path.join(NETWORK_DIR, "run.py"), "-f", path, "-e", "cisco_ios", "-o", out],
                               capture_output=True, text=True, encoding="utf-8")
         paths = glob.glob(os.path.join(out, "*", "result.json"))
         if proc.returncode != 0 or not paths:
@@ -415,8 +415,77 @@ def run_fix_cases(cases: list[dict]) -> tuple[list[str], int]:
     return failures, n
 
 
+def _run_cli(args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, os.path.join(NETWORK_DIR, "run.py")] + args,
+                          capture_output=True, text=True, encoding="utf-8")
+
+
+NXOS_SECRETS = ["NxAuthKeyLeak21", "NxPrivKeyLeak22", "0x1234NxAuthHexLeak23", "0x5678NxPrivHexLeak24"]
+
+
+def run_cli_cases() -> list[str]:
+    """진입점 동작 회귀(외부 검수 A14/B1/B5/C4)."""
+    failures = []
+    nxos = os.path.join(FIXTURES_DIR, "nxos_reject.txt")
+    vuln = os.path.join(FIXTURES_DIR, "cisco_ios_vuln.txt")
+    with tempfile.TemporaryDirectory() as tmp:
+        # A14: NX-OS 설정은 자동 판별·-e cisco_ios 강제 모두 거부(0 아닌 종료, 결과물 없음), 비밀값은 어디에도 안 남음
+        for label, extra in (("자동 판별", []), ("-e cisco_ios 강제", ["-e", "cisco_ios"])):
+            out = os.path.join(tmp, f"nx{len(extra)}")
+            p = _run_cli(["-f", nxos, "-o", out] + extra)
+            if p.returncode == 0:
+                failures.append(f"nxos_reject.txt({label}): NX-OS 설정인데 exit 0")
+            if glob.glob(os.path.join(out, "*", "result.json")):
+                failures.append(f"nxos_reject.txt({label}): NX-OS 설정을 IOS 로 판정해 결과물을 만듦")
+            for s in NXOS_SECRETS:
+                if s in p.stdout + p.stderr or any(s in open(f, encoding="utf-8", errors="replace").read()
+                                                   for f in glob.glob(os.path.join(out, "**", "*"), recursive=True) if os.path.isfile(f)):
+                    failures.append(f"nxos_reject.txt({label}): 비밀값 '{s}' 노출")
+        # A14 이중 방어: 마스킹 함수 자체도 NX-OS `priv <key>`/`priv aes-128 <key>` 를 가린다
+        sys.path.insert(0, NETWORK_DIR)
+        from parsers import cisco_ios as cio  # noqa: E402
+        masked = cio.mask_secrets(open(nxos, encoding="utf-8").read())
+        for s in NXOS_SECRETS:
+            if s in masked:
+                failures.append(f"mask_secrets: NX-OS 비밀값 '{s}' 가 마스킹되지 않음")
+        # B1: 같은 hostname 설정 2개를 -d 로 돌리면 결과 폴더 2개
+        d = os.path.join(tmp, "same_host")
+        os.makedirs(d)
+        for n in ("a.txt", "b.txt"):
+            with open(vuln, encoding="utf-8") as src, open(os.path.join(d, n), "w", encoding="utf-8", newline="\n") as dst:
+                dst.write(src.read())
+        out = os.path.join(tmp, "b1")
+        p = _run_cli(["-d", d, "-e", "cisco_ios", "-o", out, "-i", "N-01"])
+        n_res = len(glob.glob(os.path.join(out, "*", "result.json")))
+        if p.returncode != 0 or n_res != 2:
+            failures.append(f"-d 같은 hostname 2개: exit={p.returncode} result.json {n_res}개(기대 2) {p.stderr[-300:]}")
+        # B5: 벤더 판별 실패 파일이 섞이면 나머지는 분석하되 exit 1, 없는 파일도 exit 1
+        with open(os.path.join(d, "c_unknown.txt"), "w", encoding="utf-8", newline="\n") as f:
+            f.write("this is not a device config\n")
+        out = os.path.join(tmp, "b5")
+        p = _run_cli(["-d", d, "-o", out, "-i", "N-01"])
+        n_res = len(glob.glob(os.path.join(out, "*", "result.json")))
+        if p.returncode == 0 or n_res != 2:
+            failures.append(f"-d 판별 실패 파일 포함: exit={p.returncode}(기대 0 아님) result.json {n_res}개(기대 2)")
+        p = _run_cli(["-f", os.path.join(tmp, "no_such_file.txt"), "-o", os.path.join(tmp, "b5b")])
+        if p.returncode == 0:
+            failures.append("-f 없는 파일: exit 0(기대 0 아님)")
+        # C4: -e 와 하위 호환 -v 모두 동작
+        for opt in ("-e", "-v", "--engine", "--vendor"):
+            out = os.path.join(tmp, "c4" + opt.strip("-"))
+            p = _run_cli(["-f", vuln, opt, "cisco_ios", "-o", out, "-i", "N-01"])
+            if p.returncode != 0 or not glob.glob(os.path.join(out, "*", "result.json")):
+                failures.append(f"벤더 지정 옵션 {opt}: 동작하지 않음 (exit {p.returncode}) {p.stderr[-200:]}")
+    return failures
+
+
 def main() -> None:
     all_failures = []
+    failures = run_cli_cases()
+    if failures:
+        all_failures.extend(failures)
+    else:
+        print("PASS: 진입점(NX-OS 거부·마스킹, -d 같은 hostname, 실패 시 exit 1, -e/-v)")
     for fixture_file, expected_file in CASES:
         failures = run_one(fixture_file, expected_file)
         if failures:

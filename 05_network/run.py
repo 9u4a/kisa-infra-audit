@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """05_network/run.py — 네트워크 장비 오프라인 설정파일 분석 진입점 (분석자 PC 전용, Python 3.10+).
 
-옵션 문자는 전 카테고리와 통일한다: -l(목록) -i(항목) -g(분류) -o(출력) -h(도움말).
+옵션 문자는 전 카테고리와 통일한다: -l(목록) -i(항목) -g(분류) -e(벤더/엔진) -o(출력) -h(도움말).
+(-v 는 예전 벤더 지정 옵션으로, 하위 호환을 위해 -e 와 같은 뜻으로 남겨 둔다.)
 다른 카테고리와 달리 대상 장비에 아무것도 배치하지 않는다 — 미리 수집한 `show running-config`
 텍스트 파일을 입력받아 분석자 PC에서 판정한다.
 
 사용법:
   python run.py -f running-config.txt              벤더 자동 판별 후 전체 항목 분석
-  python run.py -f running-config.txt -v cisco_ios  벤더 수동 지정
+  python run.py -f running-config.txt -e cisco_ios  벤더 수동 지정(-v 도 같은 뜻, 하위 호환)
   python run.py -d configs/                         디렉토리 내 다수 설정 파일 일괄 분석
   python run.py -f running-config.txt -i N-01,N-06  개별(복수) 항목만 분석
   python run.py -f running-config.txt -g 2          하위분류 단위(1=계정관리...5=기능관리) 분석
   python run.py -l                                  항목 목록만 출력 (38항목 전체)
 
-이 스크립트는 대상 설정을 절대 변경하지 않는다 (진단 전용). 조치는 이후 로드맵의 fix.py 참고.
+이 스크립트는 대상 설정을 절대 변경하지 않는다 (진단 전용). 조치는 fix.py 참고.
+종료 코드: 0 = 모든 파일 분석 완료, 1 = 하나 이상의 파일을 읽지 못했거나 벤더 판별·입력 검증에 실패(나머지 파일은 계속 분석).
 """
 from __future__ import annotations
 
@@ -87,6 +89,14 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
         print(f"오류: {path} 를 읽을 수 없습니다: {e}", file=sys.stderr)
         return None
 
+    # 다른 Cisco 플랫폼(NX-OS·ASA·IOS XR) 설정은 -e cisco_ios 로 강제해도 IOS check 로 판정하지 않는다 - 설정 문법이
+    # 달라 "설정 없음"을 근거로 한 거짓 GOOD 이 나고 비밀값 형식도 달라 마스킹이 빠진다(외부 검수 A14, S5·S6).
+    for mod in VENDORS.values():
+        other = getattr(mod, "other_platform", lambda _t: None)(text)
+        if other:
+            print(f"오류: {path} 는 {other} 설정으로 보입니다 - 지원 범위(Cisco IOS) 밖이라 분석하지 않습니다.", file=sys.stderr)
+            return None
+
     vendor_name = args.vendor or detect_vendor(text)
     # 장비 설정의 hostname 을 쓰고, 없을 때만 파일 이름으로 대신한다 - 예전에는 항상 파일 이름이라 "running-config" 같은
     # 이름이 여러 장비에 겹쳐 병합·보고서에서 구분되지 않았다(실무 적용 검증 P-23). 폴더 이름에 쓰므로 안전한 문자만 남긴다.
@@ -94,7 +104,7 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
     host = re.sub(r"[^A-Za-z0-9._-]", "_", m.group(1)) if m else os.path.splitext(os.path.basename(path))[0]
 
     if not vendor_name:
-        print(f"[{host}] 벤더를 자동으로 판별하지 못했습니다. -v 옵션으로 지정하세요(예: -v cisco_ios).", file=sys.stderr)
+        print(f"[{host}] 벤더를 자동으로 판별하지 못했습니다. -e 옵션으로 지정하세요(예: -e cisco_ios).", file=sys.stderr)
         return None
     if vendor_name not in VENDORS:
         print(f"[{host}] 지원하지 않는 벤더입니다: {vendor_name}", file=sys.stderr)
@@ -102,6 +112,11 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
 
     vendor_mod = VENDORS[vendor_name]
     ctx = vendor_mod.Ctx(text)
+    # 잘린 설정(`end` 없음 등)은 뒤쪽 설정이 빠졌을 수 있어 "설정 없음"을 근거로 한 GOOD/NA 를 믿을 수 없다(외부 검수 A14,
+    # S6). 발견된 취약(VULN)·수동(MANUAL)은 있는 설정을 근거로 하므로 그대로 두고, GOOD/NA 만 ERROR 로 바꾼다.
+    incomplete = getattr(vendor_mod, "completeness_problem", lambda _t: None)(text)
+    if incomplete:
+        print(f"경고: [{host}] 입력 설정이 불완전합니다 - {incomplete}. 양호/해당없음 판정은 오류로 바꿉니다.", file=sys.stderr)
     checks_dir = os.path.join(SCRIPT_DIR, "checks", vendor_name)
 
     all_codes = sorted_codes(by_code)
@@ -126,9 +141,19 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     # 진단 검수 D-R10: 다른 카테고리(prepare_output_dir)와 같이 PID 를 붙여 같은 초의 두 실행이 섞이지 않게 하고,
     # 결과 폴더를 실행자 전용(700)으로 만든다 - 증적에 장비 설정 발췌가 들어간다(Windows 에서는 chmod 가 사실상 무시됨).
-    out_dir = os.path.join(out_base, f"{host}_{CATEGORY_NUM}_{ts}-{os.getpid()}")
+    # 같은 hostname 장비 설정 여러 개를 -d 로 돌리면 같은 초·같은 PID 라 폴더 이름이 겹쳐 FileExistsError 로 나머지 파일이
+    # 전부 빠졌다(외부 검수 B1) - 겹치면 순번을 붙인다.
     os.makedirs(out_base, exist_ok=True)
-    os.makedirs(out_dir, mode=0o700, exist_ok=False)
+    base_name = f"{host}_{CATEGORY_NUM}_{ts}-{os.getpid()}"
+    out_dir = os.path.join(out_base, base_name)
+    seq = 1
+    while True:
+        try:
+            os.makedirs(out_dir, mode=0o700, exist_ok=False)
+            break
+        except FileExistsError:
+            seq += 1
+            out_dir = os.path.join(out_base, f"{base_name}-{seq}")
     os.makedirs(os.path.join(out_dir, "raw"), mode=0o700)
     for d in (out_dir, os.path.join(out_dir, "raw")):
         try:
@@ -162,6 +187,10 @@ def run_one_file(path: str, args, by_code: dict, tool_version: str) -> str | Non
             result = {"status": "NA", "detail": f"이 항목은 {vendor_name} 대상이 아니거나 아직 구현되지 않음", "evidence": ""}
 
         status = result.get("status", "ERROR")
+        if incomplete and status in ("GOOD", "NA"):
+            result = dict(result, status="ERROR",
+                          detail=f"입력 설정이 불완전해 확인할 수 없음({incomplete}) - 원래 판정: {status} / {result.get('detail', '')}")
+            status = "ERROR"
         # 진단 검수 D-R4(S5): check 가 설정 원문(VTY 블록·snmp-server 줄)을 넘겨도 비밀번호·community·키 값이
         # 결과물(result.json·raw·report·csv)에 남지 않도록 여기서 한 번 더 마스킹한다.
         mask = getattr(vendor_mod, "mask_secrets", None) or (lambda t: t)
@@ -192,7 +221,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="네트워크 장비 오프라인 설정파일 분석", add_help=True)
     parser.add_argument("-f", "--file", help="분석할 설정 파일 경로")
     parser.add_argument("-d", "--dir", dest="dirpath", help="디렉토리 내 다수 설정 파일 일괄 분석")
-    parser.add_argument("-v", "--vendor", help="벤더 수동 지정 (예: cisco_ios). 생략 시 자동 판별")
+    # CLAUDE.md 옵션 문자 표의 환경/엔진 지정은 -e. 예전 -v/--vendor 도 하위 호환으로 받는다(외부 검수 C4).
+    parser.add_argument("-e", "-v", "--engine", "--vendor", dest="vendor", help="벤더/엔진 수동 지정 (예: cisco_ios). 생략 시 자동 판별")
     parser.add_argument("-i", "--items", help="개별(복수) 항목 코드, 콤마 구분 (예: N-01,N-06)")
     parser.add_argument("-g", "--group", help="하위분류 번호 (1=계정관리 ... 5=기능관리)")
     parser.add_argument("-l", "--list", action="store_true", help="항목 목록만 출력")
@@ -226,9 +256,15 @@ def main() -> None:
             print(f"오류: {args.dirpath} 안에 파일이 없습니다.", file=sys.stderr)
             sys.exit(2)
 
+    # 파일 읽기·벤더 판별·입력 검증에 실패한 파일이 있으면 0 이 아닌 코드로 끝낸다(외부 검수 B5 - 예전에는 항상 0).
+    failed = []
     for path in files:
-        run_one_file(path, args, by_code, tool_version)
+        if run_one_file(path, args, by_code, tool_version) is None:
+            failed.append(path)
         print()
+    if failed:
+        print(f"오류: {len(failed)}/{len(files)}개 파일을 분석하지 못했습니다: {', '.join(failed)}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

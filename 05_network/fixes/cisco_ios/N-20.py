@@ -19,8 +19,8 @@ def generate(ctx):
         if info["mode"] == "RO":
             continue
         string_ = info["string"]
-        if not info["acl"] or cio.snmp_community_weak(string_):
-            subsumed = True  # ACL 없음(N-19) 또는 문자열 약함(N-18) - 둘 다 다른 항목이 RO까지 함께 반영
+        if cio.snmp_acl_problem(ctx, info) or cio.snmp_community_weak(string_):
+            subsumed = True  # ACL 없음·효과 없음(N-19, A13) 또는 문자열 약함(N-18) - 둘 다 다른 항목이 RO까지 함께 반영
             continue
         cmds.append(f"no snmp-server community {string_}")
         cmds.append(cio.build_snmp_community(string_, "RO", info["view"], info["ipv6_acl"], info["acl"]))
