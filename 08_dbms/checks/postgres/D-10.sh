@@ -5,6 +5,8 @@
 # 진단 검수 D-R3: 예전에는 ①읽지 못한 파일을 "규칙 없음"=GOOD ②database/user 열의 `all` 에도 걸려 거짓 VULN
 # ③주소+마스크 형식·include 지시어를 놓쳤다. 열 위치로 판정하고, 읽기 실패는 ERROR, include 가 있으면
 # 그 파일까지는 보지 않으므로 전체 허용 규칙이 없을 때 MANUAL 로 남긴다.
+# 외부 검수 A18: DB 조회가 안 될 때 고정 경로 glob 의 첫 파일(구 클러스터일 수 있음)로 판정하지 않는다 - 실행 중인 postmaster 의
+# 데이터 디렉터리·hba_file 로 확정하고, 확정하지 못하면 ERROR(lib/common_db.sh postgres_hba_path).
 run_check() {
     db_remote_skip "pg_hba.conf" && return
     if ! command -v psql >/dev/null 2>&1; then
@@ -13,7 +15,7 @@ run_check() {
     fi
     hba=$(postgres_hba_path)
     if [ -z "$hba" ] || [ ! -f "$hba" ]; then
-        CHECK_STATUS="ERROR"; CHECK_DETAIL="pg_hba.conf 파일을 찾을 수 없음"; CHECK_EVIDENCE=""
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="사용 중인 pg_hba.conf 경로를 확정하지 못함(SHOW hba_file 조회 실패, 실행 중인 postmaster 에서도 확인 불가)"; CHECK_EVIDENCE=""
         return
     fi
     if [ ! -r "$hba" ] || ! raw=$(sed 's/#.*$//' "$hba" 2>/dev/null); then

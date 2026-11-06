@@ -35,11 +35,19 @@ detect_dbms_engine() {
 # DB가 내려간 채로 남는 조치에서만 쓴다(fixes/oracle/D-19·D-26).
 DB_CMD_TIMEOUT=${DB_CMD_TIMEOUT:-120}
 
+# -k 5: 클라이언트가 TERM 을 무시하거나 종료 처리 중 멈춰도 5초 뒤 KILL 한다(외부 검수 B4 - R-07 은 run_to 만 고쳐
+# _db_run 은 TERM 만 보내고 끝없이 기다릴 수 있었다). -k 가 없는 구형 timeout 은 그대로 쓴다. KILL 로 끝나면 137.
 _db_run() {
     if [ "$DB_CMD_TIMEOUT" != "0" ] && command -v timeout >/dev/null 2>&1; then
-        timeout "$DB_CMD_TIMEOUT" "$@"
+        if [ -z "${_DB_RUN_K+x}" ]; then
+            _DB_RUN_K=""; timeout -k 1 1 true >/dev/null 2>&1 && _DB_RUN_K="-k 5"
+        fi
+        # shellcheck disable=SC2086
+        timeout $_DB_RUN_K "$DB_CMD_TIMEOUT" "$@"
         _dbr_rc=$?
-        [ "$_dbr_rc" -eq 124 ] && printf 'DB 명령이 %s초 안에 끝나지 않아 중단함(무기한 대기 방지)\n' "$DB_CMD_TIMEOUT" >&2
+        if [ "$_dbr_rc" -eq 124 ] || [ "$_dbr_rc" -eq 137 ]; then
+            printf 'DB 명령이 %s초 안에 끝나지 않아 중단함(무기한 대기 방지)\n' "$DB_CMD_TIMEOUT" >&2
+        fi
         return "$_dbr_rc"
     fi
     "$@"
@@ -208,6 +216,72 @@ mysql_config_path() {
     done
 }
 
+# mysql_config_files -> MySQL/MariaDB 서버가 실제로 읽는 설정 파일과 비밀번호 파일(존재하는 것만, 한 줄에 하나, 중복 없음).
+# 외부 검수 A17(P-06 과 같은 패턴): 예전 D-14 는 고정 경로 중 첫 파일 하나(mysql_config_path)만 봐서 !include/!includedir 로
+# 불러오는 파일(공식 이미지 /etc/mysql/conf.d/, Debian mysql.conf.d·mariadb.conf.d), --defaults-file 로 띄운 서버의 설정,
+# debian.cnf(유지보수 계정 비밀번호)를 놓쳤다.
+#  - 시작점: 실행 중인 mysqld/mariadbd 마다 명령행 --defaults-file(있으면 그 파일만) 또는 기본 탐색 경로
+#    (/etc/my.cnf /etc/mysql/my.cnf /usr/etc/my.cnf + 구동 계정 홈의 .my.cnf) + --defaults-extra-file. --no-defaults 는 읽는 파일 없음.
+#    실행 중인 서버가 없으면 기본 탐색 경로.
+#  - 각 파일의 !include <파일>, !includedir <폴더>(그 안의 *.cnf) 를 따라간다(같은 파일은 한 번, 최대 256개 - S2).
+#  - /etc/mysql/debian.cnf 가 있으면 함께 넣는다(서버가 읽지는 않지만 가이드 D-14 의 "비밀번호 파일").
+mysql_config_files() {
+    _mcf_std="/etc/my.cnf
+/etc/mysql/my.cnf
+/usr/etc/my.cnf"
+    _mcf_q=""; _mcf_np=0
+    for _mcf_p in $(proc_pids_by_comm mysqld) $(proc_pids_by_comm mariadbd); do
+        _mcf_np=$((_mcf_np + 1))
+        _mcf_args=$(tr '\000' '\n' 2>/dev/null < "/proc/$_mcf_p/cmdline")
+        printf '%s\n' "$_mcf_args" | grep -qx -- '--no-defaults' && continue
+        _mcf_cwd=$(readlink "/proc/$_mcf_p/cwd" 2>/dev/null)
+        _mcf_df=$(printf '%s\n' "$_mcf_args" | sed -n 's/^--defaults-file=//p' | head -n 1)
+        _mcf_xf=$(printf '%s\n' "$_mcf_args" | sed -n 's/^--defaults-extra-file=//p' | head -n 1)
+        case "$_mcf_df" in ""|/*) ;; *) _mcf_df="$_mcf_cwd/$_mcf_df" ;; esac
+        case "$_mcf_xf" in ""|/*) ;; *) _mcf_xf="$_mcf_cwd/$_mcf_xf" ;; esac
+        if [ -n "$_mcf_df" ]; then
+            _mcf_q="$_mcf_q
+$_mcf_df"
+        else
+            _mcf_home=$(awk -F: -v u="$(proc_uid "$_mcf_p")" '$3 == u { print $6; exit }' /etc/passwd 2>/dev/null)
+            _mcf_q="$_mcf_q
+$_mcf_std
+$_mcf_xf${_mcf_home:+
+$_mcf_home/.my.cnf}"
+        fi
+    done
+    [ "$_mcf_np" -eq 0 ] && _mcf_q=$_mcf_std
+    _mcf_q="$_mcf_q
+/etc/mysql/debian.cnf"
+    _mcf_seen=""; _mcf_n=0
+    _mcf_q=$(printf '%s\n' "$_mcf_q" | awk 'NF')
+    while [ -n "$_mcf_q" ] && [ "$_mcf_n" -lt 256 ]; do
+        _mcf_f=$(printf '%s\n' "$_mcf_q" | head -n 1)
+        _mcf_q=$(printf '%s\n' "$_mcf_q" | sed '1d')
+        _mcf_n=$((_mcf_n + 1))
+        [ -f "$_mcf_f" ] || continue
+        printf '%s\n' "$_mcf_seen" | grep -qxF -- "$_mcf_f" && continue
+        _mcf_seen="$_mcf_seen
+$_mcf_f"
+        _mcf_inc=$(awk '
+            /^[ \t]*!include[ \t]/    { sub(/^[ \t]*!include[ \t]+/, "");    sub(/[ \t\r]+$/, ""); print "F " $0; next }
+            /^[ \t]*!includedir[ \t]/ { sub(/^[ \t]*!includedir[ \t]+/, ""); sub(/[ \t\r]+$/, ""); print "D " $0 }' "$_mcf_f" 2>/dev/null)
+        [ -n "$_mcf_inc" ] || continue
+        _mcf_add=$(printf '%s\n' "$_mcf_inc" | while IFS= read -r _mcf_l; do
+            _mcf_v=${_mcf_l#? }
+            case "$_mcf_l" in
+                F\ *) printf '%s\n' "$_mcf_v" ;;
+                D\ *) [ -d "$_mcf_v" ] && find "$_mcf_v" -maxdepth 1 -type f -name '*.cnf' 2>/dev/null | LC_ALL=C sort ;;
+            esac
+        done)
+        # 포함 파일은 포함한 파일 바로 뒤에 읽히므로 큐 앞쪽에 넣는다(판정에는 순서 무관, 근거 표시 순서만)
+        [ -n "$_mcf_add" ] && _mcf_q="$_mcf_add
+$_mcf_q"
+        _mcf_q=$(printf '%s\n' "$_mcf_q" | awk 'NF')
+    done
+    printf '%s\n' "$_mcf_seen" | awk 'NF'
+}
+
 # ---- DBMS 공통: PostgreSQL 연결/쿼리 ----------------------------------------
 # -w: 비밀번호가 필요해도 프롬프트를 띄우지 않고 즉시 실패(대화형 대기 방지).
 psql_args() {
@@ -232,22 +306,117 @@ psql_query() {
     ) 2>"${DB_ERR_FILE:-/dev/null}"
 }
 
+# postgres_config_path / postgres_hba_path -- 접속 중인 서버의 SHOW config_file / hba_file. 조회하지 못하면(사전 점검 실패 등)
+# 실행 중인 postmaster 에서 확정한 경로(postgres_server_files), 그것도 안 되면 빈 값(호출 check 는 ERROR).
+# 외부 검수 A18: 예전에는 조회 실패 시 고정 경로 glob 의 첫 파일을 썼다 - 메이저 업그레이드 뒤 남은 구 클러스터(/etc/postgresql/12/main)
+# 나 hba_file 을 다른 곳에 둔 서버에서 실제로 쓰지 않는 파일로 D-10/D-14 를 판정했다.
 postgres_config_path() {
     _cf=$(psql_query "SHOW config_file;" 2>/dev/null | tr -d '\r' | awk '{$1=$1};1')
     if [ -n "$_cf" ] && [ -f "$_cf" ]; then printf '%s' "$_cf"; return; fi
-    for _f in /var/lib/postgresql/data/postgresql.conf /var/lib/pgsql/data/postgresql.conf \
-              /etc/postgresql/*/main/postgresql.conf; do
-        [ -f "$_f" ] && { printf '%s' "$_f"; return; }
-    done
+    _psf=$(postgres_server_files) || return 1
+    _cf=$(printf '%s' "$_psf" | cut -d'|' -f2)
+    [ -f "$_cf" ] && printf '%s' "$_cf"
 }
 
 postgres_hba_path() {
     _hf=$(psql_query "SHOW hba_file;" 2>/dev/null | tr -d '\r' | awk '{$1=$1};1')
     if [ -n "$_hf" ] && [ -f "$_hf" ]; then printf '%s' "$_hf"; return; fi
-    for _f in /var/lib/postgresql/data/pg_hba.conf /var/lib/pgsql/data/pg_hba.conf \
-              /etc/postgresql/*/main/pg_hba.conf; do
-        [ -f "$_f" ] && { printf '%s' "$_f"; return; }
+    _psf=$(postgres_server_files) || return 1
+    _hf=$(printf '%s' "$_psf" | cut -d'|' -f3)
+    [ -f "$_hf" ] && printf '%s' "$_hf"
+}
+
+# _pg_cmdline_opt <인자 목록(한 줄에 하나)> <설정 이름> -> postgres 명령행의 -c name=value / -cname=value / --name=value 값(마지막 것)
+_pg_cmdline_opt() {
+    printf '%s\n' "$1" | awk -v k="$2" '
+        { a = $0; o = "" }
+        prev == "-c" { o = a }
+        a ~ /^-c./   { o = substr(a, 3) }
+        a ~ /^--/    { o = substr(a, 3) }
+        o != "" { n = o; sub(/=.*/, "", n); gsub(/-/, "_", n); if (n == k && index(o, "=") > 0) v = substr(o, index(o, "=") + 1) }
+        { prev = a }
+        END { if (v != "") print v }'
+}
+
+# _pg_conf_value <postgresql.conf> <설정 이름> -> 설정 파일(include/include_if_exists/include_dir 는 한 단계까지 그 자리에서 펼침)의
+# 마지막 유효 값(따옴표 제거). 없으면 빈 값.
+_pg_conf_value() {
+    _pcv_dir=$(dirname "$1")
+    _pcv_v=""
+    _pcv_lines=$(awk -v k="$2" '
+        { l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t\r]+$/, "", l); if (l == "") next
+          n = l; sub(/[ \t=].*/, "", n); val = l; sub(/^[^ \t=]+[ \t]*=?[ \t]*/, "", val); gsub(/^'\''|'\''$/, "", val)
+          if (n == k) print "V " val
+          else if (n == "include" || n == "include_if_exists") print "F " val
+          else if (n == "include_dir") print "D " val }' "$1" 2>/dev/null)
+    _pcv_tab=$(printf '%s\n' "$_pcv_lines" | while IFS= read -r _pcv_l; do
+        _pcv_x=${_pcv_l#? }
+        case "$_pcv_x" in /*) ;; ?*) _pcv_x="$_pcv_dir/$_pcv_x" ;; esac
+        case "$_pcv_l" in
+            V\ *) printf '%s\n' "${_pcv_l#V }" ;;
+            F\ *) [ -f "$_pcv_x" ] && awk -v k="$2" '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t\r]+$/, "", l)
+                      n = l; sub(/[ \t=].*/, "", n); val = l; sub(/^[^ \t=]+[ \t]*=?[ \t]*/, "", val); gsub(/^'\''|'\''$/, "", val)
+                      if (n == k) print val }' "$_pcv_x" 2>/dev/null ;;
+            D\ *) [ -d "$_pcv_x" ] && for _pcv_f in $(find "$_pcv_x" -maxdepth 1 -type f -name '*.conf' 2>/dev/null | LC_ALL=C sort); do
+                      awk -v k="$2" '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t\r]+$/, "", l)
+                          n = l; sub(/[ \t=].*/, "", n); val = l; sub(/^[^ \t=]+[ \t]*=?[ \t]*/, "", val); gsub(/^'\''|'\''$/, "", val)
+                          if (n == k) print val }' "$_pcv_f" 2>/dev/null
+                  done ;;
+        esac
+    done)
+    _pcv_v=$(printf '%s\n' "$_pcv_tab" | awk 'NF' | tail -n 1)
+    printf '%s' "$_pcv_v"
+}
+
+# _pg_postmaster_datadir <pid> <명령행 인자(한 줄에 하나)> -> postmaster 의 데이터 디렉터리(PG_VERSION 이 있는 폴더). 순서:
+#  ① /proc/<pid>/cwd - postmaster 는 기동 시 데이터 디렉터리로 chdir 한다. 다른 계정 프로세스의 cwd·environ 은 CAP_SYS_PTRACE 가
+#    있어야 읽혀 컨테이너 안 root 등에서는 비어 있다(실측) ② 명령행 -D <절대 경로> ③ 소켓 잠금 파일(/run/postgresql·/var/run/postgresql·
+#    /tmp 의 .s.PGSQL.<포트>.lock - 1행 PID, 2행 데이터 디렉터리)에서 PID 가 같은 것 ④ /proc/<pid>/environ 의 PGDATA. 못 찾으면 빈 값.
+_pg_postmaster_datadir() {
+    _ppd=$(readlink "/proc/$1/cwd" 2>/dev/null)
+    [ -n "$_ppd" ] && [ -f "$_ppd/PG_VERSION" ] && { printf '%s' "$_ppd"; return; }
+    _ppd=$(printf '%s\n' "$2" | awk 'prev == "-D" { v = $0 } /^-D./ { v = substr($0, 3) } { prev = $0 } END { print v }')
+    case "$_ppd" in /*) [ -f "$_ppd/PG_VERSION" ] && { printf '%s' "$_ppd"; return; } ;; esac
+    for _ppd_l in /run/postgresql/.s.PGSQL.*.lock /var/run/postgresql/.s.PGSQL.*.lock /tmp/.s.PGSQL.*.lock; do
+        [ -f "$_ppd_l" ] || continue
+        _ppd=$(awk -v p="$1" 'NR == 1 && $1 != p { exit } NR == 2 { print; exit }' "$_ppd_l" 2>/dev/null)
+        [ -n "$_ppd" ] && [ -f "$_ppd/PG_VERSION" ] && { printf '%s' "$_ppd"; return; }
     done
+    _ppd=$(tr '\000' '\n' 2>/dev/null < "/proc/$1/environ" | sed -n 's/^PGDATA=//p' | head -n 1)
+    case "$_ppd" in /*) [ -f "$_ppd/PG_VERSION" ] && printf '%s' "$_ppd" ;; esac
+}
+
+# postgres_server_files -> "데이터 디렉터리|config_file|hba_file" (실행 중인 postmaster 기준, 외부 검수 A18).
+#  - postmaster: comm 이 postgres/postmaster 이고 부모는 아닌 프로세스. 데이터 디렉터리는 _pg_postmaster_datadir.
+#  - config_file: 명령행 -c config_file= > -D <폴더>/postgresql.conf > 데이터 디렉터리/postgresql.conf
+#  - hba_file: 명령행 -c hba_file= > postgresql.auto.conf > postgresql.conf(한 단계 include 포함) > 데이터 디렉터리/pg_hba.conf
+# postmaster 가 없거나, 확정하지 못하거나(상대 경로·cwd 미조회 - 비 root), 여러 클러스터가 서로 다른 경로를 가리키면 1(호출부 ERROR).
+postgres_server_files() {
+    _psf_res=""
+    for _psf_p in $(proc_pids_by_comm postgres) $(proc_pids_by_comm postmaster); do
+        _psf_pp=$(sed 's/.*) //' "/proc/$_psf_p/stat" 2>/dev/null | awk '{print $2}')
+        _psf_pc=""; { IFS= read -r _psf_pc < "/proc/$_psf_pp/comm"; } 2>/dev/null
+        case "$_psf_pc" in postgres|postmaster) continue ;; esac
+        _psf_args=$(tr '\000' '\n' 2>/dev/null < "/proc/$_psf_p/cmdline")
+        _psf_dd=$(_pg_postmaster_datadir "$_psf_p" "$_psf_args")
+        if [ -z "$_psf_dd" ] || [ ! -f "$_psf_dd/PG_VERSION" ]; then return 1; fi
+        _psf_cf=$(_pg_cmdline_opt "$_psf_args" config_file)
+        if [ -z "$_psf_cf" ]; then
+            _psf_d=$(printf '%s\n' "$_psf_args" | awk 'prev == "-D" { v = $0 } /^-D./ { v = substr($0, 3) } { prev = $0 } END { print v }')
+            case "$_psf_d" in /*) _psf_cf="$_psf_d/postgresql.conf" ;; *) _psf_cf="$_psf_dd/postgresql.conf" ;; esac
+        fi
+        case "$_psf_cf" in /*) ;; *) return 1 ;; esac
+        _psf_hf=$(_pg_cmdline_opt "$_psf_args" hba_file)
+        [ -z "$_psf_hf" ] && [ -f "$_psf_dd/postgresql.auto.conf" ] && _psf_hf=$(_pg_conf_value "$_psf_dd/postgresql.auto.conf" hba_file)
+        [ -z "$_psf_hf" ] && [ -f "$_psf_cf" ] && _psf_hf=$(_pg_conf_value "$_psf_cf" hba_file)
+        [ -z "$_psf_hf" ] && _psf_hf="$_psf_dd/pg_hba.conf"
+        case "$_psf_hf" in /*) ;; *) _psf_hf="$_psf_dd/$_psf_hf" ;; esac
+        _psf_one="$_psf_dd|$_psf_cf|$_psf_hf"
+        if [ -n "$_psf_res" ] && [ "$_psf_res" != "$_psf_one" ]; then return 1; fi
+        _psf_res=$_psf_one
+    done
+    [ -n "$_psf_res" ] || return 1
+    printf '%s\n' "$_psf_res"
 }
 
 # postgres_other_dbs_manual  -- 접속한 DB 하나만 보고 GOOD 을 낸 check 가 호출한다. 접속 가능한 다른 DB 가

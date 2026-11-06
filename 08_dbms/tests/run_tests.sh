@@ -62,6 +62,14 @@ for engine in $SQL_ENGINES; do
     echo "[빌드] $engine 클라이언트 이미지..."
     docker build -q --build-arg BASE_IMAGE="$(srv_image "$engine")" -f "08_dbms/tests/Dockerfile.$engine" -t "$image" . >/dev/null
 
+    # DB 서버 없이 클라이언트 이미지 안에서 lib/common_db.sh 단위 검사(_db_run 종료 신호 무시 B4, mysql --defaults-file A17)
+    echo "[*] $engine 단위 검사(fixtures/db_unit.sh)..."
+    if docker run --rm -u 0 --entrypoint sh "$image" 08_dbms/tests/fixtures/db_unit.sh "$engine"; then
+        echo "PASS: $engine/unit"
+    else
+        echo "FAIL: $engine/unit"; fail=1
+    fi
+
     for mode in vuln hardened; do
         echo "[*] $engine/$mode 픽스처 실행..."
         net="kisa-dbms-net-$$-$engine-$mode"
