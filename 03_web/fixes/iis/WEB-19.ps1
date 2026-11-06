@@ -2,7 +2,7 @@
 # 변경: IIS 사이트별 system.webServer/handlers 에서 .stm/.shtm/.shtml 핸들러 매핑 제거(원복 불가)
 # 원복: 불가 — 제거한 SSI 핸들러 매핑은 자동으로 다시 등록하지 않음
 # checks/iis/WEB-19.ps1 이 찾아낸 .stm/.shtm/.shtml 핸들러 매핑을 제거한다. 컬렉션 원소
-# 제거라 표준 webconfig 백업/원복 대상이 아니다(WEB-13과 동일한 한계, 03_web/CLAUDE.md 참고).
+# 제거라 표준 webconfig 백업/원복 대상이 아니다(WEB-13과 동일한 한계).
 
 if (-not (Test-IisAvailable)) {
     $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; $Global:FixEvidence = ""

@@ -1,7 +1,7 @@
 #!/bin/sh
 # 03_web/run.sh — 웹 서비스(Apache/Nginx/Tomcat) 진단 진입점 (POSIX sh)
 #
-# 옵션 문자는 전 카테고리와 통일한다 (루트 CLAUDE.md "CLI 옵션 문자 통일" 참고): -l -i -g -e -o -h
+# 옵션 문자는 전 카테고리와 통일한다: -l -i -g -e -o -h
 #
 # 사용법:
 #   run.sh                  설치된 엔진 자동 탐지 후 전체 항목 일괄 진단 (여러 엔진 동시 가능)

@@ -4,7 +4,7 @@
 # checks/iis/WEB-13.ps1 이 확인하는 hiddenSegments 컬렉션에 "web.config" 항목을 추가한다.
 # 컬렉션에 원소를 추가/제거하는 작업은 Set-FixWebConfigProperty(단일 값 설정)로 표현할 수
 # 없어 Add-WebConfigurationProperty 를 직접 쓴다 - 이 항목은 표준 webconfig 백업/원복 대상이
-# 아니라는 한계가 있다(03_web/CLAUDE.md 참고, 실패해도 사이트 동작 자체에는 영향 없음).
+# 아니라는 한계가 있다(실패해도 사이트 동작 자체에는 영향 없음).
 
 if (-not (Test-IisAvailable)) {
     $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; $Global:FixEvidence = ""

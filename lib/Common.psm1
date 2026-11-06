@@ -3,7 +3,7 @@
 # PowerShell 5.1 호환. 대상 호스트에는 이 파일 + 카테고리 run.ps1/checks/*.ps1 만 배치하면 된다.
 # 사용: 카테고리 run.ps1 에서 "Import-Module $PSScriptRoot\..\lib\Common.psm1 -Force"
 
-# VERSION 파일이 버전의 단일 소스다 (루트 CLAUDE.md 버전 규칙 참고). $PSScriptRoot 는 이
+# VERSION 파일이 버전의 단일 소스다. $PSScriptRoot 는 이
 # 모듈 파일(lib/Common.psm1)의 위치를 가리키므로 그 상위 디렉터리에서 VERSION 을 읽는다.
 $_versionFile = Join-Path $PSScriptRoot "..\VERSION"
 $Script:ToolVersion = if (Test-Path $_versionFile) { (Get-Content -Raw $_versionFile).Trim() } else { "0.0.0-unknown" }
@@ -604,7 +604,7 @@ function Get-SecPrivilegeSids {
 # ---- MSSQL 연결/쿼리 (08_dbms) ---------------------------------------------------
 # sqlcmd.exe 를 사용한다(MSSQL 설치 시 기본 동봉되는 mssql-tools, 대상 무설치 원칙 준수).
 # 비밀번호는 인자로 절대 넘기지 않고 SQLCMDPASSWORD 환경변수로만 전달한다
-# (run.ps1 이 $env:DB_PASSWORD 를 이 변수에 매핑, 08_dbms/CLAUDE.md "접속정보 취급" 원칙).
+# (run.ps1 이 $env:DB_PASSWORD 를 이 변수에 매핑, 비밀번호를 CLI 인자로 노출하지 않음).
 # $Global:DbQueryOk 로 "쿼리 실패"와 "쿼리 성공+결과 0건"을 구분한다(PC-15에서 배운 원칙과 동일).
 # 운영 안전장치: -l(로그인 제한 시간)/-t(쿼리 제한 시간)로 무기한 대기를 막고, run.ps1/fix.ps1 이
 # Test-MssqlPreflight 로 접속을 1회만 시험해 실패하면 $Global:DbConnFailed 를 세워 이후 호출은
@@ -825,7 +825,7 @@ function Get-IisConfigValue {
 }
 
 # ============================================================================
-# ---- 자동 조치(fix) 공통 (§자동 조치, 루트 CLAUDE.md 참고) - Windows 계열 --------
+# ---- 자동 조치(fix) 공통 - Windows 계열 --------
 # ============================================================================
 # 01_unix/lib/common.sh 의 fix_* 계열과 같은 역할을 하는 PowerShell 버전이다. run.*/checks 는
 # 이 함수들을 쓰지 않는다 - fix.ps1/fixes/*.ps1 전용.
@@ -836,7 +836,7 @@ function Get-IisConfigValue {
 # <FixBackupDir>\_secpolicy\secedit-snapshot.inf 하나로만 백업한다 - 즉, secedit 기반 항목은
 # "이 항목만" 롤백이 불가능하고 `fix.ps1 --rollback`(전체 원복)에서만 스냅샷 전체를 재적용한다
 # (재검증 실패 시 자동 원복 경로에서는 다른 secedit 항목까지 되돌리지 않도록 일부러 건드리지 않음
-# - 알려진 한계, CLAUDE.md에 기록).
+# - 알려진 한계).
 #
 # 여러 .ps1 파일(run.ps1/fix.ps1/각 checks·fixes 파일) 경계를 넘어 상태를 공유해야 하므로
 # $Script: 가 아니라 $Global: 을 쓴다(교훈 18, MSSQL DbErrFile 버그와 동일한 이유).

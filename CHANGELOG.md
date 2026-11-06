@@ -677,7 +677,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
   - `static-analysis`(ubuntu-latest): 전체 `*.sh` ShellCheck, 전체 `*.ps1`/`*.psm1`
     PSScriptAnalyzer(pwsh가 크로스플랫폼이라 Windows 러너 불필요), 전체 `*.py` ast.parse.
   - `network`(ubuntu-latest, Docker 불필요): 05_network Cisco IOS vuln/hardened 픽스처.
-    05_network/CLAUDE.md가 예전부터 언급하던 "임시 픽스처 2종"을 처음으로 영구 커밋했다
+    예전부터 임시로만 쓰던 "픽스처 2종"을 처음으로 영구 커밋했다
     (이전엔 세션마다 만들고 버려져 커밋된 적이 없었다).
   - `linux-integration`(ubuntu-latest + Docker): 01_unix(Debian 12, ~20항목 명시적 vuln/
     hardened) + 03_web(공식 httpd:2.4/nginx:latest/tomcat:10, WEB-04만 명시적) + 08_dbms
@@ -742,7 +742,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
 
 ## [1.0.0] - 2026-10-06
 ### 6개 카테고리 완성
-루트 `CLAUDE.md`가 정한 6개 카테고리(UNIX/Windows/웹/네트워크/PC/DBMS, 가이드 2026판 기준
+처음에 정한 6개 카테고리(UNIX/Windows/웹/네트워크/PC/DBMS, 가이드 2026판 기준
 총 239항목)의 진단이 모두 구현되었고, 자동 조치도 성격에 맞는 방식으로 모두 구현되었다
 (Unix/Windows/PC/Web/DBMS는 `fix.*`로 직접 적용·백업·원복, Network는 장비에 접속하지 않는다는
 설계 원칙에 따라 `fix.py`로 조치 명령어 스크립트만 생성). 통합 런처(`audit.sh`/`audit.ps1`)와
@@ -795,7 +795,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
 ## [0.9.3] - 2026-10-06
 ### Added
 - **Network(Cisco IOS) 조치 명령어 스크립트 생성 구현**: `05_network/fix.py` 신규. 다른
-  카테고리의 `fix.sh`/`fix.ps1`과 달리 `--apply`/`--rollback`이 없다 — 05_network/CLAUDE.md의
+  카테고리의 `fix.sh`/`fix.ps1`과 달리 `--apply`/`--rollback`이 없다 — 05_network 의
   원칙("장비에 접속해 변경하지 않고 조치 명령어 스크립트만 생성") 그대로, VULN 판정 항목에 대해
   실제 적용 가능한 Cisco IOS 명령어를 모아 `remediation_<host>.txt` 한 개를 생성만 하고 장비에는
   아무것도 하지 않는다.
@@ -895,7 +895,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
   바인딩이 있는 사이트만 sslFlags에 Ssl을 추가해 평문 접근을 차단하고, 바인딩이 없는 사이트는
   인증서가 없어 안전하게 조치할 수 없으므로 건드리지 않고 오류로 안내한다(WEB-20과 동일한
   이유). WEB-13/WEB-19는 hiddenSegments/handlers 컬렉션 원소 추가·제거라 표준 webconfig
-  백업/원복 대상이 아니라는 한계를 CLAUDE.md에 기록했다.
+  백업/원복 대상이 아니라는 한계를 문서에 기록했다.
 
 ### Testing
 - **실제 IIS 미설치 — 로직/구문 검증만 수행**(0.8.1/0.8.2와 동일한 이유로 사용자가 이미 확인한
@@ -992,7 +992,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
   전량 보정, `Invoke-ScriptAnalyzer`(Error 심각도) 이슈 0건 확인, 더미 `result.json`으로
   `fix.ps1` dry-run 실행 경로(VULN 코드 추출 → guide.json 등급 조회 → manual/auto 분기 →
   guide.json 에 없는 미지 코드의 안전한 기본 처리)까지 실제로 실행해 확인했다. 레지스트리/
-  서비스/secedit 등 cmdlet 자체의 실제 동작은 검증하지 못했다 — 02_windows·07_pc/CLAUDE.md 에
+  서비스/secedit 등 cmdlet 자체의 실제 동작은 검증하지 못했다 — 02_windows·07_pc 문서에
   이 한계를 명시했다.
 
 ## [0.8.1] - 2026-09-29
@@ -1007,7 +1007,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
   서버 전역 설정을 동일한 방식으로 조회).
 - IIS 다중 사이트 판정 정책: 사이트 하나라도 VULN이면 전체 VULN, 전부 GOOD이면 GOOD, 판정
   불가/규칙 존재만으로 확정 못 하는 경우(WEB-21 URL Rewrite 등)는 MANUAL — 기존 Unix 계열
-  Web(Apache/Nginx/Tomcat) 다중 엔진 집계 정책(03_web/CLAUDE.md)과 동일한 원칙을 사이트 단위로
+  Web(Apache/Nginx/Tomcat) 다중 엔진 집계 정책과 동일한 원칙을 사이트 단위로
   적용했다.
 - WEB-02(관리자 비밀번호)·WEB-24(업로드 경로)는 IIS에 표준화된 설정 키가 없어 항상 MANUAL,
   WEB-25(패치 관리)는 다른 엔진과 동일하게 조직 정책 판단이 필요해 항상 MANUAL로 응답한다
@@ -1077,7 +1077,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
 - `05_network` 네트워크 장비 38개 항목(N-01~N-38) 중 Cisco IOS 진단 로직 구현, Python 3.10+
   (`05_network/run.py` + `checks/cisco_ios/N-xx.py`). 다른 카테고리와 달리 대상 장비에 아무것도
   배치하지 않는 **오프라인 설정파일 분석** 방식이다 — 미리 수집한 `show running-config` 텍스트
-  파일을 입력받아 분석자 PC에서 판정한다(05_network/CLAUDE.md).
+  파일을 입력받아 분석자 PC에서 판정한다.
 - `05_network/parsers/cisco_ios.py`: 설정 텍스트 파싱 컨텍스트(`Ctx`) — 전체 텍스트 정규식 검색,
   `line con/vty/aux` 및 `interface` 블록 추출(Cisco IOS의 "하위 명령은 공백 1칸 들여쓰기" 규칙으로
   블록 경계 판별), IP가 설정되고 shutdown되지 않은 "사용 중" 인터페이스만 골라내는 헬퍼 포함.
@@ -1154,14 +1154,14 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
 ### Added
 - `08_dbms` DBMS 26개 항목(D-01~D-26) 중 MySQL/PostgreSQL 대상 진단 로직 구현, POSIX sh —
   각 엔진의 카탈로그/뷰가 완전히 달라 `checks/mysql/D-xx.sh` / `checks/postgres/D-xx.sh` 로
-  엔진별 디렉터리를 분리해 구현(08_dbms/CLAUDE.md 설계 그대로 적용). 가이드 원문의 "대상" 필드에
+  엔진별 디렉터리를 분리해 구현. 가이드 원문의 "대상" 필드에
   해당 엔진이 없는 항목(D-05/09/12/13/15~19/22~24 등, Oracle/MSSQL/Windows OS 전용)은 두 엔진
   모두에서 `NA`로 정직하게 응답한다. Oracle/MSSQL/Altibase/Tibero/Cubrid 는 이번 버전 범위
   밖이며(로드맵 0.6.x 별도 버전), 해당 엔진 선택 시 전 항목 `NA`로 응답한다.
 - `08_dbms/run.sh`: 다른 카테고리와 동일한 CLI(`-l/-i/-g/-e/-o/-h`) + DBMS 전용 접속 옵션
   (`--host/--port/--user/--db/--socket`). **비밀번호는 CLI 인자로 절대 받지 않고 `DB_PASSWORD`
   환경변수로만 전달**하며, 내부적으로 `MYSQL_PWD`/`PGPASSWORD` 환경변수로 클라이언트에 넘겨
-  `ps` 목록에 노출되지 않도록 한다(08_dbms/CLAUDE.md "접속정보 취급" 원칙). `-e` 미지정 시
+  `ps` 목록에 노출되지 않도록 한다. `-e` 미지정 시
   `/proc` 기반으로 로컬에 구동 중인 엔진을 자동 탐지하되, 여러 엔진이 동시에 감지되면(Web과 달리
   DBMS는 엔진별 카탈로그가 완전히 달라 합산 진단이 부적절) `-e` 로 명시적으로 선택하도록 안내한다.
 - `lib/common.sh`: `detect_dbms_engine`, MySQL/PostgreSQL 연결·쿼리 헬퍼(`mysql_query`,
@@ -1236,7 +1236,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
   확인했고, 불필요한 `-ne $null` 방어 가드를 걷어냄.
 
 ### Changed
-- 루트 `CLAUDE.md`에 "CLI 옵션 문자 통일" 규칙 신설: 모든 카테고리의 `run.*`/`fix.*`가 언어에
+- "CLI 옵션 문자 통일" 규칙 신설: 모든 카테고리의 `run.*`/`fix.*`가 언어에
   관계없이 동일한 옵션 문자(`-l/-i/-g/-e/-o/-h`)를 쓰도록 명시.
 - `02_windows/run.ps1`: 서술형 매개변수(`-Items`/`-Group`/`-ListOnly`/`-OutBase`)에
   PowerShell `[Alias]`로 `-i/-g/-l/-o` 단축 옵션 추가, `-h`(도움말) 신규 추가 — `01_unix/run.sh`와
@@ -1261,7 +1261,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
 - **PowerShell BOM 이슈**: Windows PowerShell 5.1이 BOM 없는 `.ps1`/`.psm1`을 시스템
   코드페이지(cp949)로 읽어 한글이 깨지며 파싱 오류(`The string is missing the terminator`)가
   발생하는 문제를 `lib/Common.psm1`에서 발견. 모든 PowerShell 파일을 UTF-8 BOM으로 재저장하고,
-  루트 CLAUDE.md 코딩 규칙에 필수 절차로 명시.
+  코딩 규칙에 필수 절차로 명시.
 - `lib/common.sh`, `lib/Common.psm1` 의 `TOOL_VERSION`이 `0.1.0`으로 하드코딩되어 실제
   `VERSION` 파일과 어긋나던 문제 수정 — 이제 두 언어 모두 `VERSION` 파일을 단일 소스로 읽음.
 - W-40(감사 정책): `auditpol` 하위 범주 이름이 로캘에 따라 깨지는 문제를 로캘 독립적인
@@ -1288,8 +1288,8 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
 
 ## [0.1.0] - 2026-09-28
 ### Added
-- 프로젝트 골격: 루트 `CLAUDE.md` + 6개 카테고리(`01_unix`, `02_windows`, `03_web`,
-  `05_network`, `07_pc`, `08_dbms`) `CLAUDE.md`
+- 프로젝트 골격: 6개 카테고리(`01_unix`, `02_windows`, `03_web`,
+  `05_network`, `07_pc`, `08_dbms`) 작업 규칙 문서
 - `lib/extract_guide.py`: 가이드 PDF(2026판)에서 카테고리별 `guide.json`/`guide.md`를
   추출하는 스크립트. 6개 카테고리 전체 항목 수 검증 완료
   (Unix 67 / Windows 64 / Web 26 / Network 38 / PC 18 / DBMS 26)
@@ -1301,7 +1301,7 @@ IOS)에 대한 **영구 테스트 픽스처 + GitHub Actions CI**로 전환한�
   (`.claude/settings.json`, `.githooks/commit-msg`)
 
 ### Changed
-- `.claude/`, 모든 `CLAUDE.md`(루트·카테고리), `.githooks/`를 저장소에서 제외(`.gitignore`).
+- 로컬 작업 설정·규칙 문서, `.githooks/`를 저장소에서 제외(`.gitignore`).
   로컬 디스크에는 그대로 유지되며 작업 규칙 문서·커밋 훅으로 계속 사용하지만, 공개 저장소에는
   포함하지 않는다.
 

@@ -1,7 +1,7 @@
 """05_network/parsers/cisco_ios.py — Cisco IOS `show running-config` 텍스트 파싱 헬퍼.
 
-실제 장비 없이 미리 수집된 설정 텍스트 파일만으로 판정하므로(05_network/CLAUDE.md "오프라인
-설정파일 분석" 원칙), 이 모듈은 정규식/블록 파싱만 제공하고 판정 로직은 각 checks/cisco_ios/N-xx.py
+실제 장비 없이 미리 수집된 설정 텍스트 파일만으로 판정하므로(오프라인
+설정파일 분석), 이 모듈은 정규식/블록 파싱만 제공하고 판정 로직은 각 checks/cisco_ios/N-xx.py
 에 둔다. Cisco IOS 설정에서 하위 명령은 정확히 공백 1칸으로 들여쓰기되고, 최상위 명령/`!` 구분자는
 들여쓰기가 없다 — 이 규칙으로 블록(line/interface 등)을 구분한다.
 """

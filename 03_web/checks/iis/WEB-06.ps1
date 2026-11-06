@@ -2,7 +2,7 @@
 # 판단 기준(가이드 원문): 양호 = 상위 디렉터리 접근 기능 제거 / 취약 = 제거하지 않은 경우
 # 자동화 범위: 가이드는 IIS 6.0(ASP metabase AspEnableParentPaths)과 IIS 7.0+
 # (system.webServer/asp@enableParentPaths) 두 경로를 모두 안내한다. 이 도구는 IIS 7.0+ 만
-# 대상으로 하므로(2012 R2 이상, 루트 CLAUDE.md 환경 우선순위) web.config/applicationHost.config
+# 대상으로 하므로(2012 R2 이상) web.config/applicationHost.config
 # 기준 설정만 확인한다. 기본값은 false(비활성=양호)다.
 
 if (-not (Test-IisAvailable)) {

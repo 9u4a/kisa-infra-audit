@@ -1,9 +1,9 @@
 #!/bin/sh
 # 08_dbms/run.sh — DBMS(MySQL/PostgreSQL/Oracle 등) 진단 진입점 (POSIX sh)
 #
-# 옵션 문자는 전 카테고리와 통일한다 (루트 CLAUDE.md "CLI 옵션 문자 통일" 참고): -l -i -g -e -o -h
+# 옵션 문자는 전 카테고리와 통일한다: -l -i -g -e -o -h
 # 접속 정보는 --host/--port/--user/--db 로 지정한다. 비밀번호는 CLI 인자로 절대 넘기지 않고
-# DB_PASSWORD 환경변수로만 전달한다 (ps 목록·쉘 히스토리 노출 방지, 08_dbms/CLAUDE.md 참고).
+# DB_PASSWORD 환경변수로만 전달한다 (ps 목록·쉘 히스토리 노출 방지).
 #
 # 사용법:
 #   run.sh -e mysql                              로컬 소켓/기본 접속으로 전체 항목 진단
