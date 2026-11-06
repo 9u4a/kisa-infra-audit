@@ -53,6 +53,10 @@
     03 IIS 23 · 05 38 · 07 18/17 · 08 mysql·postgres 24 · oracle 22 · mssql 13/14(GOOD/VULN 변이). 대조: 로그에서 N-01 실패 줄을
     지우면 N-01 이 생존으로 나온다.
   - 08_dbms 는 엔진에 check 파일이 없는 항목(진입점이 NA)을 대상에서 뺀다(바꿀 check 가 없음).
+### Changed
+- `lib/common.sh`(2686줄) 분할(1.5.0 D3): 웹 → `common_web.sh`, DBMS → `common_db.sh`, 조치 → `common_fix.sh`. `common.sh`(핵심 964줄)가
+  같은 폴더에서 셋을 source 하므로 check·fix·진입점의 source 경로는 그대로다. 함수 156개·코드 줄이 원본과 같음을 기계적으로 확인했고,
+  최상위 코드는 변수 할당뿐이라 순서와 무관하다. CI `sed -i` 금지 검사 범위에 `lib/common_*.sh` 추가.
 - README 개편: 맨 위에 한눈에 표(범위·검증·CI 20개 환경·결함 50건)와 만든 이유, 카테고리별 명령은 `docs/USAGE.md` 로 이동,
   로드맵 압축, 1.4.0 결함 수를 "약 45건" 대신 정확한 50건(교차검증 9 + 양방향 검증 41)으로, 검증 환경 표에 Server 2022 행과
   "1.5.0 예정" 표시. LICENSE 는 MIT 원문만 두고 KISA 출처 문구는 `NOTICE` 로 옮겼다(GitHub 라이선스 인식).
