@@ -1,0 +1,17 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+ip access-list standard MGMT
+ 10 permit 10.1.1.0 0.0.0.255
+ 20 deny any log
+!
+line vty 0 4
+ access-class MGMT in
+ transport input ssh
+!
+end

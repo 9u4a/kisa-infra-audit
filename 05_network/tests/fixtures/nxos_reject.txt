@@ -1,0 +1,20 @@
+!Command: show running-config
+!Running configuration last done at: Mon Nov  2 10:00:00 2026
+!Time: Mon Nov  2 10:00:01 2026
+
+version 9.3(8) Bios:version 05.45
+hostname NxSwitch
+feature ssh
+feature interface-vlan
+
+snmp-server user admin network-admin auth md5 NxAuthKeyLeak21 priv NxPrivKeyLeak22 localizedkey
+snmp-server user ops network-operator auth sha 0x1234NxAuthHexLeak23 priv aes-128 0x5678NxPrivHexLeak24 localizedkey
+
+interface Vlan10
+  no shutdown
+  ip address 10.10.10.1/24
+
+interface mgmt0
+  vrf member management
+  ip address 192.0.2.10/24
+line vty

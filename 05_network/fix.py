@@ -9,7 +9,7 @@
 사용법:
   python fix.py -f running-config.txt -r output/<host>_05_<ts>/result.json
   python fix.py -f running-config.txt -r <result.json> -i N-01,N-06   특정 항목만
-  python fix.py -f running-config.txt -r <result.json> -v cisco_ios   벤더 수동 지정
+  python fix.py -f running-config.txt -r <result.json> -e cisco_ios   벤더 수동 지정(-v 도 같은 뜻, 하위 호환)
 """
 from __future__ import annotations
 
@@ -69,7 +69,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="네트워크 장비 조치 명령어 스크립트 생성", add_help=True)
     parser.add_argument("-f", "--file", required=True, help="진단에 사용한 설정 파일 경로(동일 파일)")
     parser.add_argument("-r", "--result", required=True, help="run.py 가 생성한 result.json 경로")
-    parser.add_argument("-v", "--vendor", help="벤더 수동 지정 (예: cisco_ios). 생략 시 result.json의 env 필드 사용")
+    # 환경/엔진 지정은 CLAUDE.md 옵션 문자 표대로 -e, 예전 -v/--vendor 는 하위 호환(외부 검수 C4).
+    parser.add_argument("-e", "-v", "--engine", "--vendor", dest="vendor", help="벤더/엔진 수동 지정 (예: cisco_ios). 생략 시 result.json의 env 필드 사용")
     parser.add_argument("-i", "--items", help="개별(복수) 항목 코드, 콤마 구분 (예: N-01,N-06)")
     parser.add_argument("-o", "--out", help="결과 출력 경로 (기본: ../output)")
     args = parser.parse_args()
@@ -81,12 +82,16 @@ def main() -> None:
     host = result.get("host", "unknown")
     vendor_name = args.vendor or result.get("env")
     if vendor_name not in VENDORS:
-        print(f"오류: 지원하지 않거나 알 수 없는 벤더입니다: {vendor_name} (-v 로 직접 지정하세요)", file=sys.stderr)
+        print(f"오류: 지원하지 않거나 알 수 없는 벤더입니다: {vendor_name} (-e 로 직접 지정하세요)", file=sys.stderr)
         sys.exit(2)
     vendor_mod = VENDORS[vendor_name]
 
     with open(args.file, encoding="utf-8", errors="replace") as f:
         text = f.read()
+    other = getattr(vendor_mod, "other_platform", lambda _t: None)(text)
+    if other:  # run.py 와 같이 비 IOS 설정은 다루지 않는다(외부 검수 A14)
+        print(f"오류: {args.file} 는 {other} 설정으로 보입니다 - 지원 범위(Cisco IOS) 밖입니다.", file=sys.stderr)
+        sys.exit(2)
     ctx = vendor_mod.Ctx(text)
 
     vuln_items = [it for it in result.get("items", []) if it.get("status") == "VULN"]
