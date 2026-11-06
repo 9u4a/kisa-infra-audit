@@ -1,5 +1,5 @@
 # WEB-06 (상) 웹 서비스 상위 디렉터리 접근 제한 설정 — 조치 [fix: confirm]
-# 변경: Tomcat server.xml·context.xml 의 allowLinking="true" → "false"(Apache/Nginx 는 대상 아님)
+# 변경: Tomcat server.xml·context.xml·conf/<엔진>/<호스트>/*.xml 의 allowLinking true → "false"(Apache/Nginx 는 대상 아님)
 # 대상: Tomcat 전용(checks/WEB-06.sh 참고 — Apache/Nginx 는 자동 판정 자체가 MANUAL 이라 VULN 을
 # 내지 않으므로 fix 대상이 아님).
 run_fix() {
@@ -18,12 +18,13 @@ run_fix() {
         return
     fi
     hits=""
-    for f in "$tcdir/server.xml" "$tcdir/context.xml"; do
+    # 1.5.0 A21: 앱별 컨텍스트(conf/<엔진>/<호스트>/*.xml)와 작은따옴표 값도 진단과 같이 대상
+    for f in "$tcdir/server.xml" $(tomcat_context_xmls "$tcdir"); do
         [ -f "$f" ] || continue
-        hit=$(strip_xml_comments "$f" | grep -inE 'allowLinking[[:space:]]*=[[:space:]]*"?true')
+        hit=$(strip_xml_comments "$f" | grep -inE "$TOMCAT_ALLOWLINKING_TRUE_RE")
         [ -n "$hit" ] || continue
         fix_backup "$f"
-        fix_sed_inplace "$f" -E 's/allowLinking[[:space:]]*=[[:space:]]*"true"/allowLinking="false"/I'
+        fix_sed_inplace "$f" -E "s/allowLinking[[:space:]]*=[[:space:]]*(\"true\"|'true'|true)/allowLinking=\"false\"/I"
         hits="$hits
 $f: $(printf '%s' "$hit" | web_mask_xml_secrets)"
     done

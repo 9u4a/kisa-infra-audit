@@ -3,7 +3,10 @@
 #                        취약 = 노출됨
 # Apache ServerTokens 는 마지막 값이 적용된다 - 실제 로드 순서상 마지막 값이 Prod(ProductOnly) 일 때만 GOOD
 # (Debian 은 conf-enabled/security.conf 의 "ServerTokens OS" 가 나중에 읽힌다 - 진단 검수 WEB-R11).
-# Nginx 는 server_tokens off 가 있어도 다른 블록의 on/build 가 있으면 그 범위에서 노출되므로 VULN.
+# Nginx: server 블록마다 적용되는 server_tokens(server 값 > http 값 > 기본 on)와 location 등의 재지정 값이 모두 off 여야
+# GOOD(1.5.0 A20 - 예전에는 파일 어딘가에 off 가 있으면 server 블록 하나뿐이어도 GOOD 이었다).
+# Tomcat: AJP 가 아닌 모든 <Connector> 에 server 속성이 있어야 GOOD(A22 - 예전에는 Connector 하나에만 있어도 GOOD,
+# 속성이 다음 줄에 있으면 거짓 VULN).
 
 run_check() {
     detect_web_engines
@@ -28,29 +31,44 @@ run_check() {
     case " $WEB_ENGINES " in *" nginx "*)
         checked=1
         if web_load_conf nginx; then
-            off=""; on=""
-            for f in $WEB_FILES; do
-                l=$(grep -nE '^[^#]*server_tokens[[:space:]]+off' "$f" 2>/dev/null)
-                [ -n "$l" ] && off="$off
-$f: $l"
-                l=$(grep -nE '^[^#]*server_tokens[[:space:]]+(on|build)' "$f" 2>/dev/null)
-                [ -n "$l" ] && on="$on
-$f: $l"
-            done
+            eff=$(nginx_server_effective server_tokens on)
+            bad=$(printf '%s\n' "$eff" | awk -F '\t' '
+                $1 == "SRV" && $3 != "off" { print $2 " = " $3 " (" $4 ")" }
+                $1 == "INNER" && $3 != "off" { print $2 " = " $3 " (location 등 재지정)" }')
             evidence="$evidence
-[Nginx] server_tokens off 검색: ${off:-없음(기본값 on - 버전 정보 노출)}${on:+
-[Nginx] server_tokens on/build 검색: $on}"
-            { [ -z "$off" ] || [ -n "$on" ]; } && violations="$violations nginx"
+[Nginx] server 블록별 적용 server_tokens(기본값 on - 버전 정보 노출):
+$(printf '%s\n' "$eff" | tr '\t' ' ')"
+            if [ -z "$eff" ]; then
+                errors="$errors nginx(설정 구조 해석 실패)"
+            elif [ -n "$bad" ]; then
+                violations="$violations nginx($(printf '%s\n' "$bad" | head -n 3 | tr '\n' ';' | sed 's/;$//'))"
+            fi
         fi
     esac
 
     case " $WEB_ENGINES " in *" tomcat "*)
         checked=1
         if web_load_tomcat_conf server.xml; then
-            server_attr=$(strip_xml_comments "$TC_FILE" | grep -nE 'Connector[^>]*server="' | web_mask_xml_secrets)
+            conns=$(tomcat_http_connectors "$TC_FILE")
+            ok=""; miss=""
+            while IFS= read -r c; do
+                [ -n "$c" ] || continue
+                port=$(xml_attr "$c" port)
+                if printf '%s' "$c" | grep -qE '[[:space:]]server[[:space:]]*='; then
+                    ok="$ok port=${port:-?}(server=\"$(xml_attr "$c" server)\")"
+                else
+                    miss="$miss port=${port:-?}"
+                fi
+            done <<EOF_TC16
+$conns
+EOF_TC16
             evidence="$evidence
-[Tomcat] Connector server= 속성: ${server_attr:-없음(기본 배너 노출)}"
-            [ -z "$server_attr" ] && violations="$violations tomcat"
+[Tomcat] HTTP Connector server 속성 - 지정됨:${ok:- 없음} / 미지정(기본 배너 노출):${miss:- 없음}"
+            if [ -z "$conns" ]; then
+                manuals="$manuals tomcat(HTTP Connector 없음(AJP 전용 등) - 앞단 웹 서버의 헤더 노출을 확인)"
+            elif [ -n "$miss" ]; then
+                violations="$violations tomcat(server 속성 없는 Connector:$miss)"
+            fi
         fi
     esac
 

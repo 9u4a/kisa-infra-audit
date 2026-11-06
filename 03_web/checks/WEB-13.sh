@@ -18,7 +18,8 @@ run_check() {
                 return
             fi
             files=""
-            for f in "$TC_FILE" "$(dirname "$TC_FILE")/context.xml"; do
+            # 1.5.0 A21: 앱별 컨텍스트 디스크립터(conf/Catalina/localhost/*.xml)의 <Resource> 도 본다
+            for f in "$TC_FILE" $(tomcat_context_xmls "$(dirname "$TC_FILE")"); do
                 [ -f "$f" ] || continue
                 if [ ! -r "$f" ]; then
                     CHECK_STATUS="ERROR"; CHECK_DETAIL="$f 를 읽을 수 없음(권한 부족)"; CHECK_EVIDENCE=""
@@ -30,7 +31,7 @@ run_check() {
                     grep -v 'org\.apache\.catalina\.UserDatabase')" ] && files="$files $f"
             done
             if [ -z "$files" ]; then
-                CHECK_STATUS="NA"; CHECK_DETAIL="DB 연결 리소스(Resource)가 설정되어 있지 않음"; CHECK_EVIDENCE="server.xml·context.xml 에 <Resource> 없음"
+                CHECK_STATUS="NA"; CHECK_DETAIL="DB 연결 리소스(Resource)가 설정되어 있지 않음"; CHECK_EVIDENCE="server.xml·context.xml·conf/<엔진>/<호스트>/*.xml 에 <Resource> 없음"
                 return
             fi
             st="GOOD"; det=""; ev=""

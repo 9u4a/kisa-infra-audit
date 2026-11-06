@@ -59,9 +59,25 @@ function Get-SiteVal([string]$Filter, [string]$Name, [string]$Path = "IIS:\Sites
     if ($null -ne $v -and $v.PSObject.Properties.Name -contains 'Value') { return "$($v.Value)" }
     return "$v"
 }
-function Get-SsiHandlerCount {
-    @(Get-WebConfiguration -Filter 'system.webServer/handlers/add' -PSPath "IIS:\Sites\$site" -ErrorAction Stop |
+function Get-SsiHandlerCount([string]$Path = "IIS:\Sites\$site") {
+    @(Get-WebConfiguration -Filter 'system.webServer/handlers/add' -PSPath $Path -ErrorAction Stop |
         Where-Object { $p = $_.path; @('.htr', '.idc', '.stm', '.shtm', '.shtml', '.printer', '.htw', '.ida', '.idq') | Where-Object { $p -ilike "*$_" } }).Count
+}
+# 1.5.0 A24: 사이트 아래 application(kisa_app)을 만들어 그 경로에서만 설정을 재정의하는 케이스용 - 정리는 Restore-CaseConfig
+# (applicationHost.config 복원으로 application·location 이 함께 사라짐) + 폴더 삭제
+$caseApp = 'kisa_app'
+$caseAppDir = 'C:\kisa_case_app'
+$caseAppPath = "IIS:\Sites\$site\$caseApp"
+function New-CaseApp {
+    New-Item -ItemType Directory -Force -Path $caseAppDir | Out-Null
+    New-WebApplication -Site $site -Name $caseApp -PhysicalPath $caseAppDir | Out-Null
+}
+function Remove-CaseApp { Remove-Item -Recurse -Force -LiteralPath $caseAppDir -ErrorAction SilentlyContinue }
+function Test-CaseApp { [bool](Get-WebApplication -Site $site -Name $caseApp) }
+function Remove-ServerSsiHandlers {
+    foreach ($h in @(Get-WebConfiguration -Filter "system.webServer/handlers/add" -PSPath $apphost | Where-Object { $_.modules -eq "ServerSideIncludeModule" })) {
+        Remove-WebConfigurationProperty -PSPath $apphost -Filter "system.webServer/handlers" -Name "." -AtElement @{ name = $h.name }
+    }
 }
 $writeMask = 0x2 -bor 0x4 -bor 0x10 -bor 0x100 -bor 0x10000 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000
 $samPath = Join-Path $env:SystemRoot 'system32\config\SAM'
@@ -224,5 +240,36 @@ $IisCases = @{
         Setup = 'Hide-Msadc; New-Item -ItemType Directory -Force -Path (Join-Path $env:SystemDrive "inetpub\iissamples") | Out-Null; Set-Content -Path (Join-Path $env:SystemDrive "inetpub\iissamples\default.htm") -Value "kisa case"'
         Cleanup = 'Remove-Item -Recurse -Force -LiteralPath (Join-Path $env:SystemDrive "inetpub\iissamples") -ErrorAction SilentlyContinue; Show-Msadc'
         Want = '^iissamples=True adminscripts=False iishelp=False msadc=False$'; Fix = $true
+    }
+    # ---- 1.5.0 A24: 하위 application 의 재정의(예전 진단은 사이트 루트 IIS:\Sites\<site> 만 봐 아래 상태를 모두 GOOD 으로 판정) ----
+    # WEB-06 취약: 사이트 루트는 기본값(false), application(kisa_app)에서만 enableParentPaths=true
+    "app-parent-paths" = @{
+        Probe = 'if (Test-CaseApp) { Write-Output ("app=True root=" + (Get-SiteVal "system.webServer/asp" "enableParentPaths") + " sub=" + (Get-SiteVal "system.webServer/asp" "enableParentPaths" $caseAppPath)) } else { Write-Output "app=absent" }'
+        Setup = 'Save-CaseConfig; New-CaseApp; Set-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/asp" -Name enableParentPaths -Value $true'
+        Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
+        Want = '^app=True root=False sub=True$'; Fix = $true
+    }
+    # WEB-08 취약: application(kisa_app)에서만 업로드 용량 사실상 무제한(maxAllowedContentLength=4294967295)
+    "app-upload-unlimited" = @{
+        Probe = 'if (Test-CaseApp) { Write-Output ("app=True root=" + (Get-SiteVal "system.webServer/security/requestFiltering/requestLimits" "maxAllowedContentLength") + " sub=" + (Get-SiteVal "system.webServer/security/requestFiltering/requestLimits" "maxAllowedContentLength" $caseAppPath)) } else { Write-Output "app=absent" }'
+        Setup = 'Save-CaseConfig; New-CaseApp; Set-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/security/requestFiltering/requestLimits" -Name maxAllowedContentLength -Value 4294967295'
+        Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
+        Want = '^app=True root=30000000 sub=4294967295$'; Fix = $true
+    }
+    # WEB-16 취약: 서버 전역·사이트는 removeServerHeader=true, application(kisa_app)에서만 false 로 재정의
+    "app-server-header-exposed" = @{
+        Probe = 'if (Test-CaseApp) { Write-Output ("app=True global=" + (Get-SiteVal "system.webServer/security/requestFiltering" "removeServerHeader" $apphost) + " root=" + (Get-SiteVal "system.webServer/security/requestFiltering" "removeServerHeader") + " sub=" + (Get-SiteVal "system.webServer/security/requestFiltering" "removeServerHeader" $caseAppPath)) } else { Write-Output "app=absent" }'
+        Setup = 'Save-CaseConfig; Set-WebConfigurationProperty -PSPath $apphost -Filter "system.webServer/security/requestFiltering" -Name removeServerHeader -Value $true; New-CaseApp; Set-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/security/requestFiltering" -Name removeServerHeader -Value $false'
+        Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
+        Want = '^app=True global=True root=True sub=False$'
+        Note = '조치(Invoke-FixIisRemoveServerHeader, 02_windows W-33 공용)는 서버 전역·사이트 단위만 고쳐 하위 application 재정의는 남는다 - 조치 검증 제외(진단 판정만 확인)'
+    }
+    # WEB-15/WEB-19 취약: 서버 전역 SSI 핸들러는 지우고 application(kisa_app)에서만 *.shtml → ServerSideIncludeModule 매핑을 다시 추가
+    "app-ssi-handler" = @{
+        Probe = 'if (Test-CaseApp) { Write-Output ("app=True root_danger=" + (Get-SsiHandlerCount) + " sub_danger=" + (Get-SsiHandlerCount $caseAppPath)) } else { Write-Output ("app=absent root_danger=" + (Get-SsiHandlerCount)) }'
+        Setup = 'Save-CaseConfig; Remove-ServerSsiHandlers; New-CaseApp; Add-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/handlers" -Name "." -Value @{ name = "KISA-SSINC-shtml"; path = "*.shtml"; verb = "GET,HEAD,POST"; modules = "ServerSideIncludeModule"; resourceType = "File" }'
+        Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
+        Want = '^app=True root_danger=0 sub_danger=1$'
+        Note = '조치(fixes/iis/WEB-19.ps1)는 사이트 루트의 handlers 만 지워 하위 application 에 다시 추가된 SSI 매핑은 남는다 - 조치 검증 제외(진단 판정만 확인). WEB-15 는 guide fix=manual'
     }
 }

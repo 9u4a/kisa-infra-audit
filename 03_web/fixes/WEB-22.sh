@@ -11,12 +11,11 @@ run_fix() {
         conf=$(apache_conf_path)
         files="$conf $(apache_extra_confs)"
         # 진단과 같이 404 지정 여부로 본다(1.5.0 C2 - RHEL welcome.conf 의 루트 전용 403 만 있으면 조치 대상). 500 은 없을 때만 추가
+        # 1.5.0 A20: 진단은 VirtualHost 마다(자기 것 또는 서버 전역 상속) 404 를 요구한다 - 서버 전역 404 가 없으면 메인 설정 끝에
+        # 넣는다(VirtualHost 하나에만 있던 경우 나머지 VirtualHost 가 이 값을 물려받는다). 500 은 서버 전역에 없을 때만 추가
         has404=""; has500=""
-        for f in $files; do
-            [ -f "$f" ] || continue
-            grep -qiE '^[^#]*ErrorDocument[[:space:]]+404([[:space:]]|$)' "$f" 2>/dev/null && has404=1
-            grep -qiE '^[^#]*ErrorDocument[[:space:]]+500([[:space:]]|$)' "$f" 2>/dev/null && has500=1
-        done
+        apache_vhost_scopes '^errordocument[ \t]+404([ \t]|$)' | awk -F '\t' '$1 == "MAIN" && $5 == 1 { f = 1 } END { exit !f }' && has404=1
+        apache_vhost_scopes '^errordocument[ \t]+500([ \t]|$)' | awk -F '\t' '$1 == "MAIN" && $5 == 1 { f = 1 } END { exit !f }' && has500=1
         if [ -z "$has404" ] && [ -f "$conf" ]; then
             fix_backup "$conf"
             # 인라인 문구는 Content-Type 이 iso-8859-1 로 나가 한글이 깨진다(실무 적용 검증 P-26) - ASCII 문구를 쓴다
@@ -34,6 +33,19 @@ run_fix() {
             [ -f "$f" ] || continue
             grep -qE '^[^#]*error_page' "$f" 2>/dev/null && hit=1
         done
+        # 1.5.0 A20: 진단은 server 블록마다 적용되는 error_page 에 404 를 요구한다. error_page 가 없는 server 블록은 http 블록 값을
+        # 물려받으므로, http 블록에 error_page 가 하나도 없고 그런 server 블록이 있으면 http 블록에 404 를 넣는다.
+        http_ep=""
+        nginx_scoped_stmts | awk -F '\t' '$1 == "DIR" && $2 == "http" && $5 ~ /^error_page / { f = 1 } END { exit !f }' && http_ep=1
+        bare=$(nginx_server_effective error_page "" multi | awk -F '\t' '$1 == "SRV" && $3 == "" { n++ } END { print n + 0 }')
+        if [ -n "$hit" ] && [ -z "$http_ep" ] && [ "$bare" -gt 0 ] && [ -f "$conf" ]; then
+            fix_backup "$conf"
+            if nginx_http_insert "$conf" "error_page 404 /404.html;"; then
+                applied="$applied nginx($conf http 블록 404 - error_page 없는 server 블록 ${bare}개)"
+            else
+                manual_only="$manual_only nginx($conf 에서 http 블록을 찾지 못함 - error_page 없는 server 블록에 error_page 404 수동 추가)"
+            fi
+        fi
         if [ -z "$hit" ] && [ -f "$conf" ]; then
             fix_backup "$conf"
             # error_page 는 http/server/location 컨텍스트 전용 - 파일 끝(main)에 붙이면 nginx 기동 실패

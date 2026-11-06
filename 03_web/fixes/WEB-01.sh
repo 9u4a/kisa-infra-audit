@@ -1,6 +1,6 @@
 # WEB-01 (상) Default 관리자 계정명 변경 — 조치 [fix: auto]
-# 변경: Tomcat tomcat-users.xml 관리 역할 계정명 admin/tomcat → webadmin_<무작위 8자리>(주석 밖 한 줄 요소만, 여러 줄이면 수동)
-# 대상: Tomcat 전용(checks/WEB-01.sh 참고). manager-gui 역할 계정명이 admin/tomcat 이면
+# 변경: Tomcat tomcat-users.xml 관리 역할 계정명 admin/tomcat(및 추측 쉬운 이름) → webadmin_<무작위 8자리>(주석 밖 한 줄 요소만, 여러 줄이면 수동)
+# 대상: Tomcat 전용(checks/WEB-01.sh 참고). 관리 역할 계정명이 기본값·추측하기 쉬운 이름이면
 # 무작위 접미사를 붙인 새 이름으로 변경한다(어떤 이름이 "적절한지"는 조직마다 다르지만,
 # 무작위 문자열은 스크립트가 안전하게 만들어낼 수 있는 값이라 U-28류 문제가 아니다).
 run_fix() {
@@ -20,10 +20,11 @@ run_fix() {
     fi
 
     # checks/WEB-01.sh 와 같은 함수(관리 역할 전체, 큰/작은따옴표 속성 - 실무 적용 검증 P-04)로 찾는다
+    # 진단과 같은 목록(기본값 + 추측하기 쉬운 이름 - 1.5.0 A23, lib/common_web.sh TOMCAT_GUESSABLE_ADMIN_RE)
     default_user=$(tomcat_admin_user_elems "$f" | while IFS= read -r e; do xml_attr "$e" username; done | \
-        grep -ixE 'admin|tomcat' | head -n1)
+        grep -ixE "$TOMCAT_GUESSABLE_ADMIN_RE" | head -n1)
     if [ -z "$default_user" ]; then
-        FIX_STATUS="NA"; FIX_DETAIL="기본값(admin/tomcat) 계정명을 가진 관리 역할 계정이 없음"; FIX_EVIDENCE=""
+        FIX_STATUS="NA"; FIX_DETAIL="기본값·추측하기 쉬운 계정명을 가진 관리 역할 계정이 없음"; FIX_EVIDENCE=""
         return
     fi
 
