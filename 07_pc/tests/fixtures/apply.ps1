@@ -17,7 +17,7 @@ if ($Mode -eq "vuln") {
 
 # PC-05(불필요 서비스): 러너 이미지 기본값이나 같은 VM 에서 먼저 도는 02_windows 픽스처(W-44 가
 # RemoteRegistry 를 끔)의 영향을 받지 않도록 상태를 명시한다 - vuln 은 RemoteRegistry 기동,
-# hardened 는 checks/PC-05.ps1 의 점검 대상 서비스를 모두 중지.
+# hardened 는 checks/PC-05.ps1 의 점검 대상 서비스를 모두 중지 + 사용 안 함.
 if ($Mode -eq "vuln") {
     # RemoteRegistry 는 유휴 시 스스로 멈추는(트리거 시작) 서비스라 진단 시점엔 이미 중지돼 W-44/PC-05 가 GOOD 으로
     # 흔들렸다 - 유휴 중지를 끄고 기동한다(hardened 에서 되돌림)
@@ -27,7 +27,11 @@ if ($Mode -eq "vuln") {
     Set-Service -Name "RemoteRegistry" -StartupType Manual
     Start-Service -Name "RemoteRegistry"
 } else {
+    # A8: PC-05 는 실행 중이 아니고 시작 유형이 사용 안 함일 때만 GOOD(트리거 시작 서비스는 Stopped 여도 요청 시 켜짐)
     foreach ($s in @("RemoteRegistry", "SSDPSRV", "upnphost", "WerSvc", "TapiSrv", "Fax")) {
+        $o = Get-Service -Name $s -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $s }
+        if (-not $o) { continue }
         Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+        Set-Service -Name $s -StartupType Disabled
     }
 }

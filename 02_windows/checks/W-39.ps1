@@ -8,7 +8,11 @@
 # 타사 백신을 확인할 수 없으므로 "백신 없음 = VULN" 으로 단정하지 않고 MANUAL 로 남긴다.
 
 $mp = $null; $mpErr = ""
-try { $mp = Get-MpComputerStatus -ErrorAction Stop } catch { $mpErr = $_.Exception.Message }
+# B3(W-R16 누락분): Get-MpComputerStatus(CDXML)는 Defender WMI 가 멈추면 무기한 대기한다 - 60초 제한. 시간 초과는 "Defender 없음"으로
+# 타사 백신 확인으로 넘어가지 않고 ERROR(확인하지 못한 것, S6). 그 밖의 실패(Defender 미설치 등)는 기존대로 보안 센터 확인.
+try { $mp = Invoke-CimCmdletWithTimeout -Command Get-MpComputerStatus -TimeoutSec 60 }
+catch [System.TimeoutException] { return New-CheckResult -Code "W-39" -Status "ERROR" -Detail "Windows Defender 상태 조회 시간 초과: $($_.Exception.Message)" }
+catch { $mpErr = $_.Exception.Message }
 
 $mode = if ($mp) { "$($mp.AMRunningMode)" } else { "" }
 $passive = ($mode -match 'Passive|EDR')

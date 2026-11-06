@@ -1,5 +1,5 @@
 ﻿# W-40 (중) 정책에 따른 시스템 로깅 설정 [fix: auto]
-# 변경: auditpol 감사 하위 범주 5개(GUID 0CCE923A/923F/9228/9215/922F) 성공·실패 감사 사용(자동 원복 불가)
+# 변경: auditpol 감사 하위 범주 5개(GUID 0CCE923A/923F/9228/9215/922F) 성공·실패 감사 + 디렉터리 서비스 액세스(923B) 실패 감사 사용(자동 원복 불가)
 # 원복: 불가 — 감사 정책(auditpol)은 자동 원복 경로 없음(변경 전 값은 changes.log)
 # checks/W-40.ps1 과 동일한 5개 하위 범주를 성공/실패 모두 감사하도록 설정한다(각 범주의
 # Need 기준이 "Failure"만 요구하는 경우도 있으나 "Success and Failure"가 상위 호환이다).
@@ -14,9 +14,12 @@ $subcats = @(
     "{0CCE9215-69AE-11D9-BED3-505054503030}",
     "{0CCE922F-69AE-11D9-BED3-505054503030}"
 )
+# A10: 디렉터리 서비스 액세스는 가이드 권고가 "실패"뿐이고, DC 에서 성공 감사는 보안 로그를 크게 늘린다(가이드 참고 "과도한
+# 감사 설정 주의") - 실패만 켜고 성공 설정은 건드리지 않는다.
+$failureOnly = @("{0CCE923B-69AE-11D9-BED3-505054503030}")
 
 $before = @()
-foreach ($g in $subcats) {
+foreach ($g in ($subcats + $failureOnly)) {
     $before += (& auditpol.exe /get /subcategory:"$g" /r 2>$null | Where-Object { $_ -like "*$g*" } | Select-Object -First 1)
 }
 
@@ -27,10 +30,14 @@ foreach ($g in $subcats) {
     & auditpol.exe /set /subcategory:"$g" /success:enable /failure:enable 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) { $failed += $g }
 }
+foreach ($g in $failureOnly) {
+    & auditpol.exe /set /subcategory:"$g" /failure:enable 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { $failed += $g }
+}
 
 if ($failed.Count -eq 0) {
     $Global:FixStatus = "APPLIED"
-    $Global:FixDetail = "5개 감사 하위 범주를 성공/실패 모두 감사하도록 설정함"
+    $Global:FixDetail = "5개 감사 하위 범주를 성공/실패 모두, 디렉터리 서비스 액세스를 실패 감사하도록 설정함"
     $Global:FixEvidence = "변경 전:`n" + ($before -join "`n")
 } else {
     $Global:FixStatus = "ERROR"

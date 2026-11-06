@@ -82,7 +82,8 @@ try {
     if ($Apply -and -not (Test-FixResultTarget -ResultJson $ResultJson -Category "PC" -Force:$Force)) {
         exit 2
     }
-    $VulnCodes = @(Get-ResultVulnCodes -ResultJson $ResultJson)
+    # C2: result.json 의 코드도 guide.json 항목 코드와 일치할 때만 "fixes\<코드>.ps1" 로 잇는다(조작된 결과 파일로 임의 .ps1 실행 방지)
+    $VulnCodes = @(Select-KnownItemCodes -Codes @(Get-ResultVulnCodes -ResultJson $ResultJson) -KnownCodes @($Guide.items | ForEach-Object { $_.code }))
     if ($Items) {
         $wanted = @($Items -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
         $VulnCodes = @($VulnCodes | Where-Object { $wanted -contains $_ })

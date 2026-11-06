@@ -1,10 +1,10 @@
 ﻿# W-16 (상) 공유 권한 및 사용자 그룹 설정 [fix: confirm]
-# 변경: 일반 공유(이름이 $ 로 끝나지 않는 공유, DC 의 SYSVOL/NETLOGON 제외)에서 Everyone 공유 권한 제거
+# 변경: 일반 공유(기본 관리 공유 ADMIN$/C$/IPC$/print$, DC 의 SYSVOL/NETLOGON 제외 - 사용자 숨김 공유 포함)에서 Everyone 공유 권한 제거
 # checks/W-16.ps1: 취약 = 일반(비관리용) 공유에 Everyone 권한이 부여된 경우.
-# 해당 공유들에서 Everyone 권한만 제거한다($ 로 끝나는 관리용 공유는 W-17 에서 별도 처리).
+# 해당 공유들에서 Everyone 권한만 제거한다(기본 관리 공유는 W-17 에서 별도 처리).
 
 try {
-    $shares = Get-SmbShare -ErrorAction Stop | Where-Object { $_.Name -notmatch '\$$' -and $_.Name -ne 'print$' }
+    $shares = Get-SmbShare -ErrorAction Stop | Where-Object { -not (Test-SmbDefaultShare -Share $_) }   # A7: checks/W-16 과 같은 기준(사용자 숨김 공유 포함)
     # DC 의 SYSVOL/NETLOGON 에서 Everyone 을 빼면 도메인 전체의 그룹 정책·로그온 스크립트 처리가 깨진다 - 절대 건드리지 않는다
     if (Test-IsDomainController) { $shares = $shares | Where-Object { $_.Name -notin @('SYSVOL', 'NETLOGON') } }
 } catch {

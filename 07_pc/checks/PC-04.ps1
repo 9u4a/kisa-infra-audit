@@ -14,7 +14,8 @@ try {
 }
 
 $defaultShares = $allShares | Where-Object { $_.Name -match '^[A-Za-z]\$$' -or $_.Name -eq 'ADMIN$' }
-$generalShares = $allShares | Where-Object { $_.Name -notmatch '\$$' -and $_.Name -ne 'print$' }
+# A7: 일반 공유 = 기본 관리 공유(Special 속성, print$) 가 아닌 것 - 예전에는 $ 로 끝나는 이름을 모두 빼 사용자 숨김 공유(Data$)를 놓쳤다
+$generalShares = @($allShares | Where-Object { -not (Test-SmbDefaultShare -Share $_) })
 $autoShareWks = Test-RegistryValue -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters" -Name "AutoShareWks"
 
 $violations = @()

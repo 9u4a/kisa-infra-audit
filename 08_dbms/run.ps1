@@ -69,7 +69,8 @@ if ($ListOnly) {
 
 # ---- 대상 코드 선정 ----------------------------------------------------------
 if ($Items) {
-    $Selected = $Items -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    # C2: guide.json 의 항목 코드와 일치하는 것만 받는다 - 검증 없이 "checks\<코드>.ps1" 로 이으면 -i ..\..\x 로 임의 .ps1 이 실행됐다
+    $Selected = @(Select-KnownItemCodes -Codes ($Items -split ",") -KnownCodes @($Guide.items | ForEach-Object { $_.code }))
 } elseif ($Group) {
     $Selected = $Guide.items | Where-Object { "$($_.group_no)" -eq $Group } | ForEach-Object { $_.code }
 } else {
@@ -121,6 +122,7 @@ if (-not $RunLock) {
     exit 2
 }
 
+$DbPreflightFailed = $false
 try {
     if (-not $OutBase) { $OutBase = Join-Path (Split-Path -Parent $ScriptDir) "output" }
     $OutDir = New-OutputDir -BaseDir $OutBase -CategoryNum $CategoryNum
@@ -145,6 +147,7 @@ try {
     } else {
         Write-Warning "DB 접속 사전 점검 실패 - 계정 잠금 방지를 위해 재시도하지 않고 DB 조회 항목은 ERROR 로 처리합니다: $Global:DbConnFailMsg"
         Write-Log "DB 접속 사전 점검 실패(재시도 안 함): $Global:DbConnFailMsg" "WARN"
+        $DbPreflightFailed = $true
     }
 
     $Results = @()
@@ -236,4 +239,10 @@ try {
     Remove-Item -Path $Global:DbErrFile -Force -ErrorAction SilentlyContinue
     foreach ($n in $EnvNames) { [Environment]::SetEnvironmentVariable($n, $EnvBefore[$n], 'Process') }
     $Global:DbConnFailed = $false
+}
+# B6: 결과물은 만들었지만 DB 에 접속하지 못해 DB 조회 항목이 전부 ERROR 다 - 예전에는 종료 코드 0 이라 정상 진단과 구분되지
+# 않았다. 08_dbms/run.sh 와 같이 4 = "완료, 단 DB 접속 실패"(실무 적용 검증 P-24).
+if ($DbPreflightFailed) {
+    Write-Warning "DB 접속에 실패해 DB 조회 항목은 ERROR 입니다(종료 코드 4) - 접속 정보를 확인해 다시 실행하세요."
+    exit 4
 }
