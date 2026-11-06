@@ -1,3 +1,4 @@
+#!/bin/sh
 # 08_dbms/fix.sh — DBMS(MySQL/PostgreSQL/Oracle) 자동 조치 진입점 (POSIX sh)
 #
 # run.sh(진단)와 완전히 분리된 진입점이다. MSSQL 대상은 별도 08_dbms/fix.ps1(PowerShell)을
@@ -113,24 +114,7 @@ fi
 # 카테고리 이름은 run.sh 의 CATEGORY_NAME(result.json "category")과 같은 값이어야 한다
 fix_check_result_target "$RESULT_JSON" "DBMS" "$DBMS_ENGINE"
 
-VULN_CODES=$(result_list_vuln_codes "$RESULT_JSON")
-
-if [ -n "$ITEM_FILTER" ]; then
-    _old_ifs=$IFS; IFS=,
-    _wanted=""
-    for c in $ITEM_FILTER; do _wanted="$_wanted $c"; done
-    IFS=$_old_ifs
-    _filtered=""
-    for c in $VULN_CODES; do
-        case " $_wanted " in *" $c "*) _filtered="$_filtered $c" ;; esac
-    done
-    VULN_CODES=$(printf '%s' "$_filtered" | sed 's/^ //')
-fi
-
-if [ -z "$VULN_CODES" ]; then
-    echo "적용 대상(취약 판정) 항목이 없습니다."
-    exit 0
-fi
+fix_select_vuln_codes
 
 # shellcheck disable=SC2086
 FIX_FILE_DIR="$SCRIPT_DIR/fixes/$DBMS_ENGINE"
@@ -138,7 +122,6 @@ FIX_FILE_DIR="$SCRIPT_DIR/fixes/$DBMS_ENGINE"
 
 fix_prepare_dir "$OUT_BASE" "$CATEGORY_NUM"
 export FIX_BACKUP_DIR
-TOTAL=$(echo "$VULN_CODES" | wc -w | tr -d ' ')
 
 echo "${C_BOLD}=== 자동 조치 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VERSION}) ===${C_OFF}"
 echo "카테고리   : $CATEGORY_NAME (엔진: $DBMS_ENGINE — MSSQL은 fix.ps1 사용)"
@@ -146,107 +129,6 @@ echo "모드       : $([ "$APPLY" -eq 1 ] && echo '실제 적용' || echo 'DRY-R
 echo "대상 항목  : ${TOTAL}개 (진단 결과 중 VULN$( [ -n "$ITEM_FILTER" ] && echo ", -i 필터 적용"))"
 echo "------------------------------------------------------------------------"
 
-N_APPLIED=0; N_SKIPPED=0; N_DECLINED=0; N_FAILED=0; N_MANUAL=0; N_PREVIEW=0; N_PARTIAL=0
+fix_items "$SCRIPT_DIR/fixes/$DBMS_ENGINE" "$SCRIPT_DIR/checks/$DBMS_ENGINE"
 
-for code in $VULN_CODES; do
-    title=$(guide_field "$GUIDE_JSON" "$code" "title")
-    grade=$(guide_field "$GUIDE_JSON" "$code" "fix")
-    [ -z "$grade" ] && grade="manual"
-
-    if [ "$grade" = "manual" ]; then
-        remediation=$(guide_field "$GUIDE_JSON" "$code" "remediation")
-        echo "[$code] $title"
-        echo "  등급: manual (자동 조치 없음) — 가이드 조치 방법: $remediation"
-        printf '%s\t%s\tMANUAL\t%s\n' "$code" "manual" "자동 조치 없음(가이드 조치 방법 안내만)" | fix_log_stamp >> "$FIX_LOG"
-        N_MANUAL=$((N_MANUAL + 1))
-        continue
-    fi
-
-    fix_file="$SCRIPT_DIR/fixes/$DBMS_ENGINE/$code.sh"
-    check_file="$SCRIPT_DIR/checks/$DBMS_ENGINE/$code.sh"
-
-    if [ ! -f "$fix_file" ]; then
-        echo "[$code] $title"
-        echo "  등급: $grade 이나 조치 스크립트 미구현(또는 $DBMS_ENGINE 대상 아님) — 건너뜀"
-        printf '%s\t%s\tSKIPPED\t조치 스크립트 미구현\n' "$code" "$grade" | fix_log_stamp >> "$FIX_LOG"
-        N_SKIPPED=$((N_SKIPPED + 1))
-        continue
-    fi
-
-    if [ "$APPLY" -ne 1 ]; then
-        echo "[$code] $title"
-        echo "  등급: $grade (dry-run — 실제 적용하려면 --apply 추가)"
-        _chg=$(fix_change_note "$fix_file"); [ -n "$_chg" ] && echo "  변경: $_chg"
-        _rbn=$(fix_rollback_note "$fix_file"); [ -n "$_rbn" ] && echo "  원복: $_rbn"
-        N_PREVIEW=$((N_PREVIEW + 1))
-        continue
-    fi
-
-    if [ "$grade" = "confirm" ]; then
-        printf '[%s] %s\n  등급: confirm — 실제로 적용하시겠습니까? [y/N] ' "$code" "$title"
-        _ans=""
-        read -r _ans < /dev/tty 2>/dev/null || _ans=""
-        case "$_ans" in
-            y|Y) : ;;
-            *)
-                echo "  건너뜀 (사용자 미확인)"
-                printf '%s\t%s\tDECLINED\t사용자가 확인하지 않음\n' "$code" "$grade" | fix_log_stamp >> "$FIX_LOG"
-                N_DECLINED=$((N_DECLINED + 1))
-                continue
-                ;;
-        esac
-    fi
-
-    FIX_CODE="$code"
-    export FIX_CODE
-    # X-04(1.3.4): 조치는 서브셸에서 실행한다(lib/common.sh run_fix_isolated). 미설정 변수 등으로 조치가 중간에 죽어도
-    # FIX_STATUS=ERROR 로 돌아와 아래 실패 경로가 이 항목을 원복하고 FAILED_* 를 기록한 뒤 다음 항목으로 넘어간다.
-    # 반환값 3 = fix_abort_item(백업 실패 등): 서브셸이 이미 이 항목을 원복·ABORTED 기록 → 실행 전체 중단(F1).
-    _rfi=0; run_fix_isolated "$fix_file" || _rfi=$?
-    [ "$_rfi" -eq 3 ] && exit 3
-
-    CHECK_STATUS="ERROR"; CHECK_DETAIL="check 스크립트 없음"; CHECK_EVIDENCE=""
-    if [ -f "$check_file" ]; then
-        run_check_isolated "$check_file"
-    fi
-
-    # PARTIAL/MANUAL(조치 후속 F-R6): 진단 범위 중 자동으로 바꿀 수 없는 부분(비밀번호 재설정, 다른 DB 접근까지 끊는
-    # 전역·와일드카드 권한 회수 등)이 남았다는 정직한 보고다. 재검증은 VULN 으로 남는 게 정상이라 원복하지 않는다 -
-    # 원복하면 이미 안전하게 적용한 부분까지 되돌린다. PARTIAL = 일부 적용(남은 부분 수동), MANUAL = 바꾼 것 없음.
-    if [ "$FIX_STATUS" = "PARTIAL" ] || [ "$FIX_STATUS" = "MANUAL" ]; then
-        echo "[$code] $title"
-        if [ "$FIX_STATUS" = "PARTIAL" ]; then
-            echo "  일부 적용 — 남은 부분은 수동 조치 필요(재검증: $CHECK_STATUS, 원복하지 않음): $FIX_DETAIL"
-            _fs="PARTIAL_MANUAL"; N_PARTIAL=$((N_PARTIAL + 1))
-        else
-            echo "  자동 조치 불가 — 수동 조치 필요(변경 없음, 재검증: $CHECK_STATUS): $FIX_DETAIL"
-            _fs="MANUAL"; N_MANUAL=$((N_MANUAL + 1))
-        fi
-        printf '%s\t%s\t%s\t%s (recheck=%s)\n' "$code" "$grade" "$_fs" "$FIX_DETAIL" "$CHECK_STATUS" | fix_log_stamp >> "$FIX_LOG"
-    elif { [ "$FIX_STATUS" = "APPLIED" ] || [ "$FIX_STATUS" = "NA" ]; } && [ "$CHECK_STATUS" != "VULN" ] && [ "$CHECK_STATUS" != "ERROR" ]; then
-        echo "[$code] $title"
-        echo "  적용 완료 — 재검증 결과: $CHECK_STATUS ($FIX_DETAIL)"
-        printf '%s\t%s\tAPPLIED\t%s (recheck=%s)\n' "$code" "$grade" "$FIX_DETAIL" "$CHECK_STATUS" | fix_log_stamp >> "$FIX_LOG"
-        N_APPLIED=$((N_APPLIED + 1))
-    else
-        echo "[$code] $title"
-        echo "  적용 실패 또는 재검증 실패(FIX_STATUS=$FIX_STATUS, 재검증=$CHECK_STATUS) — 원복 중"
-        # 실제로 되돌리지 못한 부분이 있으면 FAILED_NOT_ROLLED_BACK 으로 정직하게 기록한다(lib/common.sh FIX_ROLLBACK_FAILS)
-        FIX_ROLLBACK_FAILS=""
-        fix_rollback_item "$code"
-        if [ -z "$FIX_ROLLBACK_FAILS" ]; then _rbs="FAILED_ROLLED_BACK"; else _rbs="FAILED_NOT_ROLLED_BACK"; echo "  원복하지 못한 부분(수동 확인 필요):$FIX_ROLLBACK_FAILS"; fi
-        printf '%s\t%s\t%s\tFIX_STATUS=%s detail=%s recheck=%s %s\n' "$code" "$grade" "$_rbs" "$FIX_STATUS" "$FIX_DETAIL" "$CHECK_STATUS" "$(printf '%s' "$FIX_ROLLBACK_FAILS" | tr '\n' ' ')" | fix_log_stamp >> "$FIX_LOG"
-        N_FAILED=$((N_FAILED + 1))
-    fi
-    unset FIX_CODE
-done
-
-echo "------------------------------------------------------------------------"
-if [ "$APPLY" -eq 1 ]; then
-    echo "적용 완료: $N_APPLIED, 일부 적용(남은 부분 수동): $N_PARTIAL, 실패(원복됨): $N_FAILED, 확인거부: $N_DECLINED, 스크립트없음: $N_SKIPPED, 수동조치: $N_MANUAL"
-    echo "백업 위치: $FIX_BACKUP_DIR"
-    echo "원복하려면: $0 -e $DBMS_ENGINE --rollback $FIX_OUT_DIR"
-else
-    echo "DRY-RUN 미리보기: $N_PREVIEW 건 (--apply 로 실제 적용), 스크립트없음: $N_SKIPPED, 수동조치: $N_MANUAL"
-fi
-echo "로그: $FIX_LOG"
+fix_print_summary "$0 -e $DBMS_ENGINE"

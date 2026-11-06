@@ -797,3 +797,153 @@ $(basename "$_code_dir")"
         return 1
     fi
 }
+
+# ---- 조치 진입점 공통 흐름 (1.5.0 D2) ---------------------------------------------------------------
+# 01_unix·03_web·08_dbms fix.sh 가 복붙하던 대상 선정·항목 루프·마무리를 한 곳에 둔다. 진입점은 옵션 해석·가드·
+# 원복·결과 대상 확인(fix_check_result_target)·배너·엔진별 사전 검사만 남기고 아래 순서로 부른다:
+#   fix_select_vuln_codes → fix_confirm_plan·fix_prepare_dir → (배너) → fix_items → fix_print_summary
+# 진입점이 정해 두어야 하는 전역: GUIDE_JSON, RESULT_JSON, ITEM_FILTER, APPLY (fix_items 는 FIX_LOG 도 쓴다).
+
+# fix_select_vuln_codes -- result.json 의 VULN 코드(-i 가 있으면 그중 지정한 것만)를 VULN_CODES·TOTAL 로. 없으면 exit 0.
+fix_select_vuln_codes() {
+    VULN_CODES=$(result_list_vuln_codes "$RESULT_JSON")
+    if [ -n "$ITEM_FILTER" ]; then
+        _fsv_wanted=" $(printf '%s' "$ITEM_FILTER" | tr ',' ' ') "
+        _fsv_out=""
+        for _fsv_c in $VULN_CODES; do
+            case "$_fsv_wanted" in *" $_fsv_c "*) _fsv_out="$_fsv_out $_fsv_c" ;; esac
+        done
+        VULN_CODES=$(printf '%s' "$_fsv_out" | sed 's/^ //')
+    fi
+    if [ -z "$VULN_CODES" ]; then
+        echo "적용 대상(취약 판정) 항목이 없습니다."
+        exit 0
+    fi
+    TOTAL=$(echo "$VULN_CODES" | wc -w | tr -d ' ')
+}
+
+# fix_items <fix 폴더> <check 폴더> [조치 직후 함수] [재검증 직후 함수]
+#   VULN_CODES 의 항목마다 등급(manual/auto/confirm)에 따라 안내·dry-run 미리보기·확인·적용(run_fix_isolated)·재검증·실패 시
+#   원복을 하고 FIX_LOG 에 남긴다. 후처리 함수는 <코드> 를 인자로 받는다(예: 01 미검증 안내, 03 설정 문법 재검사).
+#   FIX_STATUS 처리: SKIPPED = 조치로 해소할 수 없음(변경 없음, 재검증·원복 안 함, 01 U-01 등) / PARTIAL·MANUAL = 자동으로 바꿀 수
+#   없는 부분이 남음(원복 안 함, 08 F-R6) / APPLIED·NA + 재검증이 VULN·ERROR 아님 = 성공 / 그 밖 = 실패 → 원복.
+#   반환값 3(fix_abort_item, 백업 실패 등)이면 실행 전체를 exit 3 으로 끝낸다(F1).
+fix_items() {
+    _fi_fdir=$1; _fi_cdir=$2; _fi_postfix=${3:-}; _fi_postcheck=${4:-}
+    N_APPLIED=0; N_SKIPPED=0; N_DECLINED=0; N_FAILED=0; N_MANUAL=0; N_PREVIEW=0; N_PARTIAL=0
+    for _fi_code in $VULN_CODES; do
+        _fi_title=$(guide_field "$GUIDE_JSON" "$_fi_code" "title")
+        _fi_grade=$(guide_field "$GUIDE_JSON" "$_fi_code" "fix")
+        [ -z "$_fi_grade" ] && _fi_grade="manual"
+
+        if [ "$_fi_grade" = "manual" ]; then
+            echo "[$_fi_code] $_fi_title"
+            echo "  등급: manual (자동 조치 없음) — 가이드 조치 방법: $(guide_field "$GUIDE_JSON" "$_fi_code" "remediation")"
+            printf '%s\t%s\tMANUAL\t%s\n' "$_fi_code" "manual" "자동 조치 없음(가이드 조치 방법 안내만)" | fix_log_stamp >> "$FIX_LOG"
+            N_MANUAL=$((N_MANUAL + 1))
+            continue
+        fi
+
+        _fi_fix="$_fi_fdir/$_fi_code.sh"
+        _fi_check="$_fi_cdir/$_fi_code.sh"
+
+        if [ ! -f "$_fi_fix" ]; then
+            echo "[$_fi_code] $_fi_title"
+            echo "  등급: $_fi_grade 이나 조치 스크립트 미구현(또는 이 환경 대상 아님) — 건너뜀"
+            printf '%s\t%s\tSKIPPED\t조치 스크립트 미구현\n' "$_fi_code" "$_fi_grade" | fix_log_stamp >> "$FIX_LOG"
+            N_SKIPPED=$((N_SKIPPED + 1))
+            continue
+        fi
+
+        if [ "$APPLY" -ne 1 ]; then
+            echo "[$_fi_code] $_fi_title"
+            echo "  등급: $_fi_grade (dry-run — 실제 적용하려면 --apply 추가)"
+            _fi_chg=$(fix_change_note "$_fi_fix"); [ -n "$_fi_chg" ] && echo "  변경: $_fi_chg"
+            _fi_rbn=$(fix_rollback_note "$_fi_fix"); [ -n "$_fi_rbn" ] && echo "  원복: $_fi_rbn"
+            N_PREVIEW=$((N_PREVIEW + 1))
+            continue
+        fi
+
+        if [ "$_fi_grade" = "confirm" ]; then
+            printf '[%s] %s\n  등급: confirm — 실제로 적용하시겠습니까? [y/N] ' "$_fi_code" "$_fi_title"
+            # /dev/tty 가 있어도 제어 터미널이 없는 비대화형 실행(docker exec 파이프, 크론)에서는 읽기가 실패한다 - 실패는
+            # 흡수하고 항상 안전한 기본값(미확인)으로 처리한다(set -u 에서 _fi_ans 미할당으로 죽던 문제 포함).
+            _fi_ans=""
+            read -r _fi_ans < /dev/tty 2>/dev/null || _fi_ans=""
+            case "$_fi_ans" in
+                y|Y) : ;;
+                *)
+                    echo "  건너뜀 (사용자 미확인)"
+                    printf '%s\t%s\tDECLINED\t사용자가 확인하지 않음\n' "$_fi_code" "$_fi_grade" | fix_log_stamp >> "$FIX_LOG"
+                    N_DECLINED=$((N_DECLINED + 1))
+                    continue
+                    ;;
+            esac
+        fi
+
+        FIX_CODE="$_fi_code"
+        export FIX_CODE
+        # X-04(1.3.4): 조치는 서브셸에서 실행한다(run_fix_isolated) - 중간에 죽어도 FIX_STATUS=ERROR 로 돌아와 아래 실패 경로가
+        # 원복·FAILED_* 기록 후 다음 항목으로 간다. 3 = fix_abort_item: 서브셸이 이미 원복·ABORTED 기록 → 실행 전체 중단(F1).
+        _fi_rc=0; run_fix_isolated "$_fi_fix" || _fi_rc=$?
+        [ "$_fi_rc" -eq 3 ] && exit 3
+        if [ -n "$_fi_postfix" ]; then "$_fi_postfix" "$_fi_code"; fi
+
+        if [ "$FIX_STATUS" = "SKIPPED" ]; then
+            echo "[$_fi_code] $_fi_title"
+            echo "  건너뜀(변경 없음) — $FIX_DETAIL"
+            printf '%s\t%s\tSKIPPED\t%s\n' "$_fi_code" "$_fi_grade" "$FIX_DETAIL" | fix_log_stamp >> "$FIX_LOG"
+            N_SKIPPED=$((N_SKIPPED + 1))
+            unset FIX_CODE
+            continue
+        fi
+
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="check 스크립트 없음"; CHECK_EVIDENCE=""
+        if [ -f "$_fi_check" ]; then
+            run_check_isolated "$_fi_check"
+        fi
+        if [ -n "$_fi_postcheck" ]; then "$_fi_postcheck" "$_fi_code"; fi
+
+        # 성공 기준은 "재검증이 VULN/ERROR 를 벗어났는가"다 - U-66 처럼 조직 정책 대조가 필요해 MANUAL 까지만 가는 항목이 있어
+        # GOOD 만 인정하면 정상 조치도 항상 원복된다. FIX_STATUS=NA 는 "이미 대상이 없어 조치 불필요"라 성공으로 본다.
+        if [ "$FIX_STATUS" = "PARTIAL" ] || [ "$FIX_STATUS" = "MANUAL" ]; then
+            echo "[$_fi_code] $_fi_title"
+            if [ "$FIX_STATUS" = "PARTIAL" ]; then
+                echo "  일부 적용 — 남은 부분은 수동 조치 필요(재검증: $CHECK_STATUS, 원복하지 않음): $FIX_DETAIL"
+                _fi_fs="PARTIAL_MANUAL"; N_PARTIAL=$((N_PARTIAL + 1))
+            else
+                echo "  자동 조치 불가 — 수동 조치 필요(변경 없음, 재검증: $CHECK_STATUS): $FIX_DETAIL"
+                _fi_fs="MANUAL"; N_MANUAL=$((N_MANUAL + 1))
+            fi
+            printf '%s\t%s\t%s\t%s (recheck=%s)\n' "$_fi_code" "$_fi_grade" "$_fi_fs" "$FIX_DETAIL" "$CHECK_STATUS" | fix_log_stamp >> "$FIX_LOG"
+        elif { [ "$FIX_STATUS" = "APPLIED" ] || [ "$FIX_STATUS" = "NA" ]; } && [ "$CHECK_STATUS" != "VULN" ] && [ "$CHECK_STATUS" != "ERROR" ]; then
+            echo "[$_fi_code] $_fi_title"
+            echo "  적용 완료 — 재검증 결과: $CHECK_STATUS ($FIX_DETAIL)"
+            printf '%s\t%s\tAPPLIED\t%s (recheck=%s)\n' "$_fi_code" "$_fi_grade" "$FIX_DETAIL" "$CHECK_STATUS" | fix_log_stamp >> "$FIX_LOG"
+            N_APPLIED=$((N_APPLIED + 1))
+        else
+            echo "[$_fi_code] $_fi_title"
+            echo "  적용 실패 또는 재검증 실패(FIX_STATUS=$FIX_STATUS, 재검증=$CHECK_STATUS) — 원복 중"
+            # 되돌리지 못한 부분이 있으면 FAILED_NOT_ROLLED_BACK 으로 정직하게 남긴다(FIX_ROLLBACK_FAILS)
+            FIX_ROLLBACK_FAILS=""
+            fix_rollback_item "$_fi_code"
+            if [ -z "$FIX_ROLLBACK_FAILS" ]; then _fi_rbs="FAILED_ROLLED_BACK"; else _fi_rbs="FAILED_NOT_ROLLED_BACK"; echo "  원복하지 못한 부분(수동 확인 필요):$FIX_ROLLBACK_FAILS"; fi
+            printf '%s\t%s\t%s\tFIX_STATUS=%s detail=%s recheck=%s %s\n' "$_fi_code" "$_fi_grade" "$_fi_rbs" "$FIX_STATUS" "$FIX_DETAIL" "$CHECK_STATUS" "$(printf '%s' "$FIX_ROLLBACK_FAILS" | tr '\n' ' ')" | fix_log_stamp >> "$FIX_LOG"
+            N_FAILED=$((N_FAILED + 1))
+        fi
+        unset FIX_CODE
+    done
+}
+
+# fix_print_summary <원복 명령> -- 건수·백업 위치·원복 방법·로그 경로 출력
+fix_print_summary() {
+    echo "------------------------------------------------------------------------"
+    if [ "$APPLY" -eq 1 ]; then
+        echo "적용 완료: $N_APPLIED, 일부 적용(남은 부분 수동): $N_PARTIAL, 실패(원복됨): $N_FAILED, 확인거부: $N_DECLINED, 건너뜀(스크립트없음·조치로 해소 불가): $N_SKIPPED, 수동조치: $N_MANUAL"
+        echo "백업 위치: $FIX_BACKUP_DIR"
+        echo "원복하려면: $1 --rollback $FIX_OUT_DIR"
+    else
+        echo "DRY-RUN 미리보기: $N_PREVIEW 건 (--apply 로 실제 적용), 스크립트없음: $N_SKIPPED, 수동조치: $N_MANUAL"
+    fi
+    echo "로그: $FIX_LOG"
+}

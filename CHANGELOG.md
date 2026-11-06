@@ -61,6 +61,10 @@
   `common.sh` 의 `run_list_items`·`run_select_codes`·`run_begin_output`·`run_items`·`run_finish` 로 합쳤다(3개 파일 257줄 → 진입점 고유
   부분만). 카테고리별 차이(check 폴더, 파일 없을 때 ERROR/NA, 후처리 nonroot_unverified·append_unverified_note·web_unsupported_note·
   db_privilege_apply)는 인자와 후처리 함수로 넘긴다. 01 의 `-i` 도 03/08 처럼 콤마를 공백으로 바꿔 나눈다.
+- 조치 진입점 공통 흐름을 lib 로 옮김(1.5.0 D2 2단계): 01/03/08 `fix.sh` 의 대상 선정·항목 루프(등급별 안내·dry-run·확인·적용·
+  재검증·원복·감사 로그)·요약을 `common_fix.sh` 의 `fix_select_vuln_codes`·`fix_items`·`fix_print_summary` 로 합쳤다(374줄 → 150줄).
+  FIX_STATUS 처리는 세 진입점의 합집합(SKIPPED=01, PARTIAL/MANUAL=08)이며 다른 카테고리의 조치는 이 값을 쓰지 않아 동작은 같다.
+  01 미검증 안내·03 적용 후 설정 문법 재검사(F2)는 후처리 함수로 넘긴다. 03/08 `fix.sh` 에 빠져 있던 `#!/bin/sh` 추가.
 - README 개편: 맨 위에 한눈에 표(범위·검증·CI 20개 환경·결함 50건)와 만든 이유, 카테고리별 명령은 `docs/USAGE.md` 로 이동,
   로드맵 압축, 1.4.0 결함 수를 "약 45건" 대신 정확한 50건(교차검증 9 + 양방향 검증 41)으로, 검증 환경 표에 Server 2022 행과
   "1.5.0 예정" 표시. LICENSE 는 MIT 원문만 두고 KISA 출처 문구는 `NOTICE` 로 옮겼다(GitHub 라이선스 인식).
