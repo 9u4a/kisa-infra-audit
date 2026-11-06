@@ -1,7 +1,8 @@
 ﻿# W-16 (상) 공유 권한 및 사용자 그룹 설정
 # 판단 기준(가이드 원문): 양호 = 일반 공유 디렉터리가 없거나 Everyone 권한이 없는 경우
 #                        취약 = 일반 공유 디렉터리 접근 권한에 Everyone 이 있는 경우
-# 기본 관리 공유(C$, ADMIN$, IPC$ 등 $ 로 끝나는 공유)는 W-17 에서 별도로 다루므로 제외한다.
+# 기본 관리 공유(C$, ADMIN$, IPC$, print$)는 W-17 에서 별도로 다루므로 제외한다. A7: 예전에는 이름이 $ 로 끝나는 공유를 모두
+# 빼서 사용자 숨김 공유(Data$)의 Everyone 권한을 놓쳤다 - Special 속성으로 가린다(Test-SmbDefaultShare).
 # W-R2: Get-SmbShareAccess 실패(권한 부족 등)를 예전에는 "Everyone 없음"=GOOD 으로 처리했다. 실패한 공유가
 # 있으면 ERROR. Everyone 은 이름 대신 SID(S-1-1-0)로 비교한다(비영문 OS). W-R16: CDXML cmdlet 시간 제한.
 
@@ -9,7 +10,7 @@
 $everyoneNames = @('Everyone')
 try { $everyoneNames += (New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')).Translate([System.Security.Principal.NTAccount]).Value } catch { }
 try {
-    $shares = @(Invoke-CimCmdletWithTimeout -Command Get-SmbShare | Where-Object { $_.Name -notmatch '\$$' -and $_.Name -ne 'print$' })
+    $shares = @(Invoke-CimCmdletWithTimeout -Command Get-SmbShare | Where-Object { -not (Test-SmbDefaultShare -Share $_) })
 } catch {
     return New-CheckResult -Code "W-16" -Status "ERROR" -Detail "Get-SmbShare 실행 실패: $($_.Exception.Message)"
 }

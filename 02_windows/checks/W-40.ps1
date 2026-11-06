@@ -14,6 +14,9 @@ $checks = @(
     @{ Name = "계정 관리(Other Account Management Events)"; Guid = "{0CCE923A-69AE-11D9-BED3-505054503030}"; Need = 2 },
     @{ Name = "계정 로그온(Credential Validation)"; Guid = "{0CCE923F-69AE-11D9-BED3-505054503030}"; Need = 3 },
     @{ Name = "권한 사용(Sensitive Privilege Use)"; Guid = "{0CCE9228-69AE-11D9-BED3-505054503030}"; Need = 3 },
+    # A10: 가이드 권고 "디렉터리 서비스 액세스=실패"가 위 주석에만 있고 판정 목록에서 빠져 있었다. 고급 감사 정책의
+    # DS 액세스 > 디렉터리 서비스 액세스 하위 범주(DC 가 아니어도 auditpol 백업에 존재 - 한글 Windows 11 실측 샘플)로 판정한다.
+    @{ Name = "디렉터리 서비스 액세스(Directory Service Access)"; Guid = "{0CCE923B-69AE-11D9-BED3-505054503030}"; Need = 2 },
     @{ Name = "로그온(Logon)"; Guid = "{0CCE9215-69AE-11D9-BED3-505054503030}"; Need = 3 },
     @{ Name = "정책 변경(Audit Policy Change)"; Guid = "{0CCE922F-69AE-11D9-BED3-505054503030}"; Need = 3 }
 )
