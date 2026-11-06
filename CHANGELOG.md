@@ -45,7 +45,11 @@
   - 조치는 실 PC 라 적용하지 않았다(VM 검증은 1.6.0 G-07).
 - 릴리스 체크리스트(1.5.0 D5): `.github/release-checklist.md` - 태그 전 CI 전 job 수동 실행, coverage·조치 등급 검사,
   VERSION·CHANGELOG·README·KNOWN_ISSUES 갱신, 서명·로컬 전용 파일·실호스트 정보 확인, 태그·릴리스 명령.
-### Changed
+- 변이 검증(1.5.0 D1): `lib/tests/mutation.py` - 저장소 사본의 check 를 전부 "항상 GOOD" / "항상 VULN" 스텁으로 바꿔
+  카테고리 테스트를 돌리고, 기대값이 있는 (엔진, 항목)마다 실패가 실제로 나오는지 확인한다(1.4.0 에 손으로 한 음성 대조의 자동화).
+  CI `mutation` job(주간·수동): 01_unix, 03_web(IIS 제외), 05_network, 08_dbms mysql·postgres / oracle. 실행 로그는 artifact.
+  - 로컬 실측: 05_network 38/38, 03_web nginx 26/26, 08_dbms mysql 12/12 - 두 변이 모두 생존 0.
+  - 08_dbms 는 엔진에 check 파일이 없는 항목(진입점이 NA)을 대상에서 뺀다(바꿀 check 가 없음).
 - README 개편: 맨 위에 한눈에 표(범위·검증·CI 20개 환경·결함 50건)와 만든 이유, 카테고리별 명령은 `docs/USAGE.md` 로 이동,
   로드맵 압축, 1.4.0 결함 수를 "약 45건" 대신 정확한 50건(교차검증 9 + 양방향 검증 41)으로, 검증 환경 표에 Server 2022 행과
   "1.5.0 예정" 표시. LICENSE 는 MIT 원문만 두고 KISA 출처 문구는 `NOTICE` 로 옮겼다(GitHub 라이선스 인식).

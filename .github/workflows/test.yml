@@ -349,6 +349,36 @@ jobs:
       - uses: actions/checkout@v4
       - run: ${{ matrix.run }}
 
+  mutation:
+    # 변이 검증(1.5.0 D1, lib/tests/mutation.py): 카테고리의 check 를 전부 "항상 GOOD" / "항상 VULN" 스텁으로 바꾼 사본에서
+    # 그 카테고리 테스트를 돌려, 기대값이 있는 항목마다 실패가 실제로 나오는지(= 테스트가 check 결과를 보는지) 확인한다.
+    # 생존 변이(잡히지 않은 항목)가 있으면 FAIL. 테스트 묶음을 변이마다 한 번씩 더 돌리므로 주간 스케줄·수동 실행에서만 돈다.
+    # Windows 계열(02/07, 03 IIS, 08 MSSQL)은 D1 2차.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: 01_unix, args: "01_unix" }
+          - { name: 03_web, args: "03_web" }
+          - { name: 05_network, args: "05_network" }
+          - { name: 08_dbms-mysql-postgres, args: "08_dbms --engines mysql postgres" }
+          - { name: 08_dbms-oracle, args: "08_dbms --engines oracle" }
+    name: mutation (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 lib/tests/mutation.py ${{ matrix.args }} --log-dir "$RUNNER_TEMP" | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -o pipefail {0}
+      - name: 변이 실행 로그 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ matrix.name }}
+          path: ${{ runner.temp }}/mutation_*.log
+          if-no-files-found: ignore
+
   mssql-express:
     # 08_dbms MSSQL 정식 인스턴스(SQL Server Express, 1.5.0 C4): LocalDB 는 서비스·서비스 계정·인증 모드·오류 로그 위치가 정식
     # 인스턴스와 달라(KNOWN_ISSUES L-09 환경 표) 같은 진단 회귀·항목별 케이스·조치·원복·운영 안전을 Express 에서 한 번 더 돌린다.
