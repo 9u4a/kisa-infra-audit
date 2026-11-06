@@ -6,7 +6,7 @@
             Save    = { Get-CaseDefaultShares }
             Restore = {
                 param($names)
-                if (Get-SmbShare -Name 'kisa_case04' -ErrorAction SilentlyContinue) { Remove-SmbShare -Name 'kisa_case04' -Force }
+                foreach ($n in @('kisa_case04', 'kisa_case04$')) { if (Get-SmbShare -Name $n -ErrorAction SilentlyContinue) { Remove-SmbShare -Name $n -Force } }
                 Remove-Item -Recurse -Force (Join-Path $env:SystemDrive 'kisa_case\share04') -ErrorAction SilentlyContinue
                 $cur = Get-CaseDefaultShares; if (@(@($names) | Where-Object { $_ -and $cur -notcontains $_ }).Count -gt 0) { Restart-CaseLanman }
             }
@@ -29,6 +29,17 @@
                 New-SmbShare -Name 'kisa_case04' -Path $dir -FullAccess $everyone | Out-Null
             }
             Check = { $a = @(Get-SmbShareAccess -Name 'kisa_case04' | Where-Object { $_.AccountName -eq 'Everyone' }); if ($a.Count -gt 0 -and (Get-CaseDefaultShares).Count -eq 0) { $true } else { "everyone=$($a.Count)" } }
+        }
+        # A7: 사용자 숨김 공유(이름이 $ 로 끝남)도 일반 공유다 - 기본 공유가 없어도 Everyone 권한이면 취약(예전에는 GOOD)
+        'hidden-everyone-share' = @{
+            Reg   = @(@{ P = 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'; N = 'AutoShareServer'; V = 0 }, @{ P = 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'; N = 'AutoShareWks'; V = 0 })
+            Set   = {
+                Restart-CaseLanman -NoWait
+                $dir = Join-Path $env:SystemDrive 'kisa_case\share04'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
+                $everyone = (New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')).Translate([System.Security.Principal.NTAccount]).Value
+                New-SmbShare -Name 'kisa_case04$' -Path $dir -FullAccess $everyone | Out-Null
+            }
+            Check = { $s = Get-SmbShare -Name 'kisa_case04$' -ErrorAction SilentlyContinue; $a = @(Get-SmbShareAccess -Name 'kisa_case04$' | Where-Object { $_.AccountName -eq 'Everyone' }); if ($s -and -not $s.Special -and $a.Count -gt 0 -and (Get-CaseDefaultShares).Count -eq 0) { $true } else { "share=$([bool]$s) everyone=$($a.Count)" } }
         }
         'restricted-share' = @{
             Reg   = @(@{ P = 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'; N = 'AutoShareServer'; V = 0 }, @{ P = 'HKLM:\SYSTEM\CurrentControlSet\Services\LanmanServer\Parameters'; N = 'AutoShareWks'; V = 0 })
