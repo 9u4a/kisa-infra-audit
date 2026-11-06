@@ -46,6 +46,9 @@
   같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
   U-32 VULN 이 나던 하네스 잡음.
 ### Fixed
+- 02_windows 케이스 W-01/default-name: 이름 변경 확인을 WMI 로만 기다려, Server 2022 에서 Win32_UserAccount 가 60초 내내
+  "No mapping between account names and security IDs" 로 실패하면 진단은 정상인데도 FAIL 이던 것(CI run 42141148806) -
+  `Wait-CaseAdminName` 이 진단(W-01)과 같은 순서(Get-LocalUser 우선, 없으면 WMI)로 확인한다.
 - 08_dbms 케이스 하네스: MySQL 8.0 은 `--mysql-native-password` 옵션을 몰라 케이스 서버가 뜨지 않던 것 - 서버가 옵션을 알 때만 넘긴다.
   PostgreSQL 18 공식 이미지의 PGDATA(`/var/lib/postgresql/18/docker`)를 `$PGDATA` 로 따른다(예전 경로 고정으로 D-01/D-10/D-14 케이스 실패).
 - 08_dbms PostgreSQL D-03 조치에 `# 원복: 일부` 표기 - 원복은 shared_preload_libraries 설정만 되돌리고 불러온 passwordcheck 모듈은
