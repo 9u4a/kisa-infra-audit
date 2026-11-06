@@ -237,6 +237,30 @@ try {
         } finally { Exit-FixLock -Mutex $held }
     }
 
+    # ---- C2 항목 코드 검증(sh 의 R-09 와 같은 기준): -Items 에 guide.json 에 없는 경로 형태 코드를 주면 그 .ps1 이 실행되지 않고
+    # "대상 항목이 없습니다" exit 2 로 끝나야 한다. 예전에는 checks\<코드>.ps1 로 이어 붙여 저장소 밖 스크립트가 관리자 권한으로 실행됐다 ----
+    $probeMarker = Join-Path ([System.IO.Path]::GetTempPath()) "kisa_rs_c2_marker.txt"
+    $probeFile = Join-Path $Repo "kisa_rs_c2_probe.ps1"
+    Remove-Item -LiteralPath $probeMarker -Force -ErrorAction SilentlyContinue
+    Set-Content -LiteralPath $probeFile -Encoding UTF8 -Value "Set-Content -LiteralPath '$probeMarker' -Value 'C2 probe ran'"
+    try {
+        # checks\<코드>.ps1(02/07) 또는 checks\iis|mssql\<코드>.ps1(03/08) 에서 저장소 루트까지 올라가는 상대 경로
+        $up = if ($Category -in @("03_web", "08_dbms")) { "..\..\..\" } else { "..\..\" }
+        $c2Out = Join-Path ([System.IO.Path]::GetTempPath()) "kisa_rs_c2"
+        Remove-Item -Recurse -Force $c2Out -ErrorAction SilentlyContinue
+        $p4 = Start-Process powershell -ArgumentList (@("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "`"$runPs1`"", "-OutBase", "`"$c2Out`"", "-Items", "`"${up}kisa_rs_c2_probe`"") + $extra) `
+            -NoNewWindow -PassThru -RedirectStandardOutput "$c2Out.stdout.txt" -RedirectStandardError "$c2Out.stderr.txt" -RedirectStandardInput $emptyIn
+        $null = $p4.Handle
+        if (-not $p4.WaitForExit(120 * 1000)) { $p4.Kill(); $fail += "C2: 경로 형태 -Items 진단이 120초 안에 끝나지 않음" }
+        elseif ($p4.ExitCode -ne 2) { $fail += "C2: 경로 형태 -Items 진단의 종료 코드가 2가 아님($($p4.ExitCode))" }
+        if (Test-Path -LiteralPath $probeMarker) { $fail += "C2: -Items '${up}kisa_rs_c2_probe' 로 저장소 밖 .ps1 이 실행됨" }
+        else { $notes += "C2: 경로 형태 -Items 거부 확인(exit $($p4.ExitCode), 탐침 미실행)" }
+    } finally {
+        Remove-Item -LiteralPath $probeFile, $probeMarker -Force -ErrorAction SilentlyContinue
+        Remove-Item -Recurse -Force $c2Out -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath "$c2Out.stdout.txt", "$c2Out.stderr.txt" -Force -ErrorAction SilentlyContinue
+    }
+
     # ---- S5 비밀값 검색 ------------------------------------------------------------------
     # 원문 + JSON 이스케이프(PS 5.1 ConvertTo-Json 은 & < > ' 를 \u0026 등으로) + HTML 이스케이프 형태를 파일 바이트에서 찾고,
     # result.json 은 ConvertFrom-Json 으로 풀어 모든 문자열 값에서도 찾는다(이스케이프 형태가 무엇이든 잡힘).

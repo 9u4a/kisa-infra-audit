@@ -169,13 +169,15 @@ function Invoke-NativeCommand {
 function Invoke-CimCmdletWithTimeout {
     <# Get-SmbShare·Get-SmbShareAccess·Get-NetFirewallProfile 같은 CDXML cmdlet 은 -OperationTimeoutSec 기본값이 적용되지
        않아 WMI 가 멈추면 무기한 대기한다(W-R16). -AsJob(같은 프로세스 안의 CIM 작업)으로 실행해 시간을 제한한다.
-       시간 초과·조회 오류(권한 거부 등)는 예외로 던진다 - 호출부가 "결과 없음"과 구분할 수 있게(W-R2) #>
+       시간 초과·조회 오류(권한 거부 등)는 예외로 던진다 - 호출부가 "결과 없음"과 구분할 수 있게(W-R2).
+       시간 초과는 [System.TimeoutException] 이라 호출부가 다른 실패(대체 경로로 넘어가도 되는 것)와 갈라 ERROR 로 낼 수 있다(B3).
+       Get-ScheduledTask(W-37)·Get-MpComputerStatus(W-39/45, PC-13/14)도 CDXML 이라 같은 방식으로 제한한다. #>
     param([Parameter(Mandatory)][string]$Command, [hashtable]$Parameters = @{}, [int]$TimeoutSec = 60)
     $job = & $Command @Parameters -AsJob
     try {
         if (-not (Wait-Job -Job $job -Timeout $TimeoutSec)) {
             Stop-Job -Job $job -ErrorAction SilentlyContinue
-            throw "$Command 시간 초과(${TimeoutSec}초)"
+            throw (New-Object System.TimeoutException("$Command 시간 초과(${TimeoutSec}초)"))
         }
         # 작업 안의 오류(권한 거부 등)는 작업 상태가 Completed 여도 Receive-Job 에서 다시 던져진다
         $out = Receive-Job -Job $job -ErrorAction Stop
@@ -184,6 +186,36 @@ function Invoke-CimCmdletWithTimeout {
     } finally {
         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Test-SmbDefaultShare {
+    <# A7: OS 가 만드는 기본 관리 공유(ADMIN$, C$ 등 드라이브$, IPC$)와 프린터 드라이버 공유(print$)인지. 예전 W-16/PC-04 는 이름이
+       $ 로 끝나는 공유를 모두 제외해, 사용자가 만든 숨김 공유(Data$)에 Everyone 권한이 있어도 GOOD 이었다. 이름이 아니라
+       Get-SmbShare 의 Special 속성(관리·기본·IPC 공유면 True, 한글 Windows 11 실측)으로 가린다. print$ 는 스풀러가 만드는 일반
+       디스크 공유라 Special 이 False 여서 이름으로 따로 뺀다. Special 속성이 없는 객체(예전 OS·모의 객체)만 이름 모양으로 대신한다. #>
+    param([Parameter(Mandatory)]$Share)
+    $name = "$($Share.Name)"
+    if ($name -eq 'print$') { return $true }
+    if ($Share.PSObject.Properties.Name -contains 'Special' -and $null -ne $Share.Special) { return [bool]$Share.Special }
+    return ($name -match '^[A-Za-z]\$$' -or $name -eq 'ADMIN$' -or $name -eq 'IPC$')
+}
+
+function Select-KnownItemCodes {
+    <# C2: run.ps1/fix.ps1 의 -Items(그리고 fix 입력 result.json)의 코드를 guide.json 코드 목록과 일치할 때만 통과시킨다. 예전에는
+       검증 없이 "checks\<코드>.ps1" 로 이어 붙여 -i ..\..\probe 같은 값으로 임의 경로의 .ps1 이 관리자 권한으로 실행됐다(sh 는
+       R-09 code_is_known). 대소문자는 무시하고 guide.json 표기로 돌려준다. 모르는 코드는 경고 후 뺀다(sh 와 같은 동작) -
+       남는 것이 없으면 호출부가 "대상 항목이 없습니다"로 종료한다. #>
+    param([AllowEmptyCollection()][AllowEmptyString()][string[]]$Codes = @(), [Parameter(Mandatory)][string[]]$KnownCodes)
+    $out = New-Object System.Collections.Generic.List[string]
+    foreach ($c in $Codes) {
+        $t = "$c".Trim()
+        if (-not $t) { continue }
+        $hit = @($KnownCodes | Where-Object { $_ -eq $t }) | Select-Object -First 1
+        if ($hit) { if (-not $out.Contains($hit)) { $out.Add($hit) } }
+        else { Write-Warning "알 수 없는 항목 코드라 건너뜀: $t" }
+    }
+    # 호출부는 @(...) 로 받는다 - 쉼표 연산자로 감싸면 빈 결과가 "빈 배열 1개"로 세어져 대상 없음 검사를 통과했다
+    return $out.ToArray()
 }
 
 # ---- 로캘 의존 명령 출력 파싱 (C6, KNOWN_ISSUES L-02) ----------------------------
@@ -1871,4 +1903,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion

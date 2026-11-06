@@ -1,5 +1,6 @@
 ﻿# lib/tests/locale_parse_tests.ps1 — 로캘 의존 명령 출력 파싱 단위 테스트(1.5.0 C6, KNOWN_ISSUES L-02)
 # 대상: lib/Common.psm1 의 ConvertFrom-AuditPolBackup(W-40) / Get-BcdEditEntryCount(PC-08) / ConvertFrom-TlntadmnConfig(W-34).
+#       + 외부 명령 없이 확인하는 판정 헬퍼 Test-SmbDefaultShare(A7 W-16/PC-04) / Select-KnownItemCodes(C2 -Items 검증).
 # 픽스처(lib/tests/fixtures/locale/, UTF-8):
 #   - auditpol_backup_*.csv, bcdedit_enum_{ko-KR,en-US}.txt : 한글 Windows 11 에서 읽기 전용 명령으로 실제 수집
 #     (ko-KR = chcp 949 콘솔, en-US = chcp 437 콘솔 - 콘솔 코드페이지에 따라 표시 언어가 바뀐다). 컴퓨터 이름은 HOST 로 바꿈.
@@ -48,6 +49,36 @@ Assert-Equal "ko-KR methods" ($r.Methods -join '|') 'NTLM|Password'
 $r = ConvertFrom-TlntadmnConfig -Lines (Read-Fixture 'tlntadmn_config_ntlm-aligned.txt')
 Assert-Equal "space-aligned NTLM only" ($r.Methods -join '|') 'NTLM'
 Assert-Equal "no auth line -> null" ($null -eq (ConvertFrom-TlntadmnConfig -Lines @('State : Running'))) $true
+
+# 아래 둘은 로캘 파싱은 아니지만 외부 명령 없이 단위로 확인할 수 있는 Common.psm1 판정 헬퍼라 같은 CI 단계에서 돌린다.
+Write-Host "[기본 관리 공유 판별 - A7 W-16/PC-04]"
+# Special 값은 한글 Windows 11 의 Get-SmbShare 실측(ADMIN$/C$/IPC$ = True). 사용자 숨김 공유(Data$)는 Special=False.
+$mk = { param($n, $sp) [PSCustomObject]@{ Name = $n; Special = $sp } }
+Assert-Equal "ADMIN$ special" (Test-SmbDefaultShare -Share (& $mk 'ADMIN$' $true)) $true
+Assert-Equal "C$ special" (Test-SmbDefaultShare -Share (& $mk 'C$' $true)) $true
+Assert-Equal "IPC$ special" (Test-SmbDefaultShare -Share (& $mk 'IPC$' $true)) $true
+Assert-Equal "print$ (Special=False)" (Test-SmbDefaultShare -Share (& $mk 'print$' $false)) $true
+Assert-Equal "user hidden Data$" (Test-SmbDefaultShare -Share (& $mk 'Data$' $false)) $false
+Assert-Equal "user hidden D$ (not special)" (Test-SmbDefaultShare -Share (& $mk 'D$' $false)) $false
+Assert-Equal "normal share" (Test-SmbDefaultShare -Share (& $mk 'share' $false)) $false
+Assert-Equal "no Special prop: C$" (Test-SmbDefaultShare -Share ([PSCustomObject]@{ Name = 'C$' })) $true
+Assert-Equal "no Special prop: Data$" (Test-SmbDefaultShare -Share ([PSCustomObject]@{ Name = 'Data$' })) $false
+
+Write-Host "[-Items 코드 검증 - C2]"
+$known = @('PC-01', 'PC-02', 'PC-18')
+$WarningPreference = 'SilentlyContinue'
+Assert-Equal "known codes" ((Select-KnownItemCodes -Codes @('PC-01', 'PC-18') -KnownCodes $known) -join ',') 'PC-01,PC-18'
+Assert-Equal "case-insensitive -> guide spelling" ((Select-KnownItemCodes -Codes @(' pc-02 ') -KnownCodes $known) -join ',') 'PC-02'
+Assert-Equal "path traversal dropped" ((Select-KnownItemCodes -Codes @('..\..\probe', 'PC-01', '../x', 'PC-01\..\..\y') -KnownCodes $known) -join ',') 'PC-01'
+Assert-Equal "wildcard not expanded" (@(Select-KnownItemCodes -Codes @('PC-*', '*') -KnownCodes $known).Count) 0
+Assert-Equal "all unknown -> empty" (@(Select-KnownItemCodes -Codes @('..\..\probe') -KnownCodes $known).Count) 0
+Assert-Equal "duplicates once" ((Select-KnownItemCodes -Codes @('PC-01', 'pc-01') -KnownCodes $known) -join ',') 'PC-01'
+$WarningPreference = 'Continue'
+
+Write-Host "[W-40 디렉터리 서비스 액세스 - A10]"
+# 비 DC(한글 Windows 11)에도 하위 범주가 백업에 있다 - 실측값 0(감사 안 함)
+$m = ConvertFrom-AuditPolBackup -Lines (Read-Fixture "auditpol_backup_ko-KR.csv")
+Assert-Equal "ko-KR Directory Service Access present" $m['{0CCE923B-69AE-11D9-BED3-505054503030}'] 0
 
 if ($script:fail -gt 0) { Write-Host "locale parse tests: $script:fail FAILED"; exit 1 }
 Write-Host "locale parse tests: all passed"
