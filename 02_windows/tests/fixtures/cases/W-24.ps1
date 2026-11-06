@@ -6,7 +6,11 @@
             Restore = {
                 param($o)
                 # 사이트 단위 <location path="kisa_case_ftp"> 설정은 사이트를 지워도 applicationHost.config 에 남을 수 있어 먼저 지운다
-                Clear-WebConfiguration -PSPath 'MACHINE/WEBROOT/APPHOST' -Location 'kisa_case_ftp' -Filter '/system.ftpServer/security/ipSecurity' -ErrorAction SilentlyContinue
+                # 사이트가 없는 상태(ftp-stopped 등)에서는 "Unrecognized configuration path" 종료 오류가 나므로(-ErrorAction 무시됨)
+                # 사이트가 있을 때만 지운다 - 사이트가 없으면 앞선 상태의 원복에서 이미 지워졌다
+                if (Get-Website -Name 'kisa_case_ftp' -ErrorAction SilentlyContinue) {
+                    try { Clear-WebConfiguration -PSPath 'MACHINE/WEBROOT/APPHOST' -Location 'kisa_case_ftp' -Filter '/system.ftpServer/security/ipSecurity' -ErrorAction Stop } catch { Write-Verbose "location 정리 생략: $_" }
+                }
                 Remove-CaseFtpSites
                 foreach ($ip in @((Get-WebConfiguration -Filter '/system.ftpServer/security/ipSecurity' -PSPath 'IIS:\').Collection | ForEach-Object { $_.ipAddress })) {
                     if (@($o.Ips) -notcontains $ip) { Remove-WebConfigurationProperty -PSPath 'IIS:\' -Filter '/system.ftpServer/security/ipSecurity' -Name '.' -AtElement @{ ipAddress = $ip } }
