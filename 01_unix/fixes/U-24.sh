@@ -1,5 +1,5 @@
 # U-24 (상) 사용자, 시스템 환경변수 파일 소유자 및 권한 설정 — 조치
-# 변경: 로그인 계정 홈의 .profile·.kshrc·.cshrc·.bashrc·.bash_profile·.login·.exrc·.netrc 소유자가 root/본인이 아니면 본인으로 chown, 기타 쓰기 권한 제거(o-w)
+# 변경: 로그인 계정 홈의 .profile·.kshrc·.cshrc·.bashrc·.bash_profile·.login·.exrc·.netrc 소유자가 root/본인이 아니면 본인으로 chown, 그룹/기타 쓰기 권한 제거(go-w, 1.5.0 A3 - check 와 같이 그룹 쓰기도)
 run_fix() {
     passwd_file="/etc/passwd"
     dotfiles=".profile .kshrc .cshrc .bashrc .bash_profile .login .exrc .netrc"
@@ -23,14 +23,14 @@ run_fix() {
             f="$home/$df"
             [ -e "$f" ] || continue
             owner=$(stat -L -c '%U' "$f" 2>/dev/null)
-            other_write=$(find "$f" -perm -0002 2>/dev/null)
+            other_write=$(find "$f" -perm /0022 2>/dev/null)
             if [ "$owner" != "root" ] && [ "$owner" != "$name" ]; then
                 fix_backup "$f"; chown "$name" "$f" 2>/dev/null
                 applied="$applied $f(owner->$name)"
             fi
             if [ -n "$other_write" ]; then
-                fix_backup "$f"; chmod o-w "$f" 2>/dev/null
-                applied="$applied $f(other-write제거)"
+                fix_backup "$f"; chmod go-w "$f" 2>/dev/null
+                applied="$applied $f(그룹/기타 쓰기 제거)"
             fi
         done
         IFS='

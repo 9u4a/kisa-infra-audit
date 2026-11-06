@@ -190,8 +190,38 @@ banner_start() {
 # 에서 HTML/JS 가 실행될 수 있다.
 # TAB/CR 외의 제어문자(ESC 등 - 일반 사용자가 /tmp 에 만든 파일 이름에 넣을 수 있음)는 지운다: 남아 있으면
 # result.json 이 JSON 으로 읽히지 않아 보고서가 빈 화면이 되고 merge.py 에서 그 호스트가 빠졌다(진단 검수 R-04).
+# 1.5.0 C1: UTF-8 이 아닌 바이트(EUC-KR 로캘의 파일 이름·명령 출력 등)가 증적에 섞이면 result.json 이 잘못된 UTF-8 이
+# 되어 보고서가 깨지고 merge.py 가 UnicodeDecodeError 로 중단됐다. 유효한 UTF-8 이 아닌 바이트는 하나씩 U+FFFD 로
+# 바꾼다. iconv 없이 awk 만 쓴다(LC_ALL=C 라 awk 는 바이트 단위 - mawk·gawk 공통). 순수 ASCII 줄은 바이트 검사 없이 통과(S4).
+_UTF8_SANITIZE_AWK='
+BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i
+        hi = "[" sprintf("%c", 128) "-" sprintf("%c", 255) "]"; rep = sprintf("%c%c%c", 239, 191, 189) }
+{
+    if ($0 !~ hi) { printf "%s\\n", $0; next }
+    s = $0; n = length(s); o = ""; i = 1
+    while (i <= n) {
+        c = ord[substr(s, i, 1)]
+        if (c < 128) { o = o substr(s, i, 1); i++; continue }
+        k = 0; lo = 128; up = 191
+        if (c >= 194 && c <= 223) k = 1
+        else if (c >= 224 && c <= 239) { k = 2; if (c == 224) lo = 160; if (c == 237) up = 159 }
+        else if (c >= 240 && c <= 244) { k = 3; if (c == 240) lo = 144; if (c == 244) up = 143 }
+        ok = (k > 0 && i + k <= n)
+        if (ok) { c2 = ord[substr(s, i + 1, 1)]; if (c2 < lo || c2 > up) ok = 0 }
+        for (j = 2; ok && j <= k; j++) { c2 = ord[substr(s, i + j, 1)]; if (c2 < 128 || c2 > 191) ok = 0 }
+        if (ok) { o = o substr(s, i, k + 1); i += k + 1 } else { o = o rep; i++ }
+    }
+    printf "%s\\n", o
+}'
 json_escape() {
-    printf '%s' "$1" | tr '\t\r' '  ' | tr -d '\001-\010\013\014\016-\037\177' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's#</#<\\/#g' | awk '{printf "%s\\n", $0}' | sed '$ s/\\n$//'
+    printf '%s' "$1" | tr '\t\r' '  ' | tr -d '\001-\010\013\014\016-\037\177' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's#</#<\\/#g' | awk "$_UTF8_SANITIZE_AWK" | sed '$ s/\\n$//'
+}
+
+# passwd_mask -- 표준 입력의 /etc/passwd 형식 줄에서 두 번째 필드(비밀번호)를 가린다. shadow 를 쓰지 않는 호스트는 이
+# 필드에 해시가 그대로 있어, 줄 전체를 증적에 남기면 결과물에 해시가 저장됐다(S5, 1.5.0 C3 - U-11·U-55).
+# 판정 근거가 되는 표식(x * ! !! 빈 값)은 그대로 두고 그 밖의 값은 "<masked>" 로 바꾼다.
+passwd_mask() {
+    awk 'BEGIN { FS = OFS = ":" } NF >= 2 && $2 != "x" && $2 != "*" && $2 != "!" && $2 != "!!" && $2 != "" { $2 = "<masked>" } { print }'
 }
 
 # perm_within <권한> <기준>  -- 8진수 권한이 기준보다 넓은 비트를 하나도 갖지 않으면 참("기준 이하").

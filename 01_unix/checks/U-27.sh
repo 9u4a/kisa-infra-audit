@@ -5,16 +5,37 @@
 # 전 Unix 계열 공통 로직. rsh/rlogin 관련 데몬 유무로 서비스 사용 여부를 우선 판단.
 
 run_check() {
+    # 1.5.0 A5: 예전에는 systemctl 을 시간 제한 없이 불러(D-Bus 장애 시 무기한 대기 - S2) 실패·멈춤을 "미사용 = GOOD"으로
+    # 받았고(S6), is-enabled(재부팅·첫 연결 시 기동)는 보지 않았다. 이제 U-36 과 같은 공통 헬퍼(check_service_disabled:
+    # 프로세스 + 유닛 is-active/is-enabled(run_to) + inetd.conf)로 사용 여부를 정하고, 확인하지 못하면 ERROR 로 둔다.
     rcmd_running=0
-    for bin_pattern in in.rshd in.rlogind rshd rlogind; do
-        command -v "$bin_pattern" >/dev/null 2>&1 && rcmd_running=1
+    rcmd_evidence=""
+    for bin_pattern in in.rshd in.rlogind in.rexecd rshd rlogind rexecd; do
+        if command -v "$bin_pattern" >/dev/null 2>&1; then
+            rcmd_running=1
+            rcmd_evidence="$rcmd_evidence
+r-command 데몬 설치됨: $(command -v "$bin_pattern")"
+        fi
     done
-    if command -v systemctl >/dev/null 2>&1; then
-        systemctl is-active --quiet rsh.socket 2>/dev/null && rcmd_running=1
-        systemctl is-active --quiet rlogin.socket 2>/dev/null && rcmd_running=1
+    check_service_disabled "r 계열(rlogin/rsh/rexec)" "in\.rlogind|in\.rshd|in\.rexecd|rlogind|rshd|rexecd" \
+        "rlogin.socket rsh.socket rexec.socket" "login shell exec"
+    case "$CHECK_STATUS" in
+        VULN) rcmd_running=1; rcmd_evidence="$rcmd_evidence
+$CHECK_EVIDENCE" ;;
+        GOOD) : ;;
+        *)
+            # 사용 여부를 확인하지 못함(systemctl 시간 초과·inetd.conf 읽기 실패 등) - 이미 사용 근거가 있으면 계속 판정
+            if [ "$rcmd_running" -eq 0 ]; then
+                CHECK_DETAIL="r-command 사용 여부를 확인하지 못함: $CHECK_DETAIL"
+                return
+            fi ;;
+    esac
+    xl=$(grep -lE '^[[:space:]]*disable[[:space:]]*=[[:space:]]*no' /etc/xinetd.d/rlogin /etc/xinetd.d/rsh /etc/xinetd.d/rexec 2>/dev/null)
+    if [ -n "$xl" ]; then
+        rcmd_running=1
+        rcmd_evidence="$rcmd_evidence
+xinetd 활성(disable = no): $(printf '%s' "$xl" | tr '\n' ' ')"
     fi
-    grep -qE '^[[:space:]]*(shell|login|exec)[[:space:]]' /etc/inetd.conf 2>/dev/null && rcmd_running=1
-    grep -rlqE 'disable[[:space:]]*=[[:space:]]*no' /etc/xinetd.d/rlogin /etc/xinetd.d/rsh /etc/xinetd.d/rexec 2>/dev/null && rcmd_running=1
 
     if [ "$rcmd_running" -eq 0 ]; then
         CHECK_STATUS="GOOD"
@@ -80,4 +101,6 @@ EOF
         CHECK_DETAIL="r-command 사용 중이며 기준을 위반하는 파일이 존재함:$violations"
         CHECK_EVIDENCE="$evidence"
     fi
+    CHECK_EVIDENCE="[r-command 사용 근거]$rcmd_evidence
+$CHECK_EVIDENCE"
 }

@@ -37,6 +37,13 @@ def main() -> int:
         with open(os.path.join(d, "result.json"), "w", encoding="utf-8", newline="\n") as f:
             json.dump(result("win-bom", "GOOD", "2026-10-28T00:00:00"), f, ensure_ascii=False)
         paths.append(os.path.join(d, "result.json"))
+        # C1(1.5.0): 증적에 UTF-8 이 아닌 바이트(EUC-KR "가")가 든 결과 - 예전에는 UnicodeDecodeError 로 병합 전체가 중단
+        d = os.path.join(tmp, "linux-euckr_01_20261029-000000")
+        os.makedirs(d)
+        raw = json.dumps(result("linux-euckr", "VULN"), ensure_ascii=False).replace('"evidence": ""', '"evidence": "@@"')
+        with open(os.path.join(d, "result.json"), "wb") as f:
+            f.write(raw.encode("utf-8").replace(b"@@", bytes([0xB0, 0xA1]) + b" file"))
+        paths.append(os.path.join(d, "result.json"))
         out = os.path.join(tmp, "merged")
         proc = subprocess.run([sys.executable, os.path.join(ROOT, "lib", "merge.py"), *paths, "-o", out],
                               capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -50,12 +57,12 @@ def main() -> int:
         if os.path.isfile(csv_path):
             with open(csv_path, encoding="utf-8-sig", newline="") as f:
                 rows = [(row["host"], row["status"]) for row in csv.DictReader(f)]
-        if sorted(rows) != [("linux-nobom", "GOOD"), ("win-bom", "VULN")]:
+        if sorted(rows) != [("linux-euckr", "VULN"), ("linux-nobom", "GOOD"), ("win-bom", "VULN")]:
             fails.append(f"병합 결과 불일치(같은 호스트는 최근 결과만): {sorted(rows)}")
     if fails:
         print("FAIL: merge_test\n  - " + "\n  - ".join(fails))
         return 1
-    print("PASS: merge_test (BOM 있는 Windows 결과 포함 2개 호스트 병합, 같은 호스트 이전 결과 제외)")
+    print("PASS: merge_test (BOM 있는 Windows 결과·비 UTF-8 증적 결과 포함 3개 호스트 병합, 같은 호스트 이전 결과 제외)")
     return 0
 
 

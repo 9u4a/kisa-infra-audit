@@ -129,7 +129,7 @@ CASE_DISTRO=rhel sh 01_unix/tests/run_cases.sh || fail=1
 # SNMPv3 비밀번호(특수문자 포함 - JSON/HTML 이스케이프를 풀어서도 검색), 외부 명령이 멈추는 경우(HANG_CMDS 가짜를 PATH
 # 앞에 둠)에도 HANG_LIMIT 안에 끝나는지(vuln 만 - 시간 절약).
 UNIX_SECRETS='plainhash123|KisaComm77Secret|\$1\$kisasalt\$Qp0wYQK0rM1y9vUe6m3Vx/|KisaAuthPass#2026'
-UNIX_HANG='systemctl postconf sendmail exim exim4 rpcinfo firewall-cmd hostnamectl nft iptables ypwhich named exportfs showmount'
+UNIX_HANG='systemctl ufw postconf sendmail exim exim4 rpcinfo firewall-cmd hostnamectl nft iptables ypwhich named exportfs showmount'
 # 1.5.0 C1: rhel(Rocky 9 케이스 이미지 - run_cases.sh 가 빌드, systemd 없이 sh 로 실행)에서도 같은 검사를 한다.
 for target in debian:vuln debian:hardened rhel:vuln rhel:hardened; do
     distro=${target%%:*}; mode=${target#*:}

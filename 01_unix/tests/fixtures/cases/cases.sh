@@ -67,9 +67,16 @@ c_U_35__vsftpd_anon_yes() { printf 'listen=YES\nanonymous_enable=YES\n' > /etc/v
 # ---- 3. 서비스 관리 ----
 # Rocky 9(cronie)는 기본 상태가 crontab SUID(4755) + /etc/cron.deny 644 라 기준 초과 - 양호 쪽은 cron.deny 도 640 으로,
 # SUID 쪽은 cron.deny 만 640 으로 바꿔(SUID 는 그대로) 판정 원인을 crontab 하나로 좁힌다(Debian 은 cron.deny 없음)
-c_U_37__crontab_750() { chmod 750 /usr/bin/crontab; [ ! -f /etc/cron.deny ] || chmod 640 /etc/cron.deny; }
-c_U_37__crontab_suid() { chmod 4755 /usr/bin/crontab; [ ! -f /etc/cron.deny ] || chmod 640 /etc/cron.deny; }
-c_U_37__cron_allow_644() { chmod 750 /usr/bin/crontab; echo root > /etc/cron.allow; chmod 644 /etc/cron.allow; }
+# 1.5.0 A1: /etc/crontab·/etc/cron.d/* 도 판정 대상(기준 640) - 배포판 기본값(644)을 640 으로 맞춘 상태를 양호 기준선으로 쓴다
+u37_base() {
+    chmod 750 /usr/bin/crontab
+    [ ! -f /etc/cron.deny ] || chmod 640 /etc/cron.deny
+    [ ! -f /etc/crontab ] || chmod 640 /etc/crontab
+    [ ! -d /etc/cron.d ] || find /etc/cron.d -maxdepth 1 -type f -exec chmod 640 {} +
+}
+c_U_37__crontab_750() { u37_base; }
+c_U_37__crontab_suid() { u37_base; chmod 4755 /usr/bin/crontab; }
+c_U_37__cron_allow_644() { u37_base; echo root > /etc/cron.allow; chmod 644 /etc/cron.allow; }
 c_U_38__inetd_echo_commented() { printf '#echo\tstream\ttcp\tnowait\troot\tinternal\n' >> /etc/inetd.conf; }
 c_U_38__inetd_echo() { printf 'echo\tstream\ttcp\tnowait\troot\tinternal\n' >> /etc/inetd.conf; }
 c_U_39__nfs_server_enabled() { fake_unit nfs-server enabled; }
@@ -188,3 +195,134 @@ exim_fake() {
 }
 c_U_47__exim_only() { exim_fake; }
 c_U_48__exim_only() { exim_fake; }
+
+# ---- 진단 판정 신뢰성(1.5.0 A·B·C 외부 검수) ------------------------------------------------------------------------
+# A1 U-37: 작업 목록(스풀) 0644 - 예전 -perm -0007 은 기타 rwx 가 "모두" 있을 때만 잡아 GOOD 이었다
+c_U_37__spool_644() {
+    u37_base
+    d=/var/spool/cron/crontabs; [ -d "$d" ] || d=/var/spool/cron
+    printf '0 0 * * * true\n' > "$d/root"; chmod 644 "$d/root"
+}
+# A1 U-37: /etc/crontab 644(배포판 기본값) - 예전에는 /etc/crontab·cron.d 를 보지 않아 GOOD
+c_U_37__etc_crontab_644() { u37_base; chmod 644 /etc/crontab; }
+# C1: 파일 이름에 EUC-KR 바이트("가")가 든 cron.d 파일 - 증적(ls -l)에 섞여 예전에는 result.json 이 잘못된 UTF-8
+c_U_37__cron_d_euckr_name() {
+    u37_base
+    f=/etc/cron.d/kisa-$(printf '\260\241')
+    printf '0 0 * * * root true\n' > "$f"; chmod 644 "$f"
+}
+# A2 U-28: 정책 accept + "ct state invalid drop" 한 줄(가짜 nft) - 예전 GOOD. 조치는 manual 등급(변경 없음)
+c_U_28__nft_invalid_only() {
+    cat > /usr/local/sbin/nft <<'NFT'
+#!/bin/sh
+[ "$1 $2" = "list ruleset" ] || exit 1
+printf 'table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t\tct state invalid drop\n\t\tct state established,related accept\n\t}\n}\n'
+NFT
+    chmod 755 /usr/local/sbin/nft
+}
+# A2 U-28: nft 은 정책 accept 뿐, iptables INPUT 은 정책 ACCEPT + INVALID DROP 한 줄(가짜 iptables-nft) - 예전 GOOD
+c_U_28__iptables_invalid_only() {
+    cat > /usr/local/sbin/nft <<'NFT'
+#!/bin/sh
+[ "$1 $2" = "list ruleset" ] || exit 1
+printf 'table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t}\n}\n'
+NFT
+    cat > /usr/local/sbin/iptables <<'IPT'
+#!/bin/sh
+case "$*" in
+    -V) echo "iptables v1.8.9 (nf_tables)" ;;
+    *-S\ INPUT*) printf -- '-P INPUT ACCEPT\n-A INPUT -m conntrack --ctstate INVALID -j DROP\n' ;;
+    *) exit 1 ;;
+esac
+IPT
+    chmod 755 /usr/local/sbin/nft /usr/local/sbin/iptables
+}
+# A2 U-28: 정책 accept 라도 출발지·포트 기준 drop 규칙이 있으면 접근 제한(양호 쪽 회귀)
+c_U_28__nft_source_port_drop() {
+    cat > /usr/local/sbin/nft <<'NFT'
+#!/bin/sh
+[ "$1 $2" = "list ruleset" ] || exit 1
+printf 'table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy accept;\n\t\tct state invalid drop\n\t\ttcp dport 22 ip saddr != 10.0.0.0/8 drop\n\t}\n}\n'
+NFT
+    chmod 755 /usr/local/sbin/nft
+}
+# A3 U-24: 그룹 쓰기(0664) - 예전 -perm -0002 는 기타 쓰기만 봐서 GOOD
+c_U_24__bashrc_group_write() { chmod 664 /root/.bashrc; }
+# A4 U-17: /etc/init.d 의 rc 스크립트에 기타 쓰기 - 예전에는 /etc/systemd/system 이 있으면 init.d 를 보지 않아 GOOD
+c_U_17__initd_other_write() {
+    [ -d /etc/init.d ] || mkdir -p /etc/init.d
+    printf '#!/bin/sh\nexit 0\n' > /etc/init.d/kisa-test
+    chmod 757 /etc/init.d/kisa-test
+}
+c_U_17__initd_755() {
+    [ -d /etc/init.d ] || mkdir -p /etc/init.d
+    printf '#!/bin/sh\nexit 0\n' > /etc/init.d/kisa-test
+    chmod 755 /etc/init.d/kisa-test
+}
+# A5 U-27: rsh.socket 이 enabled(재부팅·첫 연결 시 기동, 지금은 inactive) + .rhosts "+ +" - 예전에는 is-active 만 봐서
+# "r-command 미사용" GOOD
+c_U_27__rsh_socket_enabled() {
+    printf '[Unit]\nDescription=KISA test fake rsh\n[Socket]\nListenStream=5514\nAccept=yes\n[Install]\nWantedBy=sockets.target\n' \
+        > /etc/systemd/system/rsh.socket
+    printf '[Unit]\nDescription=KISA test fake rsh conn\n[Service]\nExecStart=/bin/true\nStandardInput=socket\n' \
+        > /etc/systemd/system/rsh@.service
+    systemctl daemon-reload
+    systemctl enable rsh.socket >/dev/null 2>&1
+    printf '+ +\n' > /root/.rhosts; chmod 644 /root/.rhosts
+}
+# A6 U-62: sshd 배너를 sshd_config.d 드롭인에서만 지정 - 예전에는 주 설정 파일만 봐서 "Banner 미설정" VULN
+u62_banners() {
+    echo "Authorized access only. All activity may be monitored." > /etc/motd
+    echo "Authorized access only." > /etc/issue
+    echo "Authorized access only." > /etc/issue.net
+}
+c_U_62__sshd_dropin_banner() {
+    u62_banners
+    mkdir -p /etc/ssh/sshd_config.d
+    grep -qiE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config || \
+        sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+    echo "Banner /etc/issue.net" > /etc/ssh/sshd_config.d/00-kisa-banner.conf
+}
+# A6 U-62: 드롭인이 먼저 "Banner none"(sshd 는 처음 값 사용) - 주 설정 파일의 Banner 만 봐서 예전 GOOD. 드롭인 수정은
+# 자동 조치하지 않는다 → PARTIAL(변경 없음)
+c_U_62__sshd_dropin_banner_none() {
+    u62_banners
+    mkdir -p /etc/ssh/sshd_config.d
+    grep -qiE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/' /etc/ssh/sshd_config || \
+        sed -i '1i Include /etc/ssh/sshd_config.d/*.conf' /etc/ssh/sshd_config
+    echo "Banner none" > /etc/ssh/sshd_config.d/00-kisa-banner.conf
+    echo "Banner /etc/issue.net" >> /etc/ssh/sshd_config
+}
+# A6 U-62: Postfix 기본 smtpd_banner("$myhostname ESMTP $mail_name") - 예전에는 증적에만 남기고 GOOD
+postconf_fake() {
+    cat > /usr/local/sbin/postconf <<PC
+#!/bin/sh
+[ "\$1 \$2" = "-h smtpd_banner" ] && echo '$1'
+exit 0
+PC
+    chmod 755 /usr/local/sbin/postconf
+}
+c_U_62__postfix_default_banner() {
+    u62_banners; echo "Banner /etc/issue.net" >> /etc/ssh/sshd_config
+    postconf_fake '$myhostname ESMTP $mail_name'
+}
+c_U_62__postfix_custom_banner() {
+    u62_banners; echo "Banner /etc/issue.net" >> /etc/ssh/sshd_config
+    postconf_fake '$myhostname ESMTP Authorized access only'
+}
+# A6 U-62: BIND 설치(가짜 named) + options 에 version 문 없음(hardened 픽스처의 /etc/bind) - 예전에는 DNS 미검사 GOOD
+c_U_62__bind_no_version() {
+    u62_banners; echo "Banner /etc/issue.net" >> /etc/ssh/sshd_config
+    printf '#!/bin/sh\nexit 0\n' > /usr/local/sbin/named; chmod 755 /usr/local/sbin/named
+}
+# C5 U-55: /usr/bin/false 는 로그인 불가 쉘(U-11 deviation 과 같음) - 예전 VULN
+c_U_55__ftp_usr_bin_false() { ftp_account /usr/bin/false; }
+# C3 U-55/U-11: shadow 를 쓰지 않는 계정(/etc/passwd 두 번째 필드에 해시) - 예전에는 줄 전체를 증적에 남겼다(S5)
+c_U_55__ftp_shell_passwd_hash() {
+    ftp_account /bin/sh
+    sed -i 's/^ftp:[^:]*:/ftp:KisaPwHash77:/' /etc/passwd
+}
+c_U_11__daemon_shell_passwd_hash() {
+    usermod -s /bin/bash daemon
+    sed -i 's/^daemon:[^:]*:/daemon:KisaPwHash77:/' /etc/passwd
+}

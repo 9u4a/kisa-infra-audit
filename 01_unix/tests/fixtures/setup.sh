@@ -121,6 +121,10 @@ elif [ "$MODE" = "hardened" ]; then
     mkdir -p /usr/local/sbin
     printf '#!/bin/sh\n[ "$1 $2" = "list ruleset" ] || exit 1\nprintf "table inet filter {\\n\\tchain input {\\n\\t\\ttype filter hook input priority filter; policy drop;\\n\\t\\ttcp dport 22 ip saddr 10.0.0.0/8 accept\\n\\t}\\n}\\n"\n' > /usr/local/sbin/nft
     chmod 755 /usr/local/sbin/nft
+    # U-37 (1.5.0 A1): /etc/crontab·/etc/cron.d 파일(e2scrub_all 등 배포판 기본 644)을 기준(640) 이내로 - 예전 check 는
+    # 이 파일들을 보지 않았다. vuln 쪽은 기본값(644) 그대로라 VULN.
+    [ ! -d /etc/cron.d ] || find /etc/cron.d -maxdepth 1 -type f -exec chmod 640 {} +
+    [ ! -f /etc/crontab ] || chmod 640 /etc/crontab
     # U-12 (U-R7): 따옴표·"export TMOUT=" 형태 - 예전 check 는 인식하지 못해 VULN 이었다.
     echo 'export TMOUT="600"' > /etc/profile.d/kisa-tmout.sh
     # U-11 (U-R17): /usr/bin/false 도 로그인 불가 쉘 - 예전 check 는 /bin/false 만 인정해 VULN 이었다.

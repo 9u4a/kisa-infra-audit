@@ -119,10 +119,32 @@ f=$(find /tmp/rs_nr -name result.json 2>/dev/null | head -n 1)
 if [ -n "${HANG_CMDS:-}" ]; then
     mkdir -p /tmp/rs_hang
     for c in $HANG_CMDS; do printf '#!/bin/sh\nexec sleep 9999\n' > "/tmp/rs_hang/$c"; chmod 755 "/tmp/rs_hang/$c"; done
+    # 진입점(lib/common.sh)은 보안상 PATH 맨 앞에 /usr/sbin:/usr/bin:/sbin:/bin 을 다시 붙인다 - 가짜를 PATH 앞에만 두면
+    # 실물이 먼저 잡혀 이 검사가 아무것도 못 봤다(1.5.0 B2). 그 네 곳에 있는 실물(심볼릭 링크 포함)은 잠시 이름을 바꾸고
+    # 가짜로 바꿔치기했다가 끝나면 되돌린다. 네 곳 어디에도 없는 명령은 /usr/sbin 에 가짜를 두고 끝나면 지운다.
+    # (usrmerge 로 /bin → /usr/bin 처럼 같은 폴더면 한 번만. 컨테이너 안에서만 쓰는 하네스다.)
+    : > /tmp/rs_hang/.swapped
+    for c in $HANG_CMDS; do
+        placed=0
+        for d in /usr/sbin /usr/bin /sbin /bin; do
+            rd=$(cd -P "$d" 2>/dev/null && pwd) || continue
+            p="$rd/$c"
+            [ -e "$p" ] || [ -L "$p" ] || continue
+            if grep -qxF "M $p" /tmp/rs_hang/.swapped; then placed=1; continue; fi
+            mv "$p" "$p.rs_real" && cp "/tmp/rs_hang/$c" "$p" && echo "M $p" >> /tmp/rs_hang/.swapped && placed=1
+        done
+        if [ "$placed" -eq 0 ]; then
+            cp "/tmp/rs_hang/$c" "/usr/sbin/$c" && echo "N /usr/sbin/$c" >> /tmp/rs_hang/.swapped
+        fi
+    done
     start=$(date +%s)
     # shellcheck disable=SC2086
     PATH="/tmp/rs_hang:$PATH" timeout -k 5 "${HANG_LIMIT:-180}" $RUN_CMD -o /tmp/rs_hangout < /dev/null > "$RS/hang.out" 2>&1
     echo "HANG_RC=$?" >> "$RS/kv"
+    while read -r k p; do
+        case "$k" in M) rm -f "$p"; mv "$p.rs_real" "$p" ;; N) rm -f "$p" ;; esac
+    done < /tmp/rs_hang/.swapped
+    echo "HANG_SWAPPED=$(wc -l < /tmp/rs_hang/.swapped | tr -d ' ')" >> "$RS/kv"
     echo "HANG_SECONDS=$(( $(date +%s) - start ))" >> "$RS/kv"
     f=$(find /tmp/rs_hangout -name result.json 2>/dev/null | head -n 1)
     [ -n "$f" ] && cp "$f" "$RS/hang.json"

@@ -21,8 +21,9 @@ run_check() {
         entry=$(grep "^${name}:" "$passwd_file" 2>/dev/null)
         [ -z "$entry" ] && continue
         shell=$(printf '%s' "$entry" | awk -F: '{print $NF}')
+        # 비밀번호 필드는 가린다(shadow 미사용 호스트는 해시가 여기 있다 - S5, 1.5.0 C3)
         evidence="$evidence
-$entry"
+$(printf '%s\n' "$entry" | passwd_mask)"
         # 진단 검수 U-R17: /usr/bin/false(usrmerge 이후 RHEL/Debian 경로)도 로그인 불가 쉘이다 - 예전에는 VULN.
         case "$shell" in
             */nologin|*/false) ;;
