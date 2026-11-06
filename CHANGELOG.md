@@ -45,6 +45,14 @@
   - 조치는 실 PC 라 적용하지 않았다(VM 검증은 1.6.0 G-07).
 - 릴리스 체크리스트(1.5.0 D5): `.github/release-checklist.md` - 태그 전 CI 전 job 수동 실행, coverage·조치 등급 검사,
   VERSION·CHANGELOG·README·KNOWN_ISSUES 갱신, 서명·로컬 전용 파일·실호스트 정보 확인, 태그·릴리스 명령.
+- 변이 검증(1.5.0 D1): `lib/tests/mutation.py` - 저장소 사본의 check 를 전부 "항상 GOOD" / "항상 VULN" 스텁으로 바꿔
+  카테고리 테스트를 돌리고, 기대값이 있는 (엔진, 항목)마다 실패가 실제로 나오는지 확인한다(1.4.0 에 손으로 한 음성 대조의 자동화).
+  CI `mutation` job(주간·수동): 01_unix, 03_web(IIS 제외), 05_network, 08_dbms mysql·postgres / oracle.
+  `mutation-windows` job: 02_windows·07_pc(케이스 → 전역 픽스처 순), 03_web IIS, 08_dbms MSSQL. 실행 로그는 artifact.
+  - 첫 전체 실행(CI run 42148551021): 9개 대상 모두 두 변이 생존 0 - (엔진, 항목) 대상 수 01 67 · 02 62/64 · 03 비IIS 104 ·
+    03 IIS 23 · 05 38 · 07 18/17 · 08 mysql·postgres 24 · oracle 22 · mssql 13/14(GOOD/VULN 변이). 대조: 로그에서 N-01 실패 줄을
+    지우면 N-01 이 생존으로 나온다.
+  - 08_dbms 는 엔진에 check 파일이 없는 항목(진입점이 NA)을 대상에서 뺀다(바꿀 check 가 없음).
 ### Changed
 - `lib/common.sh`(2686줄) 분할(1.5.0 D3): 웹 → `common_web.sh`, DBMS → `common_db.sh`, 조치 → `common_fix.sh`. `common.sh`(핵심 964줄)가
   같은 폴더에서 셋을 source 하므로 check·fix·진입점의 source 경로는 그대로다. 함수 156개·코드 줄이 원본과 같음을 기계적으로 확인했고,
