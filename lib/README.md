@@ -9,7 +9,7 @@
 
 | 파일 | 대상 | 역할 |
 |---|---|---|
-| `common.sh` | Unix 계열 카테고리(01, 03의 Unix 엔진, 08의 Unix DBMS) | 로그, 색상, 진행 표시, `uname`/`os-release` 기반 환경 감지, `guide.json` 조회(`guide_field`/`guide_list_codes`), 결과 JSON(NDJSON→최종 JSON)/CSV/`summary.txt` 생성, `report.html` 렌더링 |
+| `common.sh` | Unix 계열 카테고리(01, 03의 Unix 엔진, 08의 Unix DBMS) | 로그, 색상, 진행 표시, `uname`/`os-release` 기반 환경 감지, `guide.json` 조회(`guide_field`/`guide_list_codes`), 결과 JSON(NDJSON→최종 JSON)/CSV/`summary.txt` 생성, `report.html` 렌더링, 진단 진입점 공통 흐름(`run_list_items`→`run_select_codes`→`run_begin_output`→`run_items`→`run_finish`) |
 | `common_web.sh` | 03_web(Unix 엔진) — `common.sh` 가 source | 웹 엔진 자동 탐지·설정 경로 조회, XML 주석 제거·속성 파싱 |
 | `common_db.sh` | 08_dbms(Unix DBMS) — `common.sh` 가 source | 엔진 탐지, 운영 안전장치(시간 제한·계정 잠금 방지), 원격 판별, 권한 사전 확인, MySQL/PostgreSQL/Oracle 접속·쿼리, DB 재기동·Oracle 정적 파라미터 복구, SQL 원복 큐 |
 | `common_fix.sh` | 01/03/08 `fix.sh` — `common.sh` 가 source | 자동 조치 공통: 백업·원복·감사 로그, 설정 파일 편집(F2), 비밀번호 직접 입력, 진입점 가드(F1·F6), 서비스·권한 조치, 전체 원복 |

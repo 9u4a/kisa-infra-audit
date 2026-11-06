@@ -57,6 +57,10 @@
 - `lib/common.sh`(2686줄) 분할(1.5.0 D3): 웹 → `common_web.sh`, DBMS → `common_db.sh`, 조치 → `common_fix.sh`. `common.sh`(핵심 964줄)가
   같은 폴더에서 셋을 source 하므로 check·fix·진입점의 source 경로는 그대로다. 함수 156개·코드 줄이 원본과 같음을 기계적으로 확인했고,
   최상위 코드는 변수 할당뿐이라 순서와 무관하다. CI `sed -i` 금지 검사 범위에 `lib/common_*.sh` 추가.
+- 진단 진입점 공통 흐름을 lib 로 옮김(1.5.0 D2 1단계): 01/03/08 `run.sh` 가 복붙하던 목록 출력·대상 선정·출력 준비·항목 루프·마무리를
+  `common.sh` 의 `run_list_items`·`run_select_codes`·`run_begin_output`·`run_items`·`run_finish` 로 합쳤다(3개 파일 257줄 → 진입점 고유
+  부분만). 카테고리별 차이(check 폴더, 파일 없을 때 ERROR/NA, 후처리 nonroot_unverified·append_unverified_note·web_unsupported_note·
+  db_privilege_apply)는 인자와 후처리 함수로 넘긴다. 01 의 `-i` 도 03/08 처럼 콤마를 공백으로 바꿔 나눈다.
 - README 개편: 맨 위에 한눈에 표(범위·검증·CI 20개 환경·결함 50건)와 만든 이유, 카테고리별 명령은 `docs/USAGE.md` 로 이동,
   로드맵 압축, 1.4.0 결함 수를 "약 45건" 대신 정확한 50건(교차검증 9 + 양방향 검증 41)으로, 검증 환경 표에 Server 2022 행과
   "1.5.0 예정" 표시. LICENSE 는 MIT 원문만 두고 KISA 출처 문구는 `NOTICE` 로 옮겼다(GitHub 라이선스 인식).
