@@ -602,7 +602,18 @@ for engine in $ENGINES; do
         if [ "$engine" = "oracle" ]; then
             # 이미지 기본 상태의 전 항목 판정(로컬 모드, SYSTEM@FREEPDB1) = expected_oracle_default.json
             def="$TMPW/oracle_default.json"
-            docker exec "$srv" sh -c 'DB_PASSWORD=TestRoot123 sh 08_dbms/run.sh -e oracle --host localhost --db FREEPDB1 --user system -o /tmp/def >/dev/null 2>&1; cat /tmp/def/*/result.json' > "$def" 2>/dev/null || true
+            # ready(OS 인증) 직후에는 리스너·FREEPDB1 등록이 덜 끝나 SYSTEM@FREEPDB1 접속이 실패할 수 있다 - run.sh 가 사전 접속
+            # 점검 실패(exit 4)로 끝나면 전 항목 ERROR 라 기다렸다 다시 진단한다(CI run 42181792315: 17건 ERROR, 같은 job 케이스는 통과)
+            try=1
+            while :; do
+                docker exec "$srv" sh -c 'rm -rf /tmp/def; DB_PASSWORD=TestRoot123 sh 08_dbms/run.sh -e oracle --host localhost --db FREEPDB1 --user system -o /tmp/def >/dev/null 2>&1' \
+                    && break
+                rc=$?
+                if [ "$rc" -ne 4 ] || [ "$try" -ge 6 ]; then break; fi
+                echo "  oracle/default: 사전 접속 점검 실패(시도 $try) - 30초 후 재시도"
+                try=$((try + 1)); sleep 30
+            done
+            docker exec "$srv" sh -c 'cat /tmp/def/*/result.json' > "$def" 2>/dev/null || true
             python3 - "$def" 08_dbms/tests/fixtures/expected_oracle_default.json "oracle/default" <<'PYEOF' || fail=1
 import json, sys
 if hasattr(sys.stdout, "reconfigure"):
