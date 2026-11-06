@@ -49,7 +49,9 @@
   카테고리 테스트를 돌리고, 기대값이 있는 (엔진, 항목)마다 실패가 실제로 나오는지 확인한다(1.4.0 에 손으로 한 음성 대조의 자동화).
   CI `mutation` job(주간·수동): 01_unix, 03_web(IIS 제외), 05_network, 08_dbms mysql·postgres / oracle.
   `mutation-windows` job: 02_windows·07_pc(케이스 → 전역 픽스처 순), 03_web IIS, 08_dbms MSSQL. 실행 로그는 artifact.
-  - 로컬 실측: 05_network 38/38, 03_web nginx 26/26, 08_dbms mysql 12/12 - 두 변이 모두 생존 0.
+  - 첫 전체 실행(CI run 42148551021): 9개 대상 모두 두 변이 생존 0 - (엔진, 항목) 대상 수 01 67 · 02 62/64 · 03 비IIS 104 ·
+    03 IIS 23 · 05 38 · 07 18/17 · 08 mysql·postgres 24 · oracle 22 · mssql 13/14(GOOD/VULN 변이). 대조: 로그에서 N-01 실패 줄을
+    지우면 N-01 이 생존으로 나온다.
   - 08_dbms 는 엔진에 check 파일이 없는 항목(진입점이 NA)을 대상에서 뺀다(바꿀 check 가 없음).
 - README 개편: 맨 위에 한눈에 표(범위·검증·CI 20개 환경·결함 50건)와 만든 이유, 카테고리별 명령은 `docs/USAGE.md` 로 이동,
   로드맵 압축, 1.4.0 결함 수를 "약 45건" 대신 정확한 50건(교차검증 9 + 양방향 검증 41)으로, 검증 환경 표에 Server 2022 행과
