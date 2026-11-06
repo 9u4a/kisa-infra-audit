@@ -33,7 +33,7 @@
       "envs": [
         "tomcat"
       ],
-      "deviation": null
+      "deviation": "1.5.0(A23): 가이드 취약 기준의 '추측하기 쉬운 문자 조합으로 이루어진 계정명'을 자동 판정하기 위해 기본 계정(tomcat/admin/administrator) 외에 흔한 관리·예시 계정명 목록(manager, robot, root, both, role1, test, guest, user, demo, sysadmin, system, operator, master, super, superuser, webadmin, web 등 - lib/common_web.sh TOMCAT_GUESSABLE_ADMIN_RE, 대소문자 무시 정확히 일치)과 같으면 취약으로 본다. 목록에 없는 이름의 추측 용이성은 판정하지 않는다."
     },
     {
       "code": "WEB-02",
@@ -458,7 +458,7 @@
       "envs": [
         "iis"
       ],
-      "deviation": null
+      "deviation": "1.5.0: IIS 는 IIS 6.0 시절 대표 취약 확장자(.htr/.idc/.stm/.shtm/.shtml/.printer/.htw/.ida/.idq) 매핑이 사이트·하위 application/virtual directory 에 남아 있으면 취약으로 본다(불필요 매핑 존재가 분명한 경우). 그 외 스크립트 매핑(ISAPI/CGI/FastCGI/SSI 모듈·scriptProcessor)은 업무상 필요 여부를 판단할 수 없어 양호로 판정하지 않고 목록을 증적으로 남겨 수동점검(MANUAL)으로 둔다 - 예전에는 대표 확장자가 없으면 양호였다."
     },
     {
       "code": "WEB-16",

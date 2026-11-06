@@ -5,7 +5,8 @@
 # 을 확인한다. 기본값은 false(=Server 헤더 노출)이므로 명시적으로 true 로 설정된 경우만 양호로
 # 본다. 구버전 IIS(설정 자체가 없는 경우)는 URL Rewrite 규칙 등 다른 수단이 필요해 MANUAL.
 # WEB-R8: 서버 전역 값이 true 여도 사이트(web.config)가 false 로 재정의할 수 있다 - 예전에는 전역 값만 봤다.
-# 전역 값과 함께 사이트별 유효 값을 확인해 하나라도 false 면 취약.
+# 1.5.0 A24: 사이트 루트뿐 아니라 하위 application·virtual directory 의 재정의도 확인한다(Get-IisSiteConfigPaths).
+# 전역 값과 함께 경로별 유효 값을 확인해 하나라도 false 면 취약.
 
 if (-not (Test-IisAvailable)) {
     return New-CheckResult -Code "WEB-16" -Status "NA" -Detail "IIS(WebAdministration 모듈)가 설치되어 있지 않음"
@@ -20,12 +21,14 @@ $evid = @("[서버 전역] removeServerHeader = $removeHeader")
 $exposed = @()
 if ($removeHeader -ne $true) { $exposed += "서버 전역" }
 foreach ($site in (Get-IisSiteNames)) {
-    $v = Get-IisConfigValue -Filter "system.webServer/security/requestFiltering" -Name "removeServerHeader" -SiteName $site
-    $evid += "[$site] removeServerHeader = $v"
-    if ($null -ne $v -and $v -ne $true) { $exposed += $site }
+    foreach ($cp in (Get-IisSiteConfigPaths -SiteName $site)) {
+        $v = Get-IisConfigValue -Filter "system.webServer/security/requestFiltering" -Name "removeServerHeader" -PSPath $cp.PSPath
+        $evid += "[$($cp.Label)] removeServerHeader = $v"
+        if ($null -ne $v -and $v -ne $true) { $exposed += $cp.Label }
+    }
 }
 
 if ($exposed.Count -eq 0) {
-    return New-CheckResult -Code "WEB-16" -Status "GOOD" -Detail "Server 응답 헤더가 제거되도록 설정됨(removeServerHeader = true, 사이트 재정의 없음)" -Evidence ($evid -join "`n")
+    return New-CheckResult -Code "WEB-16" -Status "GOOD" -Detail "Server 응답 헤더가 제거되도록 설정됨(removeServerHeader = true, 사이트·하위 경로 재정의 없음)" -Evidence ($evid -join "`n")
 }
 return New-CheckResult -Code "WEB-16" -Status "VULN" -Detail "Server 응답 헤더가 노출됨(removeServerHeader = false): $($exposed -join ', ')" -Evidence ($evid -join "`n")

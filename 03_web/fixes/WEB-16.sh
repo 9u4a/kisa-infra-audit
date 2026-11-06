@@ -1,5 +1,5 @@
 # WEB-16 (중) 웹 서비스 헤더 정보 노출 제한 — 조치 [fix: auto]
-# 변경: Apache: 메인 설정 끝에 ServerTokens Prod·ServerSignature Off 추가, Nginx: server_tokens off(on/build 교체·http 블록 추가), Tomcat: 8080 Connector server="WebServer"
+# 변경: Apache: 메인 설정 끝에 ServerTokens Prod·ServerSignature Off 추가, Nginx: server_tokens off(on/build 교체·http 블록에 없으면 추가), Tomcat: server 속성 없는 HTTP Connector 마다 server="WebServer"
 run_fix() {
     detect_web_engines
     applied=""
@@ -22,10 +22,12 @@ run_fix() {
     case " $WEB_ENGINES " in *" nginx "*)
         conf=$(nginx_conf_path)
         files="$conf $(nginx_extra_confs)"
+        # checks/WEB-16.sh 와 같은 기준(server 블록별 적용값, 1.5.0 A20): http 블록에 off 가 없으면 http 블록에 넣는다 -
+        # server 블록 하나에만 off 가 있던 경우 나머지 server 블록이 이 값을 물려받는다.
         hit=""
+        nginx_scoped_stmts | awk -F '\t' '$1 == "DIR" && $2 == "http" && $5 == "server_tokens off" { f = 1 } END { exit !f }' && hit=1
         for f in $files; do
             [ -f "$f" ] || continue
-            grep -qE '^[^#]*server_tokens[[:space:]]+off' "$f" 2>/dev/null && hit=1
             # 다른 블록의 server_tokens on/build 도 check 는 노출로 본다 - off 로 바꾼다
             if grep -qE '^[^#]*server_tokens[[:space:]]+(on|build)' "$f" 2>/dev/null; then
                 fix_backup "$f"
@@ -49,18 +51,13 @@ run_fix() {
         tcdir=$(tomcat_conf_dir) || tcdir="(Tomcat conf 폴더를 찾지 못함)"
         f="$tcdir/server.xml"
         if [ -f "$f" ]; then
-            hit=$(strip_xml_comments "$f" | grep -nE 'Connector[^>]*server="')
-            if [ -z "$hit" ]; then
+            # checks/WEB-16.sh 와 같은 기준(1.5.0 A22): AJP 가 아닌 모든 HTTP Connector 에 server 속성. 없는 Connector 마다
+            # "<Connector" 바로 뒤에 넣는다(여러 줄 태그 안전 - lib/common_web.sh tomcat_connectors_add_attr).
+            miss=$(tomcat_http_connectors "$f" | grep -vcE '[[:space:]]server[[:space:]]*=')
+            if [ "${miss:-0}" -gt 0 ]; then
                 fix_backup "$f"
-                # check(WEB-16)도 grep 이 "Connector"와 "server=" 가 같은 줄에 있는지로
-                # 판정하므로(멀티라인 미지원), 닫는 ">" 를 찾지 않고 "<Connector" 바로 뒤에
-                # 삽입한다 - 실제 tomcat:10 기본 server.xml 처럼 속성이 여러 줄에 걸친
-                # Connector 에서도 안전하게 동작한다(실기 테스트로 발견한 버그 수정).
-                awk '
-                    !done && /<Connector[^>]*port="8080"/ { sub(/<Connector/, "<Connector server=\"WebServer\""); done=1 }
-                    { print }
-                ' "$f" > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
-                applied="$applied tomcat($f)"
+                tomcat_connectors_add_attr "$f" server WebServer > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
+                applied="$applied tomcat($f: Connector ${miss}개)"
             fi
         fi
     esac

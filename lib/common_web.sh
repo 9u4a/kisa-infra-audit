@@ -429,3 +429,351 @@ tomcat_admin_user_elems() {
 xml_attr() {
     printf '%s' "$1" | sed -nE "s/.*[[:space:]]$2[[:space:]]*=[[:space:]]*(\"([^\"]*)\"|'([^']*)').*/\\2\\3/p"
 }
+
+# ---- 블록(범위) 단위 판정 헬퍼 (1.5.0 진단 신뢰성 A19~A22) ---------------------------
+# 예전에는 "설정 파일 어딘가에 양호한 줄이 있으면 GOOD"(파일 단위 grep)이라, server/VirtualHost 하나에만 설정이 있고
+# 다른 블록은 기본값(노출·허용)인 경우를 놓쳤다. 아래 함수들은 설정 상속 규칙을 반영해 "실제로 적용되는 값"을 블록마다 낸다.
+
+# apache_option_effective <옵션> -> Options 가 적용되는 범위(<Directory> 등)마다 "ON|OFF<TAB>설명". 그 범위에 실제로 적용되는
+# Options 집합을 Apache 병합 규칙대로 계산한다: 기본값 FollowSymLinks(2.4) → 서버 전역 Options → 상위 경로 <Directory> 들
+# (짧은 경로부터) → 자기 Options. +/- 만 있는 줄은 상속값에 더하고 빼며, 표기 없는 줄은 상속값을 대체한다(All = Indexes
+# Includes FollowSymLinks ExecCGI, None = 빈 집합, includes 를 물을 때 IncludesNOEXEC 도 켜진 것으로 본다).
+# 예전 WEB-12 는 "Options -Indexes" 같은 상대 지정만 있어도 Options 가 있다고 보고 기본값 FollowSymLinks 를 놓쳤다(A19).
+# 평가 대상: 자기 Options 가 있는 범위 + 모든 DocumentRoot 경로(자기 <Directory> Options 가 없어도 상위 경로·기본값을 물려받음).
+# 둘 다 없으면 서버 전역 값 1줄. Options 없는 <Directory>(RHEL /var/www 처럼 직접 서비스하지 않는 상위 폴더)는 따로 평가하지 않는다.
+# 한계: <Location>/<Files> 류는 <Directory> 병합을 거치지 않고 자기 Options 로 직접 켠 것만 본다, VirtualHost 별 전역 Options
+# 차이는 구분하지 않는다, <IfModule> 등 조건부 블록은 활성으로 본다.
+apache_option_effective() {
+    apache_conf_stream | awk -F '\t' -v opt="$1" '
+        function norm(p) { gsub(/"/, "", p); sub(/[ \t]+$/, "", p); if (p != "/") sub(/\/+$/, "", p); return p }
+        function addw(set, x) { return index(set, " " x " ") ? set : set x " " }
+        function delw(set, x) { sub(" " x " ", " ", set); return set }
+        function apply(set, args,    n, a, i, rel, w, s, m, b, j) {
+            n = split(args, a, /[ \t]+/); rel = 0
+            for (i = 1; i <= n; i++) if (a[i] ~ /^[+-]/) rel = 1
+            if (!rel) set = " "
+            for (i = 1; i <= n; i++) {
+                w = tolower(a[i]); s = ""
+                if (w == "") continue
+                if (w ~ /^[+-]/) { s = substr(w, 1, 1); w = substr(w, 2) }
+                if (w == "none") continue
+                if (w == "includesnoexec" && opt == "includes") w = "includes"
+                if (w == "all") w = "indexes includes followsymlinks execcgi"
+                m = split(w, b, " ")
+                for (j = 1; j <= m; j++) set = (s == "-") ? delw(set, b[j]) : addw(set, b[j])
+            }
+            return set
+        }
+        function apply_all(set, ops,    n, a, i) {
+            n = split(ops, a, "\n")
+            for (i = 1; i <= n; i++) if (a[i] != "") set = apply(set, a[i])
+            return set
+        }
+        function anc(p, q) { return p == "/" || q == p || substr(q, 1, length(p) + 1) == p "/" }
+        function effdir(q,    nc, ch, j, x, y, tmp, e) {
+            nc = 0
+            for (j = 1; j <= ns; j++) if (st[j] == "dir" && has[j] && anc(sp[j], q)) { nc++; ch[nc] = j }
+            for (x = 1; x <= nc; x++) for (y = x + 1; y <= nc; y++)
+                if (length(sp[ch[y]]) < length(sp[ch[x]]) || (length(sp[ch[y]]) == length(sp[ch[x]]) && ch[y] < ch[x])) { tmp = ch[x]; ch[x] = ch[y]; ch[y] = tmp }
+            e = base
+            for (x = 1; x <= nc; x++) e = apply_all(e, ops[ch[x]])
+            return e
+        }
+        BEGIN { opt = tolower(opt); depth = 0; cur[0] = 0 }
+        { f = $1; ln = $2; t = $0; sub(/^[^\t]*\t[^\t]*\t/, "", t); sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
+          if (t == "" || t ~ /^#/) next
+          lt = tolower(t)
+          if (lt ~ /^<\//) { if (depth > 0) depth--; next }
+          if (lt ~ /^</) {
+              name = lt; sub(/^</, "", name); sub(/[ \t>].*$/, "", name)
+              arg = t; sub(/^<[^ \t>]+[ \t]*/, "", arg); sub(/>[ \t]*$/, "", arg)
+              depth++
+              if (name == "directory") { ns++; st[ns] = "dir"; sp[ns] = norm(arg); sl[ns] = f ":" ln " <Directory " arg ">"; cur[depth] = ns }
+              else if (name ~ /^(directorymatch|location|locationmatch|files|filesmatch|proxy|proxymatch)$/) {
+                  ns++; st[ns] = "other"; sl[ns] = f ":" ln " " t; cur[depth] = ns }
+              else cur[depth] = cur[depth - 1]
+              next
+          }
+          n = split(t, a, /[ \t]+/)
+          if (tolower(a[1]) == "documentroot" && n >= 2) {
+              d = t; sub(/^[^ \t]+[ \t]+/, "", d); d = norm(d)
+              if (d != "" && !(d in seendr)) { seendr[d] = 1; nd++; dr[nd] = d; drl[nd] = f ":" ln }
+          }
+          if (tolower(a[1]) == "options") {
+              args = t; sub(/^[^ \t]+[ \t]*/, "", args)
+              c = cur[depth]
+              if (c) { ops[c] = ops[c] "\n" args; has[c] = 1 } else gops = gops "\n" args
+          } }
+        END {
+            base = apply_all(" followsymlinks ", gops); ev = 0
+            for (i = 1; i <= ns; i++) {
+                if (!has[i]) continue
+                # <Location>/<Files> 류는 어느 <Directory> 위에 병합될지 알 수 없어 자기 Options 만 본다(빈 집합에서 시작 - +옵션·All·
+                # 표기 없는 옵션으로 직접 켠 경우만 ON). RHEL welcome.conf 의 <LocationMatch> "Options -Indexes" 를 기본값 상속으로 오판하지 않게
+                eff = (st[i] == "dir") ? effdir(sp[i]) : apply_all(" ", ops[i])
+                ev++
+                print (index(eff, " " opt " ") ? "ON" : "OFF") "\t" sl[i] " => Options" (eff == " " ? " None" : eff)
+            }
+            for (k = 1; k <= nd; k++) {
+                eff = effdir(dr[k]); ev++
+                print (index(eff, " " opt " ") ? "ON" : "OFF") "\t" drl[k] " DocumentRoot " dr[k] " (상위 경로·기본값 상속 포함) => Options" (eff == " " ? " None" : eff)
+            }
+            if (!ev) print (index(base, " " opt " ") ? "ON" : "OFF") "\t(서버 전역 - Options 지정 범위·DocumentRoot 없음, 기본값 FollowSymLinks" (gops != "" ? " + 전역 Options" : "") ") => Options" (base == " " ? " None" : base)
+        }'
+}
+
+# apache_vhost_scopes <상속 ERE> [비상속 ERE] -> 서버 전역(main)과 <VirtualHost> 마다 지시자 유무(소문자로 바꾼 줄에 ERE 대조).
+#   MAIN<TAB>평문포트_main필요(0/1)<TAB>main필요(0/1)<TAB>전역SSL<TAB>전역 상속ERE<TAB>전역 비상속ERE
+#   VH<TAB>설명<TAB>SSL(SSLEngine on)<TAB>상속ERE<TAB>비상속ERE<TAB>RewriteOptions Inherit
+# Apache 는 서버 전역 설정(ErrorDocument, mod_alias Redirect 등)을 VirtualHost 가 물려받지만 RewriteRule 은 RewriteOptions
+# Inherit 가 없으면 물려받지 않는다. main(VirtualHost 밖)은 어느 VirtualHost 도 받지 않는 Listen 포트가 있을 때만 요청을 받는다
+# (443·"https" Listen 은 SSL 포트로 본다). 예전 WEB-21/22 는 VirtualHost 하나에만 설정이 있어도 GOOD 이었다(A20).
+apache_vhost_scopes() {
+    apache_conf_stream | awk -F '\t' -v inh="$1" -v non="${2:-}" '
+        { f = $1; ln = $2; t = $0; sub(/^[^\t]*\t[^\t]*\t/, "", t); sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t)
+          if (t == "" || t ~ /^#/) next
+          lt = tolower(t)
+          if (lt ~ /^<virtualhost[ \t>]/) {
+              nv++; iv = nv; ad = t; sub(/^<[^ \t>]+[ \t]*/, "", ad); sub(/>.*$/, "", ad)
+              vl[nv] = f ":" ln " <VirtualHost " ad ">"
+              m = split(ad, aa, /[ \t]+/)
+              for (i = 1; i <= m; i++) { p = aa[i]; if (p ~ /\]$/ || index(p, ":") == 0) p = "*"; else sub(/^.*:/, "", p); vp[nv] = vp[nv] " " p " "; if (p == "*") anyport = 1 }
+              next
+          }
+          if (lt ~ /^<\/virtualhost/) { iv = 0; next }
+          n = split(t, a, /[ \t]+/); k = tolower(a[1])
+          if (k == "listen" && n >= 2) { p = a[2]; sub(/^.*:/, "", p); lp[p] = (p == "443" || tolower(a[3]) == "https") ? "ssl" : "plain"; nl++ }
+          if (k == "sslengine" && tolower(a[2]) == "on") { if (iv) vs[iv] = 1; else gs = 1 }
+          if (lt ~ inh) { if (iv) vi[iv] = 1; else gi = 1 }
+          if (non != "" && lt ~ non) { if (iv) vn[iv] = 1; else gn = 1 }
+          if (iv && k == "rewriteoptions" && lt ~ /inherit/) vr[iv] = 1
+        }
+        END {
+            for (p in lp) {
+                cov = anyport
+                for (i = 1; i <= nv && !cov; i++) if (index(vp[i], " " p " ")) cov = 1
+                if (!cov) { na = 1; if (lp[p] == "plain") np = 1 }
+            }
+            if (!nl && !nv) { na = 1; np = 1 }
+            print "MAIN\t" (np + 0) "\t" (na + 0) "\t" (gs + 0) "\t" (gi + 0) "\t" (gn + 0)
+            for (i = 1; i <= nv; i++) print "VH\t" vl[i] "\t" (vs[i] + 0) "\t" (vi[i] + 0) "\t" (vn[i] + 0) "\t" (vr[i] + 0)
+        }'
+}
+
+# apache_https_redirect_scopes -> 평문(HTTP) 요청을 받는 범위마다 "OK|BAD<TAB>설명" (WEB-21 진단·조치 공통 기준).
+# 리다이렉트 = 대상이 https:// 인 Redirect/RedirectMatch/RedirectPermanent/RedirectTemp(서버 전역 것은 VirtualHost 가 물려받음)
+# 또는 RewriteRule(서버 전역 것은 RewriteOptions Inherit 인 VirtualHost 만 물려받음). SSL(SSLEngine on) VirtualHost 는 대상 아님.
+apache_https_redirect_scopes() {
+    apache_vhost_scopes '^redirect(match|permanent|temp)?[ \t].*[ \t]"?https://' '^rewriterule[ \t].*[ \t]"?https://' | awk -F '\t' '
+        $1 == "MAIN" { np = $2; gs = $4; gi = $5; gn = $6; next }
+        $1 == "VH" { n++; l[n] = $2; s[n] = $3; i[n] = $4; r[n] = $5; ri[n] = $6 }
+        END {
+            for (k = 1; k <= n; k++) {
+                if (s[k]) { print "OK\t" l[k] " (SSL)"; continue }
+                if (i[k] || r[k]) print "OK\t" l[k] " (자체 리다이렉트)"
+                else if (gi) print "OK\t" l[k] " (서버 전역 Redirect 상속)"
+                else if (ri[k] && gn) print "OK\t" l[k] " (서버 전역 RewriteRule 상속 - RewriteOptions Inherit)"
+                else print "BAD\t" l[k]
+            }
+            if (np && !gs) print ((gi || gn) ? "OK" : "BAD") "\t서버 전역(VirtualHost 가 받지 않는 평문 Listen 포트)"
+            else if (!n) print "OK\t서버 전역(평문 Listen 포트 없음 - SSL 전용)"
+        }'
+}
+
+# _nginx_include_map <메인 설정> -> "부모파일<TAB>include 인자<TAB>펼친 파일" (nginx_scoped_stmts 가 include 자리에서 펼칠 때 쓴다)
+_nginx_include_map() {
+    _nim_base=$(dirname "$1")
+    web_conf_files nginx 2>/dev/null | while IFS= read -r _nim_f; do
+        [ -f "$_nim_f" ] || continue
+        awk '{ sub(/\r$/, ""); sub(/#.*/, ""); s = $0
+               while (match(s, /(^|[ \t;{}])include[ \t]+[^;]+;/)) {
+                   p = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+                   sub(/^[ \t;{}]*include[ \t]+/, "", p); sub(/[ \t]*;$/, "", p); gsub(/["\047]/, "", p); print p } }' "$_nim_f" 2>/dev/null | \
+        while IFS= read -r _nim_p; do
+            _nim_abs=$_nim_p
+            case "$_nim_abs" in /*) ;; *) _nim_abs="$_nim_base/$_nim_abs" ;; esac
+            _web_expand_pattern "$_nim_abs" | while IFS= read -r _nim_c; do
+                printf '%s\t%s\t%s\n' "$_nim_f" "$_nim_p" "$_nim_c"
+            done
+        done
+    done
+}
+
+# nginx_scoped_stmts -> nginx 설정을 include 자리에서 펼쳐(nginx 가 읽는 순서·블록 그대로) 지시자마다 범위를 붙여 출력한다.
+#   SRV<TAB>server번호<TAB>파일:줄                         (http 바로 아래 server 블록)
+#   DIR<TAB>범위<TAB>server번호<TAB>파일:줄<TAB>지시자 인자...  범위: main|http|server|inner(server 안 location·if 등)|other
+#   TRUNC / ERRF<TAB>파일                                  (include 깊이 16·파일 512 상한 / 읽기 실패)
+# 따옴표·# 주석·여러 줄 지시자·한 줄 여러 지시자·${var} 를 처리한다. 같은 파일을 여러 곳에서 include 하면 그 자리마다 펼친다
+# (순환만 막는다 - nginx 와 같다).
+nginx_scoped_stmts() {
+    _nss_main=$(nginx_conf_path) || return 1
+    NGX_MAP=$(_nginx_include_map "$_nss_main") awk -v main="$_nss_main" '
+        function addword() { if (inword) { nw++; w[nw] = cur; if (nw == 1) { sf = cf; sl = cl } } cur = ""; inword = 0 }
+        function scope() {
+            if (sd == 0) return "main"
+            if (stk[sd] == "http") return "http"
+            if (stk[sd] == "server" && sd >= 2 && stk[sd - 1] == "http") return "server"
+            if (ssid[sd] > 0) return "inner"
+            return "other"
+        }
+        function stmt(    i, s, ks, n, kids, k, f2) {
+            if (nw == 0) return
+            if (w[1] == "include" && nw >= 2) {
+                ks = map[sf SUBSEP w[2]]; nw = 0
+                n = split(ks, kids, "\n")
+                for (k = 1; k <= n; k++) { f2 = kids[k]; if (f2 != "" && !(f2 in onstack)) proc(f2, curdepth + 1) }
+                return
+            }
+            s = w[1]; for (i = 2; i <= nw; i++) s = s " " w[i]
+            print "DIR\t" scope() "\t" (ssid[sd] + 0) "\t" sf ":" sl "\t" s
+            nw = 0
+        }
+        function openb(    name) {
+            name = (nw >= 1) ? w[1] : ""
+            sd++; stk[sd] = name; ssid[sd] = ssid[sd - 1]
+            if (name == "server" && sd >= 2 && stk[sd - 1] == "http") { nsrv++; ssid[sd] = nsrv; print "SRV\t" nsrv "\t" sf ":" sl }
+            nw = 0
+        }
+        function scanline(f, ln, l,    i, c, n) {
+            n = length(l)
+            for (i = 1; i <= n; i++) {
+                c = substr(l, i, 1)
+                if (inq != "") {
+                    if (c == "\\") { cur = cur substr(l, i + 1, 1); i++; continue }
+                    if (c == inq) { inq = ""; continue }
+                    cur = cur c; continue
+                }
+                if (c == "\"" || c == "\047") { if (!inword) { inword = 1; cf = f; cl = ln } inq = c; continue }
+                if (c == " " || c == "\t" || c == "\r") { addword(); continue }
+                if (c == "#" && !inword) break
+                if (c == ";") { addword(); stmt(); continue }
+                if (c == "{") {
+                    if (inword && substr(cur, length(cur), 1) == "$") { cur = cur c; invar = 1; continue }
+                    addword(); openb(); continue
+                }
+                if (c == "}") {
+                    if (invar) { cur = cur c; invar = 0; continue }
+                    addword(); stmt(); if (sd > 0) sd--; continue
+                }
+                if (!inword) { inword = 1; cf = f; cl = ln }
+                cur = cur c
+            }
+            if (inq == "") addword()
+        }
+        function proc(f, depth,    l, ln, rc, od) {
+            if (depth > 16 || loads >= 512) { print "TRUNC"; return }
+            loads++; onstack[f] = 1; od = curdepth; curdepth = depth; ln = 0
+            while ((rc = (getline l < f)) > 0) { ln++; scanline(f, ln, l) }
+            if (rc < 0) print "ERRF\t" f
+            close(f); delete onstack[f]; curdepth = od
+        }
+        BEGIN {
+            n = split(ENVIRON["NGX_MAP"], ml, "\n")
+            for (i = 1; i <= n; i++) { if (split(ml[i], p, "\t") >= 3) map[p[1] SUBSEP p[2]] = map[p[1] SUBSEP p[2]] p[3] "\n" }
+            proc(main, 0)
+            exit
+        }'
+}
+
+# nginx_server_effective <지시자> <기본값> [multi] -> http 아래 server 블록마다 실제로 적용되는 값(server 블록 값, 없으면
+# http 블록 값, 둘 다 없으면 기본값 - nginx 상속 규칙). multi 를 주면 같은 블록의 여러 줄을 " | " 로 이어 하나의 값으로
+# 본다(error_page 처럼 블록에 하나라도 있으면 바깥 값을 물려받지 않는 지시자).
+#   SRV<TAB>server 설명(파일:줄 server_name)<TAB>적용값<TAB>출처(server 파일:줄 | http 파일:줄 | 기본값)
+#   INNER<TAB>파일:줄<TAB>값       (server 안 location·if 등에서 다시 지정한 값 - 그 범위에서는 이 값이 적용됨)
+# server 블록이 하나도 없으면 http 값(없으면 기본값) 한 줄을 SRV 로 낸다.
+nginx_server_effective() {
+    nginx_scoped_stmts | awk -F '\t' -v d="$1" -v def="$2" -v multi="${3:-}" '
+        $1 == "SRV" { ns++; id[ns] = $2; lab[$2] = $3; next }
+        $1 != "DIR" { next }
+        { s = $5; k = s; sub(/ .*/, "", k); v = ""; if (index(s, " ")) { v = s; sub(/^[^ ]+ /, "", v) } }
+        k == "server_name" && $2 == "server" { if (!($3 in sn)) sn[$3] = v; next }
+        k != d { next }
+        $2 == "http" { hv = (multi != "" && hset) ? hv " | " v : v; hset = 1; hloc = $4; next }
+        $2 == "server" { nv = (multi != "" && ($3 in sv)) ? sv[$3] " | " v : v; sv[$3] = nv; sloc[$3] = $4; next }
+        $2 == "inner" { print "INNER\t" $4 "\t" v; next }
+        END {
+            if (ns == 0) print "SRV\t(server 블록 없음 - http)\t" (hset ? hv : def) "\t" (hset ? "http " hloc : "기본값")
+            for (i = 1; i <= ns; i++) {
+                s = id[i]; L = lab[s] ((s in sn) ? " server_name " sn[s] : "")
+                if (s in sv) print "SRV\t" L "\t" sv[s] "\tserver " sloc[s]
+                else if (hset) print "SRV\t" L "\t" hv "\thttp " hloc
+                else print "SRV\t" L "\t" def "\t기본값"
+            }
+        }'
+}
+
+# nginx_https_redirect_servers -> http 아래 server 블록마다 "OK|BAD<TAB>설명" (WEB-21 진단·조치 공통 기준). ssl 이 아닌 listen 이
+# 있거나 listen 이 없는(기본 80) server 블록은 그 블록 또는 안쪽 location 등에 return 30x https://… / rewrite … https://… 가
+# 있어야 한다(return·rewrite 는 http 블록에서 물려받지 않는다). server 블록이 없으면 출력 없음.
+nginx_https_redirect_servers() {
+    nginx_scoped_stmts | awk -F '\t' '
+        $1 == "SRV" { n++; id[n] = $2; lab[$2] = $3; next }
+        $1 != "DIR" || ($2 != "server" && $2 != "inner") { next }
+        { s = $5; k = s; sub(/ .*/, "", k) }
+        $2 == "server" && k == "listen" { nl[$3]++; if (s !~ /[ ]ssl( |$)/) plain[$3] = 1 }
+        $2 == "server" && k == "server_name" && !($3 in sn) { sn[$3] = s; sub(/^server_name /, "", sn[$3]) }
+        (k == "return" && s ~ /^return 30[1278] "?https:\/\//) || (k == "rewrite" && s ~ / "?https:\/\//) { rd[$3] = 1; where[$3] = $4 }
+        END {
+            for (i = 1; i <= n; i++) {
+                v = id[i]; L = lab[v] ((v in sn) ? " server_name " sn[v] : "")
+                if (nl[v] && !plain[v]) print "OK\t" L " (ssl 전용)"
+                else if (rd[v]) print "OK\t" L " (리다이렉트 " where[v] ")"
+                else print "BAD\t" L
+            }
+        }'
+}
+
+# tomcat_context_xmls <conf 폴더> -> 컨텍스트 설정 파일: conf/context.xml(모든 웹앱 공통) + conf/<Engine>/<Host>/*.xml(앱별
+# 컨텍스트 디스크립터 - conf/Catalina/localhost/app.xml). 예전 WEB-06/12/13 은 server.xml·context.xml 만 봐 앱별 컨텍스트의
+# allowLinking·<Resource> 를 놓쳤다(A21). 있는 파일만(읽기 가능 여부는 호출 측이 확인).
+tomcat_context_xmls() {
+    [ -f "$1/context.xml" ] && printf '%s\n' "$1/context.xml"
+    for _tcx in "$1"/*/*/*.xml; do
+        [ -f "$_tcx" ] && printf '%s\n' "$_tcx"
+    done
+    return 0
+}
+
+# Tomcat allowLinking="true"(큰·작은따옴표·따옴표 없음 모두, grep -iE 용) - 예전에는 작은따옴표를 놓쳤다(A21)
+TOMCAT_ALLOWLINKING_TRUE_RE="allowLinking[[:space:]]*=[[:space:]]*[\"']?true"
+
+# tomcat_http_connectors <server.xml> -> AJP 가 아닌(HTTP) <Connector> 요소를 한 줄에 하나씩(주석 제외, 여러 줄 요소는 한 줄로).
+# 따옴표 속성 단위로 잘라 값에 '>' 가 있어도 잘리지 않는다. 예전 WEB-08/16 은 Connector 하나에만 속성이 있어도 GOOD 이었다(A22).
+tomcat_http_connectors() {
+    strip_xml_comments "$1" | tr '\n\r' '  ' | \
+        grep -oE "<Connector([[:space:]]+[A-Za-z_:.-]+[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*'))*[[:space:]]*/?>" | \
+        grep -viE "[[:space:]]protocol[[:space:]]*=[[:space:]]*[\"'][^\"']*AJP"
+}
+
+# tomcat_connectors_add_attr <server.xml> <속성> <값> [건너뛸 속성 ERE] -> 그 속성(또는 ERE 에 맞는 속성)이 없는 HTTP <Connector>
+# 마다 "<Connector" 바로 뒤에 속성을 넣은 내용을 표준 출력으로(파일은 바꾸지 않음 - 조치가 fix_write_back 으로 반영).
+# 주석 안의 Connector·AJP 는 건너뛴다. 여러 줄 요소는 닫는 '>' 가 나올 때까지 모아 판단하고, 여는 줄에서 삽입한다
+# (닫는 '>' 앞 삽입은 여러 줄 태그에서 실패 - 03_web/CLAUDE.md).
+tomcat_connectors_add_attr() {
+    awk -v attr="$2" -v val="$3" -v skip="${4:-$2}" '
+        function decide(first, el) {
+            if (el !~ ("[ \t]" skip "[ \t]*=") && tolower(el) !~ /[ \t]protocol[ \t]*=[ \t]*["\047][^"\047]*ajp/)
+                sub(/<Connector/, "<Connector " attr "=\"" val "\"", first)
+            return first
+        }
+        inel { el = el " " $0; buf = buf "\n" $0; if (index($0, ">")) { print decide(first, el) buf; inel = 0 } ; next }
+        {
+            line = $0; vis = ""
+            while (line != "") {
+                if (incomment) { p = index(line, "-->"); if (!p) { line = ""; break } line = substr(line, p + 3); incomment = 0; continue }
+                p = index(line, "<!--"); if (!p) { vis = vis line; line = ""; break }
+                vis = vis substr(line, 1, p - 1); line = substr(line, p + 4); incomment = 1
+            }
+            p = index(vis, "<Connector")
+            if (!p) { print; next }
+            el = substr(vis, p)
+            if (index(el, ">")) { print decide($0, el); next }
+            first = $0; buf = ""; inel = 1
+        }
+        END { if (inel) print first buf }' "$1"
+}
+
+# 추측하기 쉬운 관리자 계정명(WEB-01, A23): 가이드 기본 계정(tomcat/admin, JEUS administrator) + 흔한 관리·예시 계정명.
+# Tomcat 기본 tomcat-users.xml 예시(tomcat, both, role1)와 manager/robot 같은 역할·예시 이름을 포함한다(대소문자 무시 정확히 일치).
+TOMCAT_DEFAULT_ADMIN_RE='admin|tomcat|administrator'
+TOMCAT_GUESSABLE_ADMIN_RE='admin|tomcat|administrator|manager|root|robot|both|role1|test|tester|guest|user|demo|sysadmin|system|operator|master|super|superuser|webadmin|web'

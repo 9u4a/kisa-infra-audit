@@ -1,7 +1,7 @@
 # WEB-01 (상) Default 관리자 계정명 변경
 # 판단 기준(가이드 원문): 양호 = 관리자 페이지 미사용 또는 계정명이 기본값이 아님
 #                        취약 = 계정명이 기본값(Tomcat: tomcat/admin, JEUS: administrator)이거나 추측 쉬운 계정명
-# 대상: Tomcat, JEUS. 자동화 범위: Tomcat tomcat-users.xml 의 manager-gui 역할 계정명.
+# 대상: Tomcat, JEUS. 자동화 범위: Tomcat tomcat-users.xml 의 관리 역할 계정명이 기본값 또는 추측하기 쉬운 이름 목록과 일치하는지.
 # Tomcat 이 감지됐는데 설치 경로(conf 폴더)를 못 찾으면 "관리자 페이지 미사용(GOOD)"이 아니라 ERROR(진단 검수 WEB-R3).
 
 run_check() {
@@ -31,13 +31,18 @@ run_check() {
             mgr_users=$(printf '%s\n' "$elems" | while IFS= read -r e; do
                 printf 'username=%s\n' "$(xml_attr "$e" username)"
             done)
-            default_hit=$(printf '%s\n' "$mgr_users" | grep -ixE 'username=(admin|tomcat)')
+            # 1.5.0 A23: 가이드 취약 기준의 "추측하기 쉬운 문자 조합" 도 본다 - 예전에는 admin/tomcat 만 봐 manager·robot·root 같은
+            # 계정명이 GOOD 이었다(목록은 lib/common_web.sh TOMCAT_GUESSABLE_ADMIN_RE, guide.json deviation 참고)
+            default_hit=$(printf '%s\n' "$mgr_users" | grep -ixE "username=($TOMCAT_DEFAULT_ADMIN_RE)")
+            guess_hit=$(printf '%s\n' "$mgr_users" | grep -ixE "username=($TOMCAT_GUESSABLE_ADMIN_RE)")
             CHECK_EVIDENCE="$f
 $mgr_users"
             if [ -n "$default_hit" ]; then
                 CHECK_STATUS="VULN"; CHECK_DETAIL="Tomcat 관리 역할 계정명이 기본값(admin/tomcat)으로 설정됨"
+            elif [ -n "$guess_hit" ]; then
+                CHECK_STATUS="VULN"; CHECK_DETAIL="Tomcat 관리 역할 계정명이 추측하기 쉬운 이름임: $(printf '%s' "$guess_hit" | sed 's/^username=//' | tr '\n' ' ')"
             else
-                CHECK_STATUS="GOOD"; CHECK_DETAIL="Tomcat 관리 역할 계정명이 기본값이 아님"
+                CHECK_STATUS="GOOD"; CHECK_DETAIL="Tomcat 관리 역할 계정명이 기본값·추측하기 쉬운 이름이 아님"
             fi
             ;;
         *)
