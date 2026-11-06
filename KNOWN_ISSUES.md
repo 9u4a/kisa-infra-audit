@@ -419,3 +419,36 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 | G-08 | 중 | 판정 로직과 테스트 기대값이 같은 가이드 해석에서 나온다(§3-4) | guide.json `deviation` 이 있는 항목을 실무 컨설턴트 1명이 외부 검토 | 열림 |
 
 하지 않기로 한 것: 원격 일괄 실행(SSH/WinRM), 실점검 증적 회수, 네트워크 장비 직접 적용, 엑셀 점검표 양식(HTML·CSV 로 제출).
+
+
+---
+
+## 6. 진단 판정 신뢰성 전체 검수 — 2026-11-06 (1.5.0, D2 이후)
+
+조치를 뺀 진단만 대상으로 239항목을 다시 검수했다. 양방향 테스트(GOOD·VULN 둘 다)를 통과한 항목에서도 경계 상태 픽스처가
+없어 거짓 GOOD 이 남아 있었다. 결함 유형은 ① 한 줄·한 블록만 맞으면 전체 양호 ② `find -perm -` 오사용 ③ 일부만 보는 탐색.
+아래는 모두 재현 케이스를 붙여 해결했다(상세는 CHANGELOG [Unreleased] "진단 판정 신뢰성").
+
+| ID | 영역 | 내용 | 상태 |
+|---|---|---|---|
+| V-01 | 01 | U-37·U-24 권한 비교, U-28 형식적 drop, U-17 init.d 누락, U-27 systemctl 실패·멈춤 GOOD, U-62 배너 일부만 판정 | 해결(1.5.0) |
+| V-02 | 01 | U-55 `/usr/bin/false` 거짓 VULN, U-11/U-55 passwd 해시 증적(S5) | 해결(1.5.0) |
+| V-03 | lib | 비 UTF-8 증적으로 result.json 손상·merge.py 중단, run_safety HANG 이 PATH 실물에 가려 S2 미검사 | 해결(1.5.0) |
+| V-04 | 02·07 | W-16/PC-04 숨김 공유, W-18/W-44/PC-05 트리거 시작 서비스, W-24 사이트 재정의, W-40 DS 액세스, Defender·예약 작업 시간 제한 | 해결(1.5.0) |
+| V-05 | PS 진입점 | `-i` 임의 경로 .ps1 실행(관리자 권한), 08 run.ps1 preflight 실패 종료 코드 0 | 해결(1.5.0) |
+| V-06 | 03 | Apache Options 상속, Nginx·Apache 블록 단위 판정, Tomcat allowLinking·Catalina 컨텍스트·Connector 전체, WEB-01/09/23, IIS 하위 application, WEB-15 IIS | 해결(1.5.0) |
+| V-07 | 05 | N-01 default none, dhcp 인터페이스 제외, access-class ACL 내용 미확인, NX-OS 등 오판별·잘린 설정, `-d` 폴더 충돌, 종료 코드, `-e` 옵션 | 해결(1.5.0) |
+| V-08 | 08 | D-11 MSSQL·Oracle, D-14 MySQL 설정 파일, D-10/D-14 PG 경로 확정, `_db_run` timeout -k | 해결(1.5.0) |
+
+남은 한계·후속(이번 범위 밖):
+
+| ID | 중요도 | 내용 | 상태 |
+|---|---|---|---|
+| V-R1 | 중 | IIS 조치 WEB-16(`Invoke-FixIisRemoveServerHeader`, W-33 공용)·WEB-19 는 서버·사이트 단위만 고친다 - 하위 application 재정의가 있으면 재검증 실패·원복(진단은 VULN 으로 정확) | 열림 |
+| V-R2 | 하 | Apache Options: `<Location>` 은 직접 켠 것만, IfModule 등 조건부 블록은 활성으로 간주, Options 없는 비 DocumentRoot `<Directory>` 미평가 | 한계 |
+| V-R3 | 하 | MySQL 상대 경로 `!include`·파일 256개 초과, PostgreSQL 2단계 이상 include 미추적. D-07 조치는 여전히 첫 설정 파일만 수정 | 열림 |
+| V-R4 | 하 | 05 SNMP 조치(N-18/19)가 ACL 번호 20 고정 - 기존 `access-list 20 permit any` 가 있으면 조치 후에도 VULN | 열림 |
+| V-R5 | 하 | 05 비 IOS 판별은 대표 표지 문자열 의존 - 표지 없는 비 IOS 설정은 IOS 로 볼 수 있음(`end` 없으면 GOOD/NA→ERROR 로 완화) | 한계 |
+| V-R6 | 중 | 기본 설치에서 판정이 엄격해짐: Debian `/etc/crontab`·`/etc/cron.d` 644 → U-37 VULN, Windows 기본 수동 시작 서비스(WerSvc 등) → W-18/PC-05 VULN. 가이드 기준 그대로 | 한계 |
+| V-R7 | 중 | IIS·MSSQL·Oracle·Windows 설정 변경 케이스는 로컬 미실행 - CI(windows-latest/2022, mssql-express, oracle)에서만 검증 | 열림 |
+| V-R8 | 하 | W-45: SecurityCenter2 조회 실패 + Defender 조회가 시간 초과 아닌 이유로 실패하면 VULN | 열림 |

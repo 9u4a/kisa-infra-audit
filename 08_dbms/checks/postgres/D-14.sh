@@ -1,6 +1,7 @@
 # D-14 (중) 데이터베이스의 주요 설정 파일, 비밀번호 파일 등의 접근 권한 적절성 [PostgreSQL]
 # 판단 기준(가이드 원문): 양호 = 주요 설정 파일의 일반 사용자 수정 권한 제거 / 취약 = 아님
 # postgresql.conf, pg_hba.conf 두 파일 모두 640 이하 권한인지 확인한다(가이드 원문 기준).
+# 외부 검수 A18: 경로는 SHOW config_file/hba_file, 조회가 안 되면 실행 중인 postmaster 기준으로 확정한다(glob 첫 파일 사용 금지).
 run_check() {
     db_remote_skip "postgresql.conf/pg_hba.conf 파일 권한" && return
     if ! command -v psql >/dev/null 2>&1; then
@@ -10,7 +11,7 @@ run_check() {
     conf=$(postgres_config_path)
     hba=$(postgres_hba_path)
     if [ -z "$conf" ] && [ -z "$hba" ]; then
-        CHECK_STATUS="ERROR"; CHECK_DETAIL="postgresql.conf/pg_hba.conf 를 찾을 수 없음"; CHECK_EVIDENCE=""
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="사용 중인 postgresql.conf/pg_hba.conf 경로를 확정하지 못함(SHOW 조회 실패, 실행 중인 postmaster 에서도 확인 불가)"; CHECK_EVIDENCE=""
         return
     fi
 

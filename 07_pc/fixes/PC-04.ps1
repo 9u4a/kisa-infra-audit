@@ -29,7 +29,7 @@ try {
     if ($r.Remaining.Count -gt 0) { $shareError = "기본 공유를 중지하지 못함: $($r.Remaining -join ', ')" }
 } catch { $shareError = "기본 공유 중지 실패: $($_.Exception.Message)" }
 
-$generalShares = $allShares | Where-Object { $_.Name -notmatch '\$$' -and $_.Name -ne 'print$' }
+$generalShares = @($allShares | Where-Object { -not (Test-SmbDefaultShare -Share $_) })   # A7: checks/PC-04 와 같은 기준(사용자 숨김 공유 포함)
 $everyoneApplied = @()
 foreach ($s in $generalShares) {
     $access = Get-SmbShareAccess -Name $s.Name -ErrorAction SilentlyContinue

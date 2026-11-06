@@ -158,5 +158,149 @@
     "expect": "GOOD",
     "file": "N-03_good_user_type7.txt",
     "why": "service password-encryption 으로 username password 가 Type 7 - 가이드 양호(암호화 적용)"
+  },
+  {
+    "code": "N-01",
+    "engine": "cisco_ios",
+    "name": "vuln_aaa_none",
+    "expect": "VULN",
+    "file": "N-01_vuln_aaa_none.txt",
+    "why": "aaa authentication login default none = 인증 방식이 none 뿐(비밀번호 없이 접속). P-11 수정 이후 GOOD 오판(외부 검수 A11)"
+  },
+  {
+    "code": "N-01",
+    "engine": "cisco_ios",
+    "name": "vuln_aaa_list_none",
+    "expect": "VULN",
+    "file": "N-01_vuln_aaa_list_none.txt",
+    "why": "VTY 가 지정한 목록(NOAUTH)이 none 뿐 - default 목록이 정상이어도 이 라인은 무인증(A11)"
+  },
+  {
+    "code": "N-01",
+    "engine": "cisco_ios",
+    "name": "good_aaa_none_fallback",
+    "expect": "GOOD",
+    "file": "N-01_good_aaa_none_fallback.txt",
+    "why": "group tacacs+ none - none 은 서버 무응답 시 대체 방식일 뿐 유일 방식이 아님(A11 경계)"
+  },
+  {
+    "code": "N-33",
+    "engine": "cisco_ios",
+    "name": "vuln_dhcp",
+    "expect": "VULN",
+    "file": "N-33_vuln_dhcp.txt",
+    "why": "ip address dhcp 인터페이스에 no ip proxy-arp 없음 - 숫자 주소만 보던 예전 check 는 대상에서 빼고 GOOD 오판(A12)"
+  },
+  {
+    "code": "N-34",
+    "engine": "cisco_ios",
+    "name": "vuln_dhcp",
+    "expect": "VULN",
+    "file": "N-33_vuln_dhcp.txt",
+    "why": "dhcp 인터페이스에 no ip unreachables/redirects 없음(A12)"
+  },
+  {
+    "code": "N-38",
+    "engine": "cisco_ios",
+    "name": "vuln_dhcp",
+    "expect": "VULN",
+    "file": "N-33_vuln_dhcp.txt",
+    "why": "dhcp 인터페이스에 ip mask-reply 명시(A12)"
+  },
+  {
+    "code": "N-06",
+    "engine": "cisco_ios",
+    "name": "vuln_acl_undefined",
+    "expect": "VULN",
+    "file": "N-06_vuln_acl_undefined.txt",
+    "why": "access-class 15 가 참조하는 ACL 15 가 정의되지 않음 - 정의 안 된 ACL 은 접근을 제한하지 않음(A13)"
+  },
+  {
+    "code": "N-06",
+    "engine": "cisco_ios",
+    "name": "vuln_acl_any",
+    "expect": "VULN",
+    "file": "N-06_vuln_acl_any.txt",
+    "why": "access-class 가 참조하는 ACL 이 permit any = 사실상 무제한(A13)"
+  },
+  {
+    "code": "N-06",
+    "engine": "cisco_ios",
+    "name": "good_acl_named",
+    "expect": "GOOD",
+    "file": "N-06_good_acl_named.txt",
+    "why": "이름 ACL 이 관리망 대역만 허용(A13 대조)"
+  },
+  {
+    "code": "N-19",
+    "engine": "cisco_ios",
+    "name": "vuln_acl_undefined",
+    "expect": "VULN",
+    "file": "N-19_vuln_acl_undefined.txt",
+    "why": "community 가 참조하는 ACL 15 미정의(A13)"
+  },
+  {
+    "code": "N-19",
+    "engine": "cisco_ios",
+    "name": "vuln_acl_any",
+    "expect": "VULN",
+    "file": "N-19_vuln_acl_any.txt",
+    "why": "community ACL 15 가 0.0.0.0 255.255.255.255(any) 허용(A13)"
+  },
+  {
+    "code": "N-27",
+    "engine": "cisco_ios",
+    "name": "vuln_acl_any",
+    "expect": "VULN",
+    "file": "N-27_vuln_acl_any.txt",
+    "why": "ip http access-class 30 이 permit any(A13)"
+  },
+  {
+    "code": "N-27",
+    "engine": "cisco_ios",
+    "name": "vuln_acl_undefined",
+    "expect": "VULN",
+    "file": "N-27_vuln_acl_undefined.txt",
+    "why": "ip http access-class ipv4 WEBMGMT 미정의(A13)"
+  },
+  {
+    "code": "N-27",
+    "engine": "cisco_ios",
+    "name": "good_acl",
+    "expect": "GOOD",
+    "file": "N-27_good_acl.txt",
+    "why": "ip http access-class 30 이 관리 PC 1대만 허용(A13 대조)"
+  },
+  {
+    "code": "N-17",
+    "engine": "cisco_ios",
+    "name": "error_truncated",
+    "expect": "ERROR",
+    "file": "N-17_error_truncated.txt",
+    "why": "end 줄이 없는 잘린 설정 - 설정 부재를 근거로 GOOD 을 낼 수 없음(A14, S6)"
+  },
+  {
+    "code": "N-21",
+    "engine": "cisco_ios",
+    "name": "error_truncated",
+    "expect": "ERROR",
+    "file": "N-17_error_truncated.txt",
+    "why": "end 줄이 없는 잘린 설정 - 설정 부재를 근거로 GOOD 을 낼 수 없음(A14, S6)"
+  },
+  {
+    "code": "N-27",
+    "engine": "cisco_ios",
+    "name": "error_truncated",
+    "expect": "ERROR",
+    "file": "N-17_error_truncated.txt",
+    "why": "end 줄이 없는 잘린 설정 - 설정 부재를 근거로 GOOD 을 낼 수 없음(A14, S6)"
+  },
+  {
+    "code": "N-35",
+    "engine": "cisco_ios",
+    "name": "error_truncated",
+    "expect": "ERROR",
+    "file": "N-17_error_truncated.txt",
+    "why": "end 줄이 없는 잘린 설정 - 설정 부재를 근거로 GOOD 을 낼 수 없음(A14, S6)"
   }
 ]

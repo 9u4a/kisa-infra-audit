@@ -2,7 +2,7 @@
 # GitHub Actions windows-latest(매 job마다 새로 생성되는 휘발성 VM)에서만 실행한다 - 실제
 # 개발자 PC에서 이 스크립트를 돌리면 레지스트리·서비스가 실제로 바뀐다. 명시적으로 vuln/hardened 를
 # 가르는 항목: W-15(개인키 사용 시 암호 입력 - 기본값이 이미 VULN 이라 hardened 만 설정),
-# W-44(원격 레지스트리 서비스 - vuln 은 기동, hardened 는 중지).
+# W-44(원격 레지스트리 서비스 - vuln 은 기동, hardened 는 W-18 대상과 함께 중지 + 사용 안 함).
 param(
     [Parameter(Mandatory = $true)][ValidateSet("vuln", "hardened")][string]$Mode
 )
@@ -28,5 +28,12 @@ if ($Mode -eq "vuln") {
     Set-Service -Name "RemoteRegistry" -StartupType Manual
     Start-Service -Name "RemoteRegistry"
 } else {
-    Stop-Service -Name "RemoteRegistry" -Force -ErrorAction SilentlyContinue
+    # A8: W-44/W-18 은 실행 중이 아니고 시작 유형이 사용 안 함일 때만 GOOD 이다(트리거 시작 서비스는 Stopped 여도 요청 시 켜짐) -
+    # hardened 는 W-18 점검 대상 전부를 중지 + 사용 안 함으로 만든다(RemoteRegistry 포함 → W-44 GOOD)
+    foreach ($s in @("RemoteRegistry", "SSDPSRV", "upnphost", "simptcp", "Browser", "WerSvc")) {
+        $o = Get-Service -Name $s -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq $s }
+        if (-not $o) { continue }
+        Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+        Set-Service -Name $s -StartupType Disabled
+    }
 }

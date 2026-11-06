@@ -4,10 +4,11 @@
 # "의심스러움"은 기계적으로 판단할 수 없으므로, Microsoft 기본 제공 경로(\Microsoft\Windows\*)를
 # 제외한 사용자 정의 예약 작업 목록을 근거로 제시하고 MANUAL 로 응답한다.
 
+# B3(W-R16 누락분): Get-ScheduledTask 는 CDXML cmdlet 이라 작업 스케줄러 WMI 가 멈추면 무기한 대기한다 - 60초 제한, 초과는 ERROR
 try {
-    $tasks = Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskPath -notlike "\Microsoft\Windows\*" -and $_.State -ne "Disabled" }
+    $tasks = @(Invoke-CimCmdletWithTimeout -Command Get-ScheduledTask -TimeoutSec 60) | Where-Object { $_.TaskPath -notlike "\Microsoft\Windows\*" -and $_.State -ne "Disabled" }
 } catch {
-    return New-CheckResult -Code "W-37" -Status "ERROR" -Detail "Get-ScheduledTask 실행 실패: $($_.Exception.Message)"
+    return New-CheckResult -Code "W-37" -Status "ERROR" -Detail "Get-ScheduledTask 실행 실패(시간 초과 포함): $($_.Exception.Message)"
 }
 
 if (-not $tasks -or $tasks.Count -eq 0) {

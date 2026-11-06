@@ -1,9 +1,10 @@
 # D-11 (상) DBA 이외의 인가되지 않은 사용자가 시스템 테이블에 접근할 수 없도록 설정 [Oracle] — 조치 [fix: auto]
 # 변경: DBA 외 일반 계정의 SYS 소유·DBA_* 테이블 권한(EXECUTE 제외)마다 REVOKE <권한> ON <owner.table> FROM <계정>(SYS 소유는 SYSDBA 필요)
-# checks/oracle/D-11.sh 와 동일한 조건(oracle_maintained='N')으로 찾아낸 (owner, table, privilege,
-# grantee) 조합을 정확히 그 권한만 회수한다.
+# checks/oracle/D-11.sh 와 동일한 조건(계정·롤 oracle_maintained='N')으로 찾아낸 (owner, table, privilege,
+# grantee) 조합을 정확히 그 권한만 회수한다. 외부 검수 A16 부터 사용자 정의 롤(oracle_maintained='N')도 대상이다 - 롤에서 회수하면
+# 그 롤을 받은 계정 모두 권한을 잃는다(원복 SQL 로 롤에 다시 부여).
 run_fix() {
-    sql="SELECT tp.owner, tp.table_name, tp.privilege, tp.grantee FROM dba_tab_privs tp JOIN dba_users u ON u.username = tp.grantee WHERE (tp.owner = 'SYS' OR tp.table_name LIKE 'DBA_%') AND tp.privilege != 'EXECUTE' AND u.oracle_maintained = 'N' AND tp.grantee NOT IN (SELECT grantee FROM dba_role_privs WHERE granted_role = 'DBA') ORDER BY tp.grantee;"
+    sql="SELECT tp.owner, tp.table_name, tp.privilege, tp.grantee FROM dba_tab_privs tp WHERE (tp.owner = 'SYS' OR tp.table_name LIKE 'DBA_%') AND tp.privilege != 'EXECUTE' AND (tp.grantee IN (SELECT username FROM dba_users WHERE oracle_maintained = 'N') OR tp.grantee IN (SELECT role FROM dba_roles WHERE oracle_maintained = 'N')) AND tp.grantee NOT IN (SELECT grantee FROM dba_role_privs WHERE granted_role = 'DBA') ORDER BY tp.grantee;"
     out=$(oracle_query "$sql")
     rc=$?
     if [ $rc -ne 0 ]; then

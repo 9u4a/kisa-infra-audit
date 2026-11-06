@@ -7,7 +7,13 @@
 #   4) fix 기대가 있으면(VULN 케이스) fix.sh --apply(가상 터미널로 confirm 등급에 y) → FIX=<changes.log 결과>/<재검증>
 #      → --rollback → 스냅숏 S2. S1 = S2 이면 ROLLBACK=same(조치 전 취약 상태로 정확히 돌아옴)
 set -u
-CODE=$1; NAME=$2; BASE=$3; FIXEXP=$4
+CODE=$1; NAME=$2; BASE=$3; FIXEXP=$4; SECRET=${5:--}
+# leak_check -- SECRET(케이스 "secret")이 진단·조치 결과물(출력 폴더·화면 출력)에 남았는지(S5). LEAK=yes|no
+leak_check() {
+    [ "$SECRET" = "-" ] && return 0
+    # 조치 백업(backup/ - 원본 파일 사본, 실행자 전용 폴더)은 원래 값을 담는 것이 목적이라 제외한다
+    if grep -rqF --exclude-dir=backup -- "$SECRET" /tmp/runout /tmp/run.log /tmp/fixout /tmp/fix.log 2>/dev/null; then echo "LEAK=yes"; else echo "LEAK=no"; fi
+}
 cd /infra || exit 2
 
 # snap — 파일시스템(경로·종류·권한·소유자·크기 + /etc·/root·/home·/srv·/usr/local·/var 내용 해시, /dev 의 일반 파일) +
@@ -56,8 +62,14 @@ st=$(sed -n "s/.*\"code\":\"$CODE\",\"status\":\"\([A-Z]*\)\".*/\1/p" "$R" 2>/de
 echo "STATUS=${st:-none}"
 det=$(sed -n "s/.*\"code\":\"$CODE\",\"status\":\"[A-Z]*\",\"detail\":\"\([^\"]*\)\".*/\1/p" "$R" 2>/dev/null | head -n1 | cut -c1-240)
 echo "DETAIL=$det"
+# C1(1.5.0): result.json 이 올바른 UTF-8 인지(증적에 비 UTF-8 바이트가 섞여도 json_escape 가 치환해야 한다)
+if [ -n "$R" ] && command -v iconv >/dev/null 2>&1; then
+    if iconv -f UTF-8 -t UTF-8 "$R" >/dev/null 2>&1; then echo "UTF8=ok"; else echo "UTF8=bad"; fi
+else
+    echo "UTF8=skip"
+fi
 
-[ "$FIXEXP" = "-" ] && exit 0
+[ "$FIXEXP" = "-" ] && { leak_check; exit 0; }
 # 조치 → 재검증(fix.sh 내부) → 원복 → 상태 비교. confirm 등급과 조치 안의 확인(fix_confirm_tty)에 y 를 넣기 위해
 # script 로 가상 터미널을 만든다(03_web fix_safety.sh 와 같은 방식).
 (while echo y; do sleep 0.3; done) 2>/dev/null | \
@@ -78,3 +90,4 @@ else
     echo "ROLLBACK=diff"
     diff /tmp/s1 /tmp/s2 | grep '^[<>]' | head -n 12 | sed 's/^/DIFF=/'
 fi
+leak_check

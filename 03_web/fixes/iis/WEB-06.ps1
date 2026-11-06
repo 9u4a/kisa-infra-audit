@@ -1,34 +1,9 @@
 ﻿# WEB-06 (상) 웹 서비스 상위 디렉터리 접근 제한 설정 [IIS] — 조치 [fix: confirm]
-# 변경: IIS 사이트별 system.webServer/asp enableParentPaths=true → false
+# 변경: IIS system.webServer/asp enableParentPaths=true → false(사이트 루트·하위 application/virtual directory 중 켜진 곳)
+# 1.5.0 A24: 진단(checks/iis/WEB-06.ps1)과 같은 위치 - 사이트 루트와 하위 application·virtual directory(Get-IisSiteConfigPaths)
+# 를 모두 확인해 켜진 곳을 끈다(예전에는 사이트 루트만 고쳐 하위 재정의가 남으면 재검증 실패 → 원복). WEB-04 와 같은 공통 함수.
 
-if (-not (Test-IisAvailable)) {
-    $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; $Global:FixEvidence = ""
-    return
+Invoke-FixIisConfigPaths -Filter "system.webServer/asp" -Name "enableParentPaths" -Value $false -What "상위 디렉터리 접근(enableParentPaths)을 비활성화한" -IsVuln {
+    param($v)
+    $v -eq $true
 }
-$sites = Get-IisSiteNames
-if (-not $sites -or $sites.Count -eq 0) {
-    $Global:FixStatus = "NA"; $Global:FixDetail = "구성된 IIS 웹사이트가 없음"; $Global:FixEvidence = ""
-    return
-}
-
-$applied = @()
-$failed = @()   # 쓰기 실패 - 예전엔 "대상 없음(NA)"으로 덮여 원인이 사라졌다
-foreach ($site in $sites) {
-    $enabled = Get-IisConfigValue -Filter "system.webServer/asp" -Name "enableParentPaths" -SiteName $site
-    if ($enabled -eq $true) {
-        Set-FixWebConfigProperty -Filter "system.webServer/asp" -Name "enableParentPaths" -Value $false -PSPath "IIS:\Sites\$site"
-        if ($Global:FixStatus -eq "APPLIED") { $applied += $site } else { $failed += "${site}: $($Global:FixDetail)" }
-    }
-}
-
-if ($failed.Count -gt 0) {
-    $Global:FixStatus = "ERROR"
-    $Global:FixDetail = "조치 실패: $($failed -join ' / ')$(if ($applied) { " (적용됨: $($applied -join ', '))" })"
-} elseif ($applied.Count -gt 0) {
-    $Global:FixStatus = "APPLIED"
-    $Global:FixDetail = "상위 디렉터리 접근(enableParentPaths)을 비활성화한 사이트: $($applied -join ', ')"
-} else {
-    $Global:FixStatus = "NA"
-    $Global:FixDetail = "enableParentPaths 가 활성화된 사이트가 없음(이미 정상)"
-}
-$Global:FixEvidence = ""

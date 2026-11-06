@@ -12,8 +12,44 @@ import secrets
 import string
 
 
+# 다른 Cisco 플랫폼(NX-OS·ASA·IOS XR)의 설정 표지. 이 설정들도 `hostname`/`interface`/`version` 줄이 있어 예전 detect()
+# 가 IOS 로 판정했고, 그러면 설정 부재를 근거로 하는 항목(N-17/21/27/35 등)이 거짓 GOOD 이 되고 NX-OS `priv <key>` 같은
+# 비밀값이 마스킹되지 않은 채 증적에 남았다(외부 검수 A14). 이런 입력은 IOS check 로 판정하지 않고 거부한다.
+_OTHER_PLATFORMS = [
+    ("Cisco NX-OS", re.compile(r"^version \d+\.\d+\(\d+\)|^!Command: show running-config|^feature \S+|^boot nxos\b|^vdc \S+", re.M)),
+    ("Cisco ASA/PIX/FWSM", re.compile(r"^(?:ASA|PIX|FWSM) Version \d|^: Saved\s*$|^\s+nameif \S+", re.M)),
+    ("Cisco IOS XR", re.compile(r"^!! IOS XR Configuration|^RP/\d+/", re.M)),
+]
+
+
+def other_platform(text: str) -> str | None:
+    """IOS 가 아닌 Cisco 플랫폼 설정이면 그 이름을, 아니면 None. run.py 는 -e cisco_ios 로 강제 지정해도 거부한다."""
+    for name, pat in _OTHER_PLATFORMS:
+        if pat.search(text):
+            return name
+    return None
+
+
+def completeness_problem(text: str) -> str | None:
+    """설정이 끝까지 수집됐는지 확인한다. `show running-config`/`show startup-config` 는 마지막에 최상위 `end` 줄이
+    있다 - 없으면(복사 중 잘림, 페이지 출력 중단 등) 뒤쪽 설정이 빠졌을 수 있어 "설정 없음"을 근거로 한 GOOD/NA 를
+    낼 수 없다(외부 검수 A14, S6). `end` 뒤에는 빈 줄·프롬프트(`Router#`)만 허용한다. 문제가 없으면 None."""
+    lines = [ln.rstrip() for ln in text.splitlines()]
+    idx = None
+    for i, ln in enumerate(lines):
+        if ln == "end":
+            idx = i
+    if idx is None:
+        return "설정 마지막의 `end` 줄이 없음(수집 중 잘린 설정일 수 있음)"
+    if any(not re.match(r"^\S+[#>]\s*$", ln) for ln in lines[idx + 1:] if ln.strip()):
+        return "`end` 줄 뒤에 설정으로 보이는 줄이 더 있음(여러 설정이 섞였거나 잘린 출력일 수 있음)"
+    return None
+
+
 def detect(text: str) -> bool:
-    if re.search(r"^version \d+\.\d+", text, re.M):
+    if other_platform(text):
+        return False
+    if re.search(r"^version \d+\.\d+\s*$", text, re.M):
         return True
     if "Building configuration" in text or "Current configuration" in text:
         return True
@@ -39,6 +75,9 @@ def get_blocks(lines: list[str], header_re: str) -> list[list[str]]:
         else:
             i += 1
     return blocks
+
+
+_L3_ADDR = re.compile(r"^\s*(?:ip address (?:\d|dhcp\b|negotiated\b|pool\b)|ip unnumbered \S)", re.M)
 
 
 class Ctx:
@@ -69,11 +108,13 @@ class Ctx:
 
     def ip_interface_blocks(self) -> list[str]:
         """IP 주소가 설정되어 있고 shutdown 되지 않은 인터페이스 블록만 문자열로 반환
-        (물리적으로 사용 중인 L3 인터페이스만 대상으로 per-interface 항목을 판정하기 위함)."""
+        (물리적으로 사용 중인 L3 인터페이스만 대상으로 per-interface 항목을 판정하기 위함).
+        고정 주소뿐 아니라 `ip address dhcp`·`negotiated`·`pool`·`ip unnumbered` 도 L3 인터페이스다 - 예전에는 숫자
+        주소만 봐서 DHCP 인터페이스를 대상에서 빼고 proxy-arp 등이 켜져 있어도 GOOD 을 냈다(외부 검수 A12)."""
         out = []
         for b in self.interface_blocks:
             body = "\n".join(b)
-            if re.search(r"^\s*ip address \d", body, re.M) and not re.search(r"^\s*shutdown\s*$", body, re.M):
+            if _L3_ADDR.search(body) and not re.search(r"^\s*shutdown\s*$", body, re.M):
                 out.append(body)
         return out
 
@@ -157,6 +198,127 @@ def vty_allows_telnet(block_text: str) -> bool:
     return bool(tokens & {"all", "telnet"})
 
 
+# ---- ACL 실효성 (외부 검수 A13) -------------------------------------------------------------------------
+# N-06(VTY access-class)·N-19(SNMP community ACL)·N-27(ip http access-class) 은 ACL 을 "참조하는 줄"만 보고 GOOD 을
+# 냈다. 참조한 ACL 이 정의되어 있지 않으면 IOS 는 접근을 제한하지 않고, `permit any` 가 있으면 사실상 무제한이다.
+def acl_entries(ctx, name: str) -> list[str] | None:
+    """ACL 규칙 줄(permit/deny ..., 순번·remark 제외) 목록. 번호 ACL(`access-list N ...`)과 이름/번호 블록
+    (`ip access-list standard|extended X`)을 모두 본다. 정의가 없으면 None."""
+    found = False
+    out: list[str] = []
+    for ln in ctx.lines:
+        m = re.match(rf"^access-list {re.escape(name)}\s+(.*)$", ln)
+        if m:
+            found = True
+            out.append(m.group(1).strip())
+    for b in get_blocks(ctx.lines, rf"^ip access-list (?:standard|extended) {re.escape(name)}\s*$"):
+        found = True
+        out += [re.sub(r"^\d+\s+", "", ln.strip()) for ln in b[1:]]
+    if not found:
+        return None
+    return [e for e in out if e and re.match(r"^(?:permit|deny)\b", e)]
+
+
+def _src_is_any(tokens: list[str]) -> bool:
+    if not tokens:
+        return False
+    if tokens[0] == "any":
+        return True
+    return len(tokens) > 1 and re.match(r"^\d+\.\d+\.\d+\.\d+$", tokens[0]) is not None and tokens[1] == "255.255.255.255"
+
+
+def acl_entry_permits_any(entry: str) -> bool:
+    """규칙 하나가 출발지 any 를 허용하는지. standard(`permit any`, `permit 0.0.0.0 255.255.255.255`)와
+    extended(`permit <프로토콜> any ...`) 를 모두 본다."""
+    t = entry.split()
+    if not t or t[0] != "permit" or len(t) < 2:
+        return False
+    if _src_is_any(t[1:]):
+        return True
+    if t[1] == "host" or re.match(r"^\d+\.\d+\.\d+\.\d+$", t[1]):
+        return False  # standard 의 특정 출발지
+    return _src_is_any(t[2:])  # extended: permit <프로토콜> <출발지> ...
+
+
+def acl_problem(ctx, name: str | None) -> str | None:
+    """참조한 ACL 이 접근을 실제로 제한하지 못하는 이유(정의 없음/규칙 없음/any 허용). 문제가 없으면 None."""
+    if not name:
+        return "ACL 이 지정되지 않음"
+    entries = acl_entries(ctx, name)
+    if entries is None:
+        return f"참조한 ACL {name} 이(가) 설정에 정의되어 있지 않음(접근 제한 없음)"
+    if not entries:
+        return f"참조한 ACL {name} 에 permit/deny 규칙이 없음"
+    anys = [e for e in entries if acl_entry_permits_any(e)]
+    if anys:
+        return f"참조한 ACL {name} 이(가) 모든 출발지를 허용함({anys[0]}) - 사실상 접근 제한 없음"
+    return None
+
+
+def acl_evidence(ctx, name: str | None) -> str:
+    entries = acl_entries(ctx, name) if name else None
+    if entries is None:
+        return f"ACL {name}: (정의 없음)" if name else ""
+    return f"ACL {name}: " + " / ".join(entries)
+
+
+def vty_access_class(block_text: str) -> str | None:
+    """line vty 블록의 inbound access-class ACL 이름(없으면 None). 여러 줄이면 IOS 처럼 마지막 줄."""
+    found = re.findall(r"^\s*access-class (\S+) in\b", block_text, re.M)
+    return found[-1] if found else None
+
+
+def vty_acl_problems(ctx) -> list[tuple[str, str]]:
+    """접근 제한이 실효성 없는 VTY 블록과 그 이유 목록. checks/fixes N-06 이 같은 기준을 쓴다."""
+    out = []
+    for b in ctx.line_block_text("vty"):
+        acl = vty_access_class(b)
+        problem = acl_problem(ctx, acl) if acl else "access-class(ACL) 설정 없음"
+        if problem:
+            out.append((b, problem))
+    return out
+
+
+# ---- AAA 로그인 인증 목록 (외부 검수 A11) -----------------------------------------------------------------
+def aaa_login_lists(ctx) -> dict[str, list[str]]:
+    """`aaa authentication login <목록> <방식...>` 을 {목록: 방식 목록} 으로. 같은 목록이 여러 번이면 IOS 처럼 마지막."""
+    out: dict[str, list[str]] = {}
+    for ln in ctx.lines:
+        m = re.match(r"^aaa authentication login (\S+)\s+(.+?)\s*$", ln)
+        if m:
+            out[m.group(1)] = m.group(2).split()
+    return out
+
+
+def aaa_methods_authenticate(methods: list[str] | None) -> bool:
+    """방식 목록이 실제로 인증을 요구하는지. `none` 만 있으면 무인증이다(P-11 수정 이후 `default none` 도 GOOD 이던
+    문제, A11). `group tacacs+ none` 처럼 none 이 대체 방식으로만 있으면 인증 요구로 본다."""
+    return bool(methods) and any(m != "none" for m in methods)
+
+
+def vty_line_authenticated(ctx, block_text: str) -> bool:
+    """VTY 라인 블록이 접속 시 인증을 요구하는지. check(N-01)와 fix(N-01)가 같이 쓴다.
+    - `no login` 은 password 줄이 있어도 비밀번호 없이 접속을 허용한다(진단 검수 D-R10).
+    - aaa new-model 이면 라인의 `login authentication <목록>`(없으면 default 목록)이 적용된다(P-11). 그 목록이
+      none 뿐이면 무인증(A11). 목록이 정의되지 않았으면 예전과 같이 라인의 password/login local 을 본다."""
+    if re.search(r"^\s*no login\s*$", block_text, re.M):
+        return False
+    lists = aaa_login_lists(ctx)
+    if ctx.has(r"^aaa new-model\s*$"):
+        m = re.search(r"^\s*login authentication (\S+)", block_text, re.M)
+        name = m.group(1) if m else "default"
+        if name in lists:
+            return aaa_methods_authenticate(lists[name])
+    if re.search(r"^\s*password \S+", block_text, re.M):
+        return True
+    if re.search(r"^\s*login local\s*$", block_text, re.M):
+        return True
+    m = re.search(r"^\s*login authentication (\S+)", block_text, re.M)
+    if m:
+        return aaa_methods_authenticate(lists.get(m.group(1))) if m.group(1) in lists else True
+    return False
+
+
 SNMP_DEFAULT_COMMUNITIES = {"public", "private"}
 
 
@@ -199,6 +361,12 @@ def parse_snmp_community(line: str) -> dict | None:
             info["acl"] = t
         i += 1
     return info
+
+
+def snmp_acl_problem(ctx, info: dict) -> str | None:
+    """community 줄의 IPv4 ACL 이 접근을 실제로 제한하지 못하는 이유(미지정/미정의/any 허용, 외부 검수 A13).
+    checks N-19 와 fixes N-18/19/20 이 같은 기준으로 대상 줄을 나눈다. 문제가 없으면 None."""
+    return acl_problem(ctx, info.get("acl"))
 
 
 def snmp_community_lines(ctx) -> list[str]:
@@ -247,7 +415,9 @@ _SECRET_PATTERNS = [
     # SNMPv3 user: ... auth md5|sha* <key> priv des|3des|aes [128|192|256] <key>
     (re.compile(r"(\bauth\s+(?:md5|sha\S*)\s+)\S+", re.I), r"\1" + _MASK),
     (re.compile(r"(\bpriv\s+(?:des\S*|3des|aes(?:\s+\d+)?)\s+)\S+", re.I), r"\1" + _MASK),
-    # password|secret [암호화 타입 숫자] <값>  (enable/username/line/ppp chap 등 공통)
+    # 알고리즘 없이 바로 키가 오는 형태(NX-OS `priv <key>`, `priv aes-128 <key>`). run.py 가 비 IOS 입력을 거부하지만
+    # 이중 방어로 가린다(외부 검수 A14). 이미 가린 값은 건너뛴다.
+    (re.compile(r"(\bsnmp-server\s+user\b.*?\bpriv\s+(?:aes-128\s+)?)(?!<)(?!(?:des\S*|3des|aes)(?:\s|$))\S+", re.I), r"\1" + _MASK),    # password|secret [암호화 타입 숫자] <값>  (enable/username/line/ppp chap 등 공통)
     # run.py 가 detail 에도 적용하므로 한글 문장("enable secret 또는 ...")은 값으로 보지 않는다(P-10).
     (re.compile(r"(\b(?:password|secret)(?:\s+\d{1,2})?\s+)(?![가-힣])\S+", re.I), r"\1" + _MASK),
     # key / key-string / authentication-key / message-digest-key [n] [md5] [타입] <값>, crypto isakmp key <값>

@@ -29,8 +29,8 @@ def generate(ctx):
         if cio.snmp_community_weak(string_):
             subsumed_by_n18 = True
             continue
-        if info["acl"]:
-            continue
+        if not cio.snmp_acl_problem(ctx, info):
+            continue  # 정의된 ACL 이 접근을 제한함(미지정·미정의·any 허용이면 대상, 외부 검수 A13)
         if not added_acl_decl:
             cmds.append(f"! 주의: 아래 {_ACL_NUM}번 ACL의 permit 대상을 실제 관리 시스템 IP로 반드시 교체할 것")
             cmds.append(f"access-list {_ACL_NUM} permit <관리-시스템-IP> <wildcard mask>")

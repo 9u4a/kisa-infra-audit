@@ -89,6 +89,8 @@ conn_cmd() {  # conn_cmd <sh 08_dbms/run.sh 또는 fix.sh 뒤에 붙일 나머�
         mysql:admin) printf 'DB_PASSWORD=%s sh %s --user kisa_admin' "'$ADMPW'" "$1" ;;
         mysql:nopw) printf 'DB_PASSWORD= sh %s --user root' "$1" ;;
         postgres:local) printf 'DB_PASSWORD=%s sh %s --user postgres' "'$ROOTPW'" "$1" ;;
+        # 없는 역할로 접속 - db_preflight 가 실패해 DB 조회 없이 설정 파일만으로 판정하는 경로(A18)
+        postgres:nouser) printf 'DB_PASSWORD=%s sh %s --user kisa_nouser' "'$ROOTPW'" "$1" ;;
         oracle:pdb) printf 'DB_PASSWORD=%s sh %s --host localhost --db FREEPDB1 --user system' "'$ORAPW'" "$1" ;;
         oracle:sysdba) printf 'sh %s' "$1" ;;
         oracle:pdbsys) printf 'ORACLE_PDB_SID=FREEPDB1 sh %s' "$1" ;;
@@ -140,7 +142,7 @@ SELECT * FROM mysql.db ORDER BY user, host, db; SELECT * FROM mysql.tables_priv 
 SELECT * FROM mysql.global_grants ORDER BY user, host, priv; SELECT component_urn FROM mysql.component ORDER BY 1;
 SHOW GLOBAL VARIABLES WHERE Variable_name LIKE 'validate_password%' OR Variable_name = 'default_password_lifetime';
 EOF
-            file_state /etc/my.cnf
+            file_state /etc/my.cnf /etc/mysql/conf.d/kisa_case.cnf /etc/mysql/debian.cnf
             # ib_buffer_pool 은 mysqld 가 종료할 때마다 새로 쓰는 캐시 덤프라(구동 계정 소유) 조치의 재기동 순서에 따라
             # 소유자가 달라진다 - 원복 비교에서 뺀다(내용은 다음 기동 때 다시 덤프됨).
             find /var/lib/mysql -xdev -user 0 ! -name ib_buffer_pool 2>/dev/null | sort ;;
@@ -154,12 +156,13 @@ SELECT grantee, count(*) FROM information_schema.role_table_grants WHERE table_s
 SELECT line_number, type, database, user_name, address, auth_method FROM pg_hba_file_rules ORDER BY 1;
 EOF
             _d=$PGD
-            file_state "$_d/postgresql.conf" "$_d/pg_hba.conf" "$_d/postgresql.auto.conf" ;;
+            file_state "$_d/postgresql.conf" "$_d/pg_hba.conf" "$_d/postgresql.auto.conf" /etc/kisa_pg/pg_hba.conf ;;
         oracle)
             ora_pdb <<'EOF'
 SELECT username, account_status, profile FROM dba_users ORDER BY username;
 SELECT profile, resource_name, limit FROM dba_profiles WHERE resource_type = 'PASSWORD' ORDER BY 1, 2;
 SELECT tp.grantee, tp.owner, tp.table_name, tp.privilege, tp.grantable FROM dba_tab_privs tp JOIN dba_users u ON u.username = tp.grantee WHERE u.oracle_maintained = 'N' ORDER BY 1, 2, 3, 4;
+SELECT r.role, tp.owner, tp.table_name, tp.privilege FROM dba_roles r LEFT JOIN dba_tab_privs tp ON tp.grantee = r.role WHERE r.oracle_maintained = 'N' ORDER BY 1, 2, 3, 4;
 SELECT owner, table_name, grantee, privilege FROM dba_tab_privs WHERE table_name = 'AUD$' ORDER BY 1, 2, 3, 4;
 SELECT granted_role FROM dba_role_privs WHERE grantee = 'PUBLIC' ORDER BY 1;
 SELECT name, value FROM v$parameter WHERE name = 'resource_limit';
@@ -188,6 +191,8 @@ meta() {
         mysql:no-any-host) _m=root ;;
         mysql:mycnf-644) _m=root; _fix=1 ;;
         mysql:mycnf-640) _m=root ;;
+        mysql:includedir-cnf-664) _m=root; _fix=1 ;;
+        mysql:debian-cnf-644) _m=root; _fix=1 ;;
         mysql:grant-option-user) _m=root; _fix=1 ;;
         # 조치(비밀번호 설정) 후에도 이미지 기본 pg_hba 의 trust 규칙이 남아 재진단은 MANUAL(P-09)
         postgres:postgres-no-password) _m=local; _fix=1; _fx=MANUAL; _ans="y\ny\n$NEWPW\n$NEWPW\n"; _rb=irreversible ;;
@@ -202,6 +207,7 @@ meta() {
         postgres:hba-restricted) _m=local ;;
         postgres:conf-perm-644) _m=local; _fix=1 ;;
         postgres:conf-perm-600) _m=local ;;
+        postgres:hba-elsewhere-nouser) _m=nouser ;;
         postgres:non-admin-owner) _m=local ;;
         postgres:collector-off) _m=local; _fix=1; _fx=MANUAL ;;
         postgres:collector-on) _m=local ;;
@@ -221,6 +227,7 @@ meta() {
         oracle:validnode-checking) _m=pdb ;;
         oracle:user-dba-view-grant) _m=pdbsys; _fix=1 ;;
         oracle:no-system-table-grant) _m=pdb ;;
+        oracle:role-dba-view-grant) _m=pdbsys; _fix=1 ;;
         oracle:sqlnet-world-writable) _m=pdb; _fix=1 ;;
         oracle:net-files-644) _m=pdb ;;
         oracle:no-admin-restrictions) _m=pdb; _fix=1 ;;
@@ -268,6 +275,14 @@ EOF
         mysql:mask-any-host) echo "RENAME USER 'root'@'%' TO 'root'@'10.0.0.5'; CREATE USER 'kisa_mask'@'0.0.0.0/0.0.0.0' IDENTIFIED BY 'KisaMask#1234';" | my ;;
         # D-14 양호: my.cnf 권한 640
         mysql:mycnf-640) cp -p "$MYCNF" "$WORK/my.cnf.orig"; chmod 640 "$MYCNF"; chgrp mysql "$MYCNF" ;;
+        # D-14 취약(A17): my.cnf 자체는 640 이지만 그 파일이 !includedir 로 읽는 /etc/mysql/conf.d/*.cnf 가 그룹 쓰기 가능(664)
+        mysql:includedir-cnf-664)
+            cp -p "$MYCNF" "$WORK/my.cnf.orig"; chmod 640 "$MYCNF"; chgrp mysql "$MYCNF"
+            printf '[mysqld]\n# kisa case\n' > /etc/mysql/conf.d/kisa_case.cnf; chown root:root /etc/mysql/conf.d/kisa_case.cnf; chmod 664 /etc/mysql/conf.d/kisa_case.cnf ;;
+        # D-14 취약(A17): my.cnf 는 640, 유지보수 계정 비밀번호 파일 debian.cnf 가 644
+        mysql:debian-cnf-644)
+            cp -p "$MYCNF" "$WORK/my.cnf.orig"; chmod 640 "$MYCNF"; chgrp mysql "$MYCNF"
+            printf '[client]\nuser = debian-sys-maint\npassword = KisaDeb#1234\n' > /etc/mysql/debian.cnf; chown root:root /etc/mysql/debian.cnf; chmod 644 /etc/mysql/debian.cnf ;;
         # D-21 취약: 일반 계정에 전역 WITH GRANT OPTION(Role 이 아닌 사용자에게 직접)
         mysql:grant-option-user) echo "CREATE USER 'kisa_go'@'10.0.0.6' IDENTIFIED BY 'KisaGo#1234'; GRANT PROCESS ON *.* TO 'kisa_go'@'10.0.0.6' WITH GRANT OPTION;" | my ;;
 
@@ -293,6 +308,15 @@ EOF
             sed -i -E 's/[[:space:]]trust[[:space:]]*$/ scram-sha-256/' "$PGD/pg_hba.conf"
             echo "SELECT pg_reload_conf();" | pg >/dev/null; sleep 1 ;;
         postgres:conf-perm-644) chmod 644 "$PGD/postgresql.conf" ;;
+        # D-10/D-14 취약(A18): 실제 hba_file 은 /etc/kisa_pg/pg_hba.conf(전체 허용 규칙 + 644), 데이터 디렉터리의 pg_hba.conf 는 쓰지 않는
+        # 옛 파일(전체 허용 규칙 없음, 600). 없는 역할로 접속해 SHOW hba_file 없이 판정 - 예전에는 glob 첫 파일(옛 파일)로 GOOD.
+        postgres:hba-elsewhere-nouser)
+            cp -p "$PGD/postgresql.conf" "$WORK/postgresql.conf.orig"; cp -p "$PGD/pg_hba.conf" "$WORK/pg_hba.conf.orig"
+            mkdir -p /etc/kisa_pg; cp "$PGD/pg_hba.conf" /etc/kisa_pg/pg_hba.conf
+            chown postgres:postgres /etc/kisa_pg/pg_hba.conf; chmod 644 /etc/kisa_pg/pg_hba.conf
+            sed -i -E '/^host[[:space:]]+all[[:space:]]+all[[:space:]]+all([[:space:]]|$)/d' "$PGD/pg_hba.conf"
+            echo "hba_file = '/etc/kisa_pg/pg_hba.conf'" >> "$PGD/postgresql.conf"
+            restart_pg ;;
         postgres:non-admin-owner) echo "CREATE ROLE kisa_app LOGIN; CREATE TABLE public.kisa_app_t (id int); ALTER TABLE public.kisa_app_t OWNER TO kisa_app;" | pg ;;
         postgres:collector-on) echo "ALTER SYSTEM SET logging_collector = on;" | pg; restart_pg ;;
 
@@ -315,6 +339,8 @@ EOF
         oracle:failed-login-limited) echo "ALTER PROFILE DEFAULT LIMIT FAILED_LOGIN_ATTEMPTS 5;" | ora_pdb ;;
         oracle:validnode-checking) ora_file_backup sqlnet.ora; printf '\ntcp.validnode_checking = yes\ntcp.invited_nodes = (127.0.0.1, localhost)\n' >> "$(ora_target sqlnet.ora)" ;;
         oracle:user-dba-view-grant) echo "CREATE USER kisa_u IDENTIFIED BY \"KisaU#1234\"; GRANT SELECT ON sys.dba_users TO kisa_u;" | ora_pdb ;;
+        # D-11 취약(A16): 사용자 정의 롤에 SYS 테이블 권한을 주고 그 롤을 일반 계정에 부여(계정에 직접 부여 없음)
+        oracle:role-dba-view-grant) echo "CREATE ROLE kisa_sr; GRANT SELECT ON sys.dba_users TO kisa_sr; CREATE USER kisa_u IDENTIFIED BY \"KisaU#1234\"; GRANT kisa_sr TO kisa_u;" | ora_pdb ;;
         oracle:sqlnet-world-writable) ora_file_backup sqlnet.ora; chmod 666 "$(ora_target sqlnet.ora)" ;;
         oracle:admin-restrictions-on) ora_file_backup listener.ora; printf '\nADMIN_RESTRICTIONS_LISTENER = ON\n' >> "$(ora_target listener.ora)" ;;
         oracle:aud-grant-user) echo "CREATE USER kisa_u IDENTIFIED BY \"KisaU#1234\"; GRANT SELECT ON sys.aud\$ TO kisa_u;" | ora_pdb ;;
@@ -349,6 +375,9 @@ case_verify() {
             && [ "$(echo "SELECT host FROM mysql.user WHERE user='kisa_mask';" | my)" = "0.0.0.0/0.0.0.0" ] ;;
         mysql:mycnf-644) [ "$(stat -c '%a' "$MYCNF")" = "644" ] ;;
         mysql:mycnf-640) [ "$(stat -c '%a' "$MYCNF")" = "640" ] ;;
+        mysql:includedir-cnf-664) [ "$(stat -c '%a' "$MYCNF")" = "640" ] && grep -q '^!includedir /etc/mysql/conf.d/' "$MYCNF" \
+            && [ "$(stat -c '%a' /etc/mysql/conf.d/kisa_case.cnf)" = "664" ] ;;
+        mysql:debian-cnf-644) [ "$(stat -c '%a' "$MYCNF")" = "640" ] && [ "$(stat -c '%a' /etc/mysql/debian.cnf)" = "644" ] ;;
         mysql:grant-option-user) [ "$(echo "SELECT Grant_priv FROM mysql.user WHERE user='kisa_go';" | my)" = "Y" ] ;;
 
         postgres:postgres-no-password) [ "$(echo "SELECT rolpassword IS NULL FROM pg_authid WHERE rolname='postgres';" | pg)" = "t" ] ;;
@@ -365,6 +394,10 @@ case_verify() {
         postgres:no-trust) [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE auth_method = 'trust';" | pg)" = "0" ] \
             && [ "$(echo "SELECT rolpassword IS NOT NULL FROM pg_authid WHERE rolname='postgres';" | pg)" = "t" ] ;;
         postgres:conf-perm-644) [ "$(stat -c '%a' "$PGD/postgresql.conf")" = "644" ] ;;
+        postgres:hba-elsewhere-nouser) [ "$(echo "SHOW hba_file;" | pg)" = "/etc/kisa_pg/pg_hba.conf" ] \
+            && ! grep -qE '^host[[:space:]]+all[[:space:]]+all[[:space:]]+all([[:space:]]|$)' "$PGD/pg_hba.conf" \
+            && [ "$(stat -c '%a' "$PGD/pg_hba.conf")" = "600" ] && [ "$(stat -c '%a' /etc/kisa_pg/pg_hba.conf)" = "644" ] \
+            && [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE type = 'host' AND address = 'all';" | pg)" != "0" ] ;;
         postgres:conf-perm-600) [ "$(stat -c '%a' "$PGD/postgresql.conf")" = "600" ] && [ "$(stat -c '%a' "$PGD/pg_hba.conf")" = "600" ] ;;
         postgres:non-admin-owner) [ "$(echo "SELECT tableowner FROM pg_tables WHERE tablename='kisa_app_t';" | pg)" = "kisa_app" ] ;;
         postgres:collector-off) [ "$(echo "SHOW logging_collector;" | pg)" = "off" ] ;;
@@ -391,6 +424,9 @@ case_verify() {
         oracle:no-validnode-checking) ! grep -qi 'validnode_checking' "$(ora_target sqlnet.ora)" ;;
         oracle:validnode-checking) grep -q '^tcp.validnode_checking = yes$' "$(ora_target sqlnet.ora)" ;;
         oracle:user-dba-view-grant) ora_has "SELECT privilege FROM dba_tab_privs WHERE grantee = 'KISA_U' AND table_name = 'DBA_USERS';" SELECT ;;
+        oracle:role-dba-view-grant) ora_has "SELECT privilege FROM dba_tab_privs WHERE grantee = 'KISA_SR' AND table_name = 'DBA_USERS';" SELECT \
+            && ora_has "SELECT granted_role FROM dba_role_privs WHERE grantee = 'KISA_U';" KISA_SR \
+            && ora_has "SELECT COUNT(*) FROM dba_tab_privs WHERE grantee = 'KISA_U';" 0 ;;
         oracle:no-system-table-grant) ora_has "SELECT COUNT(*) FROM dba_tab_privs tp JOIN dba_users u ON u.username = tp.grantee WHERE u.oracle_maintained = 'N' AND tp.owner = 'SYS';" 0 ;;
         oracle:sqlnet-world-writable) [ "$(stat -L -c '%a' "$(ora_target sqlnet.ora)")" = "666" ] ;;
         oracle:net-files-644) [ "$(stat -L -c '%a' "$(ora_target sqlnet.ora)")" = "644" ] && [ "$(stat -L -c '%a' "$(ora_target listener.ora)")" = "644" ] ;;
@@ -430,6 +466,9 @@ case_restore() {
         mysql:no-any-host) echo "RENAME USER 'root'@'10.0.0.5' TO 'root'@'%';" | my ;;
         mysql:mask-any-host) echo "DROP USER IF EXISTS 'kisa_mask'@'0.0.0.0/0.0.0.0'; RENAME USER 'root'@'10.0.0.5' TO 'root'@'%';" | my ;;
         mysql:mycnf-640|mysql:mycnf-644) [ -f "$WORK/my.cnf.orig" ] && cp -p "$WORK/my.cnf.orig" "$MYCNF"; chmod 644 "$MYCNF"; chown root:root "$MYCNF" ;;
+        mysql:includedir-cnf-664|mysql:debian-cnf-644)
+            [ -f "$WORK/my.cnf.orig" ] && cp -p "$WORK/my.cnf.orig" "$MYCNF"; chmod 644 "$MYCNF"; chown root:root "$MYCNF"
+            rm -f /etc/mysql/conf.d/kisa_case.cnf /etc/mysql/debian.cnf ;;
         mysql:grant-option-user) echo "DROP USER IF EXISTS 'kisa_go'@'10.0.0.6';" | my ;;
         mysql:*) : ;;
 
@@ -440,6 +479,9 @@ case_restore() {
         postgres:md5-encryption) printf "ALTER SYSTEM RESET password_encryption;\nSELECT pg_reload_conf();\n" | pg >/dev/null; sleep 1 ;;
         postgres:md5-stored-role) echo "DROP ROLE IF EXISTS kisa_md5;" | pg ;;
         postgres:hba-restricted|postgres:hba-reject-all|postgres:no-trust) cp -p "$WORK/pg_hba.conf.orig" "$PGD/pg_hba.conf"; echo "SELECT pg_reload_conf();" | pg >/dev/null; sleep 1 ;;
+        postgres:hba-elsewhere-nouser)
+            cp -p "$WORK/postgresql.conf.orig" "$PGD/postgresql.conf"; cp -p "$WORK/pg_hba.conf.orig" "$PGD/pg_hba.conf"
+            rm -rf /etc/kisa_pg; restart_pg ;;
         postgres:conf-perm-644|postgres:conf-perm-600) chmod 600 "$PGD/postgresql.conf" "$PGD/pg_hba.conf"; chown postgres:postgres "$PGD/postgresql.conf" "$PGD/pg_hba.conf" ;;
         postgres:non-admin-owner) echo "DROP TABLE IF EXISTS public.kisa_app_t; DROP ROLE IF EXISTS kisa_app;" | pg ;;
         postgres:collector-off|postgres:collector-on)
@@ -455,6 +497,7 @@ case_restore() {
         oracle:no-logon-version|oracle:logon-version-12|oracle:no-validnode-checking|oracle:validnode-checking|oracle:sqlnet-world-writable) ora_file_restore sqlnet.ora ;;
         oracle:no-admin-restrictions|oracle:admin-restrictions-on) ora_file_restore listener.ora ;;
         oracle:user-dba-view-grant|oracle:aud-grant-user) echo "DROP USER kisa_u CASCADE;" | ora_pdb ;;
+        oracle:role-dba-view-grant) echo "DROP USER kisa_u CASCADE; DROP ROLE kisa_sr;" | ora_pdb ;;
         oracle:role-to-public) echo "DROP ROLE kisa_r;" | ora_pdb ;;
         oracle:os-roles-true|oracle:os-params-false)
             echo "ALTER SYSTEM RESET os_roles SCOPE=SPFILE;" | ora_cdb >/dev/null 2>&1

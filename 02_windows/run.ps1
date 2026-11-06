@@ -63,7 +63,8 @@ $OsFamily = Get-OsFamily
 
 # ---- 대상 코드 선정 ----------------------------------------------------------
 if ($Items) {
-    $Selected = $Items -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    # C2: guide.json 의 항목 코드와 일치하는 것만 받는다 - 검증 없이 "checks\<코드>.ps1" 로 이으면 -i ..\..\x 로 임의 .ps1 이 실행됐다
+    $Selected = @(Select-KnownItemCodes -Codes ($Items -split ",") -KnownCodes @($Guide.items | ForEach-Object { $_.code }))
 } elseif ($Group) {
     $Selected = $Guide.items | Where-Object { "$($_.group_no)" -eq $Group } | ForEach-Object { $_.code }
 } else {

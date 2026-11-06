@@ -1,6 +1,6 @@
 # WEB-13 (상) 웹 서비스 설정 파일 노출 제한 — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
-# 변경: Tomcat server.xml·context.xml 중 DB <Resource> 가 있는 파일 권한 600, 소유자 root/tomcat* 이면 유지(그 외 tomcat)
-# checks/WEB-13.sh 와 같은 대상: server.xml·context.xml 중 <Resource> 가 있는 파일을 600 으로(소유자는 허용 목록이면 유지).
+# 변경: Tomcat server.xml·context.xml·conf/<엔진>/<호스트>/*.xml 중 DB <Resource> 가 있는 파일 권한 600, 소유자 root/tomcat* 이면 유지(그 외 tomcat)
+# checks/WEB-13.sh 와 같은 대상: server.xml·context.xml·앱별 컨텍스트 중 <Resource> 가 있는 파일을 600 으로(소유자는 허용 목록이면 유지).
 run_fix() {
     detect_web_engines
     case " $WEB_ENGINES " in *" tomcat "*) : ;; *)
@@ -14,7 +14,8 @@ run_fix() {
         return
     fi
     files=""
-    for f in "$TC_FILE" "$(dirname "$TC_FILE")/context.xml"; do
+    # 진단과 같은 대상: server.xml + conf/context.xml + conf/<엔진>/<호스트>/*.xml(1.5.0 A21)
+    for f in "$TC_FILE" $(tomcat_context_xmls "$(dirname "$TC_FILE")"); do
         [ -r "$f" ] || continue
         # UserDatabase(인증 저장소)는 DB 연결 정보가 아니라 제외 - 진단과 같은 기준(실무 적용 검증 P-13)
         [ -n "$(strip_xml_comments "$f" | tr '\n' ' ' | grep -oE '<Resource([[:space:]][^>]*)?/?>' | \

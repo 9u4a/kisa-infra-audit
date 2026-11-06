@@ -1,0 +1,19 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+enable secret 9 $9$CaseEnableHash
+aaa new-model
+aaa authentication login default group tacacs+ local
+aaa authentication login NOAUTH none
+username netops privilege 15 secret 9 $9$CaseUserHash
+!
+line vty 0 4
+ login authentication NOAUTH
+ transport input ssh
+!
+end

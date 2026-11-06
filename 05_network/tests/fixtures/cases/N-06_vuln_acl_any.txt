@@ -1,0 +1,17 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+ip access-list standard VTY-ANY
+ 10 remark allow all
+ 20 permit any
+!
+line vty 0 4
+ access-class VTY-ANY in
+ transport input ssh
+!
+end

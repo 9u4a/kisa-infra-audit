@@ -1,0 +1,13 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+line vty 0 4
+ access-class 15 in
+ transport input ssh
+!
+end

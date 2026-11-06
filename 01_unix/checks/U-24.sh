@@ -50,9 +50,12 @@ $(ls -l "$f" 2>/dev/null)"
                 violations="$violations $f(owner=$owner)"
                 continue
             fi
-            perm_other_write=$(find "$f" -perm -0002 2>/dev/null)
-            if [ -n "$perm_other_write" ]; then
-                violations="$violations $f(other-write)"
+            # 1.5.0 A3: 가이드는 "root·소유자 외 쓰기 권한 없음" - 예전에는 기타 쓰기(-perm -0002)만 봐서 그룹 쓰기(0664)를 놓쳤다
+            perm=$(stat -L -c '%a' "$f" 2>/dev/null)
+            if [ -z "$perm" ]; then
+                violations="$violations $f(권한 확인 불가)"
+            elif perm_exceeds "$perm" 7755; then
+                violations="$violations $f(그룹/기타 쓰기, perm=$perm)"
             fi
         done
         IFS='
@@ -76,11 +79,11 @@ $(ls -l "$f" 2>/dev/null)"
         CHECK_EVIDENCE="$evidence"
     elif [ -z "$violations" ]; then
         CHECK_STATUS="GOOD"
-        CHECK_DETAIL="검사한 환경변수 파일(${checked}개)이 모두 소유자 기준을 충족하고 타 사용자 쓰기 권한이 없음"
+        CHECK_DETAIL="검사한 환경변수 파일(${checked}개)이 모두 소유자 기준을 충족하고 root·소유자 외 쓰기 권한(그룹/기타 쓰기)이 없음"
         CHECK_EVIDENCE="$evidence"
     else
         CHECK_STATUS="VULN"
-        CHECK_DETAIL="소유자가 부적절하거나 타 사용자 쓰기 권한이 부여된 환경변수 파일이 존재함:$violations"
+        CHECK_DETAIL="소유자가 부적절하거나 root·소유자 외 쓰기 권한(그룹/기타 쓰기)이 부여된 환경변수 파일이 존재함:$violations"
         CHECK_EVIDENCE="$evidence"
     fi
 }

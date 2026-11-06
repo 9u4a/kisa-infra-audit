@@ -37,11 +37,12 @@ function Invoke-Diag([string]$Tag, [hashtable]$Env = @{}) {
     if ($Env.ContainsKey("KISA_SQLUSER")) { $args2 += @("-SqlUser", $Env["KISA_SQLUSER"]) }
     $sw = [Diagnostics.Stopwatch]::StartNew()
     & powershell @args2 *>$null
+    $rc = $LASTEXITCODE
     $sw.Stop()
     foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null, "Process") }
     $path = Get-ChildItem -Path $out -Recurse -Filter result.json | Select-Object -First 1 -ExpandProperty FullName
     if (-not $path) { throw "$Tag 진단 결과(result.json)를 찾지 못함" }
-    return @{ Items = (Get-Content -Raw -Encoding UTF8 $path | ConvertFrom-Json).items; Seconds = [int]$sw.Elapsed.TotalSeconds }
+    return @{ Items = (Get-Content -Raw -Encoding UTF8 $path | ConvertFrom-Json).items; Seconds = [int]$sw.Elapsed.TotalSeconds; ExitCode = $rc }
 }
 
 $fail = $false
@@ -64,6 +65,8 @@ foreach ($mode in @("vuln", "hardened")) {
     if ($got -ne $want) { Write-Host "FAIL: mssql/$mode - 픽스처 준비가 반영되지 않음(sa is_disabled|is_policy_checked|weakpw = '$got', 기대 '$want')"; $fail = $true; continue }
     Write-Host "[*] mssql/$mode 픽스처: sa $got"
     $r = Invoke-Diag $mode
+    # B6: 접속에 성공한 진단은 종료 코드 0(접속 실패만 4)
+    if ($r.ExitCode -ne 0) { Write-Host "FAIL: mssql/$mode - 진단 종료 코드 $($r.ExitCode)(기대 0)"; $fail = $true }
     $actual = @{}; foreach ($it in $r.Items) { $actual[$it.code] = $it.status }
     $expectedPath = Join-Path $ScriptDir "fixtures\expected_mssql_$mode.json"
     if (-not (Test-Path $expectedPath)) { Write-Host "FAIL: mssql/$mode - $expectedPath 가 없음"; $fail = $true; continue }
@@ -124,6 +127,8 @@ if ($blocked.Count -gt 0) { Write-Host "  예: $($blocked[0].code) $($blocked[0]
 if (($after - $before) -ne $unit) { Write-Host "FAIL: mssql/safety - 로그인 실패가 $($after - $before)건(기대 ${unit}건 = 접속 시도 1회)"; $fail = $true }
 elseif ($blocked.Count -eq 0) { Write-Host "FAIL: mssql/safety - '사전 점검 실패' ERROR 항목이 없음"; $fail = $true }
 elseif ($blocked[0].detail -match 'char:\d+|CategoryInfo') { Write-Host "FAIL: mssql/safety - detail 에 PowerShell 오류 레코드 잡음이 남음"; $fail = $true }
+# B6: 사전 점검 실패는 결과물을 만들되 종료 코드 4(08_dbms/run.sh 와 같음) - 예전에는 0 이라 정상 진단과 구분되지 않았다
+elseif ($r.ExitCode -ne 4) { Write-Host "FAIL: mssql/safety - 사전 점검 실패인데 종료 코드가 $($r.ExitCode)(기대 4)"; $fail = $true }
 else { Write-Host "PASS: mssql/safety" }
 
 if ($fail) { exit 1 }

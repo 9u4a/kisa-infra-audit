@@ -18,10 +18,14 @@ def check(ctx):
             continue
         masked = " ".join(["snmp-server", "community", "<community>"] + info["rest"])
         evidence_lines.append(masked)
-        # IPv4 ACL 이 없으면(ipv6 ACL 만 있어도) IPv4 접근은 제한되지 않는다.
-        if not info["acl"]:
-            no_acl.append(masked)
-    evidence = "\n".join(evidence_lines)
+        # IPv4 ACL 이 없으면(ipv6 ACL 만 있어도) IPv4 접근은 제한되지 않는다. ACL 이 지정돼 있어도 정의되지 않았거나
+        # any 를 허용하면 제한하지 못한다(외부 검수 A13 - 예전에는 ACL 토큰 존재만 봤다).
+        problem = cio.snmp_acl_problem(ctx, info)
+        if problem:
+            no_acl.append(f"{masked} ({problem})")
+        elif info["acl"]:
+            evidence_lines.append("  " + cio.acl_evidence(ctx, info["acl"]))
+    evidence = "\n".join(evidence_lines + (["[제한되지 않은 줄]"] + no_acl if no_acl else []))
     if no_acl:
-        return {"status": "VULN", "detail": f"ACL이 지정되지 않은 SNMP community 설정이 있음: {len(no_acl)}건", "evidence": evidence}
-    return {"status": "GOOD", "detail": "모든 SNMP community 설정에 접근 제한 ACL이 지정되어 있음", "evidence": evidence}
+        return {"status": "VULN", "detail": f"접근 제한 ACL이 없거나(미지정·미정의·any 허용) 효과가 없는 SNMP community 설정이 있음: {len(no_acl)}건", "evidence": evidence}
+    return {"status": "GOOD", "detail": "모든 SNMP community 설정에 정의된 접근 제한 ACL이 지정되어 있음(any 허용 없음)", "evidence": evidence}

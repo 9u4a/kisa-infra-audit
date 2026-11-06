@@ -75,6 +75,34 @@
 - run_safety: Rocky 는 하네스의 su(pam_lastlog)가 /var/log/lastlog 를 갱신해 rhel 실행에만 `--allow-fs`(08_dbms Oracle Linux 와
   같은 처리). 일반 사용자 계정 `kisa_nr` 의 홈을 `/nonexistent` 로 만든다 - 없는 /home/kisa_nr 때문에 일반 사용자 실행에서만
   U-32 VULN 이 나던 하네스 잡음.
+### Fixed (진단 판정 신뢰성, KNOWN_ISSUES §6 V-xx)
+- 01_unix: U-37 crontab 스풀·`/etc/crontab`·`/etc/cron.d` 를 `perm_exceeds` 640 기준 비교(예전 `-perm -0007` 이라 0644·0666 누락,
+  at 작업 740·cron.{hourly,...} 스크립트 제외는 deviation)·U-28 정책 accept 에 `ct state invalid`·ICMP 만 거르는 drop 은 제한으로
+  인정하지 않음·U-24 그룹 쓰기(0664)도 취약·U-17 systemd 폴더가 있어도 `/etc/init.d`·`/etc/rc.d`·`/etc/rc.local` 판정·U-27
+  r-command 를 run_to·is-enabled 로 확인(조회 실패 ERROR)·U-62 sshd 드롭인 Banner·SMTP 기본 배너·BIND version 판정(자동 조치
+  불가 부분 PARTIAL)·U-55 `/usr/bin/false` 인정(거짓 VULN)·U-11/U-55 증적의 passwd 비밀번호 필드 마스킹(`passwd_mask`, S5).
+- lib: `json_escape` 가 비 UTF-8 바이트를 U+FFFD 로 치환(awk 만), `merge.py` 가 잘못된 UTF-8 결과도 병합 - EUC-KR 증적에서
+  병합 전체가 UnicodeDecodeError 로 중단되던 것. `run_safety.sh` HANG_CMDS 가 진입점 PATH 의 실물(systemctl 등)을 잠시 가짜로
+  바꿔치기 - 예전에는 실물에 가려져 S2 검사가 무력했다(U-27 무기한 대기를 놓친 원인).
+- 02_windows·07_pc: W-16/PC-04 사용자 숨김 공유(`Data$`) 미검사 → 기본 관리 공유(Special·print$)만 제외(`Test-SmbDefaultShare`)·
+  W-18/W-44/PC-05 실행 중이 아니어도 시작 유형이 Disabled 가 아니면 취약(트리거 시작 서비스의 거짓 양호, deviation)·W-24 FTP
+  ipSecurity 를 마스터 + 사이트별 유효 설정으로·W-40 "디렉터리 서비스 액세스=실패" 판정 추가(가이드 원문)·W-37/W-39/W-45/
+  PC-13/PC-14 조회 60초 제한(시간 초과 ERROR). PC-05 는 조치 범위가 꺼진 서비스까지 넓어져(Telephony 등) 조치 등급 auto→confirm(F5).
+- PowerShell 진입점(02/03/07/08 run.ps1·fix.ps1): `-i`·result.json 코드를 guide.json 코드와 일치할 때만 허용(`Select-KnownItemCodes`)
+  - 임의 경로 .ps1 이 관리자 권한으로 실행되던 것(sh 의 R-09 대응). 08 `run.ps1` MSSQL 사전 점검 실패 시 종료 코드 4.
+- 03_web: WEB-12 Apache 상대 Options(`-Indexes`)만 있는 범위의 기본 FollowSymLinks 상속·Nginx WEB-12/16/21/22·Apache WEB-21/22
+  server/VirtualHost 하나에만 설정이 있어도 양호(블록 상속 규칙으로 판정)·Tomcat WEB-06/12/13 allowLinking 작은따옴표와
+  `conf/<엔진>/<호스트>/*.xml`·WEB-08/16 모든 HTTP Connector·WEB-01 추측 쉬운 계정명(deviation)·WEB-09 인스턴스별 root·WEB-23
+  CredentialHandler algorithm·IIS WEB-06/08/16/19 하위 application·가상 디렉터리·WEB-15 IIS 판정 불가 시 MANUAL(deviation).
+- 05_network: N-01 `aaa authentication login default none` 등 none 뿐인 목록을 취약으로(P-11 부작용)·N-31/33/34/38 `ip address
+  dhcp`·negotiated·unnumbered 인터페이스 포함·N-06/19/27 참조 ACL 미정의·규칙 없음·출발지 any 허용(deny 뒤 permit any 포함,
+  deviation)을 취약으로·NX-OS·ASA·IOS XR 설정 거부와 `end` 없는 잘린 설정의 GOOD/NA→ERROR·NX-OS `priv` 키 마스킹·`-d` 같은
+  hostname 출력 폴더 충돌 시 순번·입력 실패 시 exit 1·옵션 `-e/--engine` 추가(`-v` 하위 호환).
+- 08_dbms: D-11 MSSQL `sys.all_objects`·WITH GRANT OPTION 반영(public 은 SQL Server 기본 부여 오탐 방지 범위)·D-11 Oracle 사용자
+  정의 롤 경유 권한·D-14 MySQL 서버가 읽는 설정 파일 전부(`--defaults-file`·`!include`/`!includedir`·debian.cnf, `mysql_config_files`)·
+  D-10/D-14 PostgreSQL 조회 실패 시 glob 첫 파일 대신 실행 중 postmaster 로 경로 확정(못 하면 ERROR)·`_db_run` `timeout -k 5`.
+- 테스트: 결함마다 재현 케이스 추가(01 18건·03 Unix 15건·IIS 5건·05 18건+진입점 회귀·02/07 케이스·08 db_unit.sh 등). 수정 전
+  코드에서 FAIL, 수정 후 PASS 를 확인했다.
 ### Fixed
 - 02_windows 케이스 W-01/default-name: 이름 변경 확인을 WMI 로만 기다려, Server 2022 에서 Win32_UserAccount 가 60초 내내
   "No mapping between account names and security IDs" 로 실패하면 진단은 정상인데도 FAIL 이던 것(CI run 42141148806) -

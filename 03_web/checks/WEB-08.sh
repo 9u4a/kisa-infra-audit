@@ -46,13 +46,28 @@ $f: $l"
     case " $WEB_ENGINES " in *" tomcat "*)
         checked=1
         if web_load_tomcat_conf server.xml; then
-            hit=$(strip_xml_comments "$TC_FILE" | grep -oE '(maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*"[^"]*"')
+            # 1.5.0 A22: AJP 가 아닌 모든 HTTP Connector 마다 maxPostSize/maxSwallowSize 가 있어야 한다(예전에는 Connector 하나에만
+            # 있어도 GOOD). 작은따옴표 값도 읽는다. 음수(-1 = 무제한)는 어느 Connector 든 VULN.
+            conns=$(tomcat_http_connectors "$TC_FILE")
+            ok=""; miss=""; neg=""
+            while IFS= read -r c; do
+                [ -n "$c" ] || continue
+                port=$(xml_attr "$c" port); mp=$(xml_attr "$c" maxPostSize); ms=$(xml_attr "$c" maxSwallowSize)
+                d="port=${port:-?}(maxPostSize=${mp:-미설정},maxSwallowSize=${ms:-미설정})"
+                if printf '%s %s' "$mp" "$ms" | grep -qE '(^|[[:space:]])[[:space:]]*-[0-9]'; then neg="$neg $d"
+                elif [ -z "$mp" ] && [ -z "$ms" ]; then miss="$miss $d"
+                else ok="$ok $d"; fi
+            done <<EOF_TC08
+$conns
+EOF_TC08
             evidence="$evidence
-[Tomcat] $TC_FILE maxPostSize/maxSwallowSize: ${hit:-미설정}"
-            if [ -z "$hit" ]; then
-                violations="$violations tomcat(미설정)"
-            elif printf '%s\n' "$hit" | grep -qE '"[[:space:]]*-[0-9]'; then
-                violations="$violations tomcat(음수 = 무제한)"
+[Tomcat] $TC_FILE HTTP Connector 별 용량 제한 - 설정됨:${ok:- 없음} / 미설정:${miss:- 없음} / 무제한(음수):${neg:- 없음}"
+            if [ -z "$conns" ]; then
+                manuals="$manuals tomcat(HTTP Connector 없음(AJP 전용 등) - 앞단 웹 서버의 업로드 제한을 확인)"
+            elif [ -n "$neg" ]; then
+                violations="$violations tomcat(음수 = 무제한:$neg)"
+            elif [ -n "$miss" ]; then
+                violations="$violations tomcat(미설정:$miss)"
             fi
         fi
     esac

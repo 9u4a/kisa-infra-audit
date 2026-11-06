@@ -173,7 +173,7 @@
       "envs": [
         "cisco_ios"
       ],
-      "deviation": null
+      "deviation": "판정 보완(A13): 참조 ACL 이 정의되지 않았거나 규칙이 없거나 출발지 any 를 허용(permit any, 0.0.0.0 255.255.255.255, extended permit <proto> any)하면 접근 제한이 없는 것으로 보고 취약 판정한다. deny 규칙 뒤에 permit any 가 오는 블랙리스트형 ACL 도 허용 출발지를 사실상 제한하지 않으므로 취약으로 본다(2026-11-06 유지보수자 결정)."
     },
     {
       "code": "N-07",
@@ -537,7 +537,7 @@
       "envs": [
         "cisco_ios"
       ],
-      "deviation": null
+      "deviation": "판정 보완(A13): 참조 ACL 이 정의되지 않았거나 규칙이 없거나 출발지 any 를 허용(permit any, 0.0.0.0 255.255.255.255, extended permit <proto> any)하면 접근 제한이 없는 것으로 보고 취약 판정한다. deny 규칙 뒤에 permit any 가 오는 블랙리스트형 ACL 도 허용 출발지를 사실상 제한하지 않으므로 취약으로 본다(2026-11-06 유지보수자 결정)."
     },
     {
       "code": "N-20",
@@ -761,7 +761,7 @@
       "envs": [
         "cisco_ios"
       ],
-      "deviation": null
+      "deviation": "판정 보완(A13): 참조 ACL 이 정의되지 않았거나 규칙이 없거나 출발지 any 를 허용(permit any, 0.0.0.0 255.255.255.255, extended permit <proto> any)하면 접근 제한이 없는 것으로 보고 취약 판정한다. deny 규칙 뒤에 permit any 가 오는 블랙리스트형 ACL 도 허용 출발지를 사실상 제한하지 않으므로 취약으로 본다(2026-11-06 유지보수자 결정)."
     },
     {
       "code": "N-28",

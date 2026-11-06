@@ -28,7 +28,7 @@ $rules"
     fi
 
     if command -v ufw >/dev/null 2>&1; then
-        ufw_status=$(ufw status 2>/dev/null)
+        ufw_status=$(run_to 15 ufw status 2>/dev/null)
         evidence="$evidence
 [ufw]
 $ufw_status"
@@ -38,12 +38,14 @@ $ufw_status"
 
     # 예전에는 규칙셋이 비어 있지만 않으면(정책 accept 체인만 있어도) GOOD 이었다(진단 검수 U-R3).
     # 이제 input 훅 체인이 "policy drop" 이거나 그 안에 drop/reject 규칙이 있어야 "제한"으로 본다.
+    # 1.5.0 A2: 정책 accept 에 "ct state invalid drop"(비정상 패킷 정리) 한 줄만 있어도 GOOD 이었다 - 연결 상태 invalid·
+    # ICMP 만 거르는 규칙은 IP·포트 접근 제한이 아니므로 세지 않는다.
     if command -v nft >/dev/null 2>&1; then
         nft_rules=$(run_to 15 nft list ruleset 2>/dev/null)
         nft_input=$(printf '%s\n' "$nft_rules" | awk '
             /^[[:space:]]*chain[[:space:]]/ { inhook = 0; next }
             /hook[[:space:]]+input/ { inhook = 1; if ($0 ~ /policy[[:space:]]+drop/) { print "policy drop"; exit } ; next }
-            inhook && /(^|[[:space:]])(drop|reject)([[:space:]]|;|$)/ { print "rule: " $0; exit }')
+            inhook && /(^|[[:space:]])(drop|reject)([[:space:]]|;|$)/ && tolower($0) !~ /invalid|icmp/ { print "rule: " $0; exit }')
         if [ -n "$nft_input" ]; then
             evidence="$evidence
 [nftables input 훅 제한: $(printf '%s' "$nft_input" | sed 's/^[[:space:]]*//')]"
@@ -63,7 +65,8 @@ $ufw_status"
             # 예전에는 INPUT 규칙이 1개라도(ACCEPT all 포함) 있으면 GOOD 이었다(진단 검수 U-R3) - 이제 기본 정책이
             # DROP 이거나 DROP/REJECT 규칙이 있어야 "제한"으로 본다.
             ipt=$(run_to 15 iptables -w -S INPUT 2>/dev/null)
-            ipt_restrict=$(printf '%s\n' "$ipt" | grep -E '^-P INPUT DROP|^-A INPUT .*-j (DROP|REJECT)' | head -n 3)
+            # 1.5.0 A2: 연결 상태 INVALID·ICMP 만 거르는 DROP 은 IP·포트 접근 제한이 아니므로 세지 않는다.
+            ipt_restrict=$(printf '%s\n' "$ipt" | grep -E '^-P INPUT DROP|^-A INPUT .*-j (DROP|REJECT)' | grep -viE 'INVALID|icmp' | head -n 3)
             evidence="$evidence
 [iptables -S INPUT]
 $ipt"

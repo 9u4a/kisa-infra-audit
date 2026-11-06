@@ -1,0 +1,26 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+interface GigabitEthernet0/0
+ ip address dhcp
+ ip mask-reply
+!
+interface Dialer1
+ ip address negotiated
+ no ip proxy-arp
+ no ip unreachables
+ no ip redirects
+!
+interface GigabitEthernet0/1
+ no ip address
+ shutdown
+!
+line vty 0 4
+ transport input ssh
+!
+end

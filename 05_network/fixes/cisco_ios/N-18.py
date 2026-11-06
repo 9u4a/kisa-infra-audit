@@ -27,7 +27,7 @@ def generate(ctx):
             continue
         new = cio.gen_secret()
         acl = info["acl"]
-        if not acl:
+        if cio.snmp_acl_problem(ctx, info):  # 미지정·미정의·any 허용 ACL 은 N-19 기준으로도 취약(A13) - 새 ACL 로 바꾼다
             if not added_acl_decl:
                 cmds.append(f"! 주의: 아래 {_ACL_NUM}번 ACL의 permit 대상을 실제 관리 시스템 IP로 반드시 교체할 것(N-19 겸용)")
                 cmds.append(f"access-list {_ACL_NUM} permit <관리-시스템-IP> <wildcard mask>")

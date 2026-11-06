@@ -1,5 +1,5 @@
 # WEB-08 (하) 웹 서비스 파일 업로드 및 다운로드 용량 제한 — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
-# 변경: Apache: LimitRequestBody 0→10485760(미설정 시 추가), Nginx: client_max_body_size 0→10m, Tomcat: maxPostSize·maxSwallowSize 음수→10485760(미설정 시 8080 Connector 에 추가)
+# 변경: Apache: LimitRequestBody 0→10485760(미설정 시 추가), Nginx: client_max_body_size 0→10m, Tomcat: maxPostSize·maxSwallowSize 음수→10485760(둘 다 없는 HTTP Connector 마다 maxPostSize 추가)
 # 가이드 권고에 맞춰 넉넉한 상한값(10MB)을 기본값으로 설정한다 - 실제 업무에 필요한 값은
 # 조직마다 다를 수 있지만, "제한이 전혀 없는" 상태보다 안전한 값이라 U-28류 문제는 아니다.
 run_fix() {
@@ -49,21 +49,20 @@ run_fix() {
         f="$tcdir/server.xml"
         if [ -f "$f" ]; then
             # checks/WEB-08.sh 와 같은 기준: XML 주석을 지운 뒤 찾고, 음수(-1 = 무제한)는 10MB 로 바꾼다(1.3.3)
-            hit=$(strip_xml_comments "$f" | grep -oE '(maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*"[^"]*"')
-            if printf '%s\n' "$hit" | grep -qE '"[[:space:]]*-[0-9]'; then
-                fix_backup "$f"
-                fix_sed_inplace "$f" -E 's/((maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*")[[:space:]]*-[0-9]+"/\110485760"/g'
+            hit=$(strip_xml_comments "$f" | grep -oE "(maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*(\"[^\"]*\"|'[^']*')")
+            backed=""
+            if printf '%s\n' "$hit" | grep -qE "[\"'][[:space:]]*-[0-9]"; then
+                fix_backup "$f"; backed=1
+                fix_sed_inplace "$f" -E "s/((maxPostSize|maxSwallowSize)[[:space:]]*=[[:space:]]*[\"'])[[:space:]]*-[0-9]+([\"'])/\\110485760\\3/g"
                 applied="$applied tomcat($f: 음수->10485760)"
-            elif [ -z "$hit" ]; then
-                fix_backup "$f"
-                # Connector 태그는 속성이 여러 줄에 걸쳐 있는 경우가 흔해(실제 tomcat:10 기본
-                # server.xml 로 실기 확인) 닫는 ">" 를 찾는 sed 대신, "<Connector" 문자열이
-                # 있는 그 줄에서 바로 뒤에 속성을 삽입한다(같은 줄에 port="8080" 도 함께 있음).
-                awk '
-                    !done && /<Connector[^>]*port="8080"/ { sub(/<Connector/, "<Connector maxPostSize=\"10485760\""); done=1 }
-                    { print }
-                ' "$f" > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
-                applied="$applied tomcat($f)"
+            fi
+            # checks/WEB-08.sh 와 같은 기준(1.5.0 A22): maxPostSize/maxSwallowSize 가 둘 다 없는 HTTP Connector 마다 maxPostSize 를
+            # 넣는다. 속성이 여러 줄에 걸친 Connector 도 "<Connector" 바로 뒤에 넣는다(lib/common_web.sh tomcat_connectors_add_attr).
+            miss=$(tomcat_http_connectors "$f" | grep -vcE '[[:space:]](maxPostSize|maxSwallowSize)[[:space:]]*=')
+            if [ "${miss:-0}" -gt 0 ]; then
+                [ -n "$backed" ] || fix_backup "$f"
+                tomcat_connectors_add_attr "$f" maxPostSize 10485760 '(maxPostSize|maxSwallowSize)' > "$f.kisa_tmp" && fix_write_back "$f.kisa_tmp" "$f"
+                applied="$applied tomcat($f: Connector ${miss}개 maxPostSize=10485760)"
             fi
         fi
     esac

@@ -50,9 +50,11 @@ def load_results(paths: list[str]) -> list[dict]:
     loaded = []
     for p in paths:
         try:
-            with open(p, encoding="utf-8-sig") as f:
+            # 1.5.0 C1: 증적에 UTF-8 이 아닌 바이트(EUC-KR 등)가 섞인 예전 버전의 결과도 병합한다 - 예전에는
+            # UnicodeDecodeError 로 병합 전체가 중단됐다. 잘못된 바이트는 U+FFFD 로 바꿔 읽는다.
+            with open(p, encoding="utf-8-sig", errors="replace") as f:
                 data = json.load(f)
-        except (OSError, json.JSONDecodeError) as e:
+        except (OSError, ValueError) as e:
             print(f"경고: {p} 를 읽을 수 없어 건너뜀: {e}", file=sys.stderr)
             continue
         data["_path"] = p

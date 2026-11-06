@@ -122,7 +122,8 @@ run.*을 직접 실행하세요.
 - `report.html` — 브라우저로 열람 (오프라인 단일 파일)
 - `summary.txt` / `run.log` — 요약 · 실행 로그
 
-모든 카테고리는 동일한 CLI 옵션 문자(`-l/-i/-g/-o/-h`)를 사용합니다.
+모든 카테고리는 동일한 CLI 옵션 문자(`-l/-i/-g/-o/-h`, 환경/엔진 지정이 필요한 카테고리는 `-e`)를 사용합니다.
+05_network 의 벤더 지정도 `-e` 입니다(예전 `-v` 는 하위 호환으로 계속 받습니다).
 
 ## 테스트
 매 push/PR마다 [`.github/workflows/test.yml`](.github/workflows/test.yml)이 자동으로
