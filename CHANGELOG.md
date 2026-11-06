@@ -5,6 +5,9 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+### Fixed
+- 08_dbms oracle 테스트: 기본 상태 진단을 DB 준비(OS 인증) 직후 바로 돌려, 리스너·FREEPDB1 등록이 덜 끝나면 SYSTEM@FREEPDB1 사전
+  접속 점검이 실패해 전 항목 ERROR(17건 불일치)로 FAIL 하던 일시 실패(CI run 42181792315) - run.sh 가 exit 4 면 30초 간격 최대 6회 재시도.
 
 ## [1.5.0] - 2026-11-06
 ### Added
