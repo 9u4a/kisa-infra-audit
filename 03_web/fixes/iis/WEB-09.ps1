@@ -1,5 +1,6 @@
 ﻿# WEB-09 (상) 웹 서비스 프로세스 권한 제한 [IIS] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # 변경: 사이트가 쓰는 애플리케이션 풀 중 processModel.identityType=LocalSystem → ApplicationPoolIdentity
+# 영향: 애플리케이션 풀 실행 계정 변경 — IIS 가 풀(작업자 프로세스)을 재시작하고, LocalSystem 권한에 기대던 애플리케이션은 권한 부족으로 실패할 수 있음
 # LocalSystem 으로 구동 중인 애플리케이션 풀을 ApplicationPoolIdentity(최소 권한 가상 계정)로
 # 전환한다. 이 계정은 IIS 가 각 풀마다 자동으로 만들어 관리하는 전용 계정이라, 특정 사용자
 # 계정을 새로 만들 필요가 없다(W-14/WEB-14 계열의 "계정 생성 필요" 문제가 아님).

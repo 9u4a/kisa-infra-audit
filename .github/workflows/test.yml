@@ -129,6 +129,11 @@ jobs:
         shell: pwsh
         run: ./lib/tests/locale_parse_tests.ps1
 
+      # G-01~03(1.6.0): 조치 정책 파일 파서·판정·옵션 검사 단위 테스트(정책 형식은 sh/Python 과 같은 명세). 진입점 dry-run 부분은 windows-integration 에서
+      - name: 조치 정책 파서 단위 테스트(pwsh 7)
+        shell: pwsh
+        run: ./lib/tests/fix_policy_tests.ps1
+
   network:
     # 05_network 는 오프라인 설정파일 분석이라 Docker/실제 장비가 필요 없다 - Cisco IOS
     # vuln/hardened 픽스처 2종으로 38항목 전체 판정 로직을 회귀 테스트한다(실제 장비
@@ -188,6 +193,12 @@ jobs:
         run: |
           $bootstrap = '${{ github.event.inputs.bootstrap_windows }}' -eq 'true'
           if ($bootstrap) { .\07_pc\tests\run_tests.ps1 -Bootstrap } else { .\07_pc\tests\run_tests.ps1 }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      # 1.6.0 G-01~03: policy parser unit tests + 02_windows/fix.ps1 policy-mode dry-run (no system change) on Windows PowerShell 5.1
+      - name: fix policy tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          .\lib\tests\fix_policy_tests.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # 1.4.0: 02_windows/07_pc 의 -Bootstrap 은 기대값과의 차이만 출력한다(파일을 쓰지 않음 - 도구 출력을 정답으로 굳히지 않기 위해).
 

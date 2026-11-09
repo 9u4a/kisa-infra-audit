@@ -22,7 +22,9 @@ param(
     [switch]$Force,
     [string]$Rollback = "",
     [Alias("o")][string]$OutBase = "",
-    [Alias("h")][switch]$Help
+    [Alias("h")][switch]$Help,
+    [string]$Policy = "",
+    [string]$Operator = ""
 )
 
 if ($Help) {
@@ -30,6 +32,7 @@ if ($Help) {
     Write-Host "  .\fix.ps1 -ResultJson <result.json>                        dry-run(미리보기만)"
     Write-Host "  .\fix.ps1 -ResultJson <result.json> -Items WEB-04,WEB-16 -Apply  지정 항목만 실제 적용"
     Write-Host "  .\fix.ps1 -ResultJson <result.json> -Apply -Yes            auto 등급 일괄 적용"
+    Write-Host "  -Policy <정책 파일> -Operator <실행자>  정책 모드: 정책이 승인한 항목만 비대화형 적용(변경 목록·confirm 확인 생략, -Apply 필요)"
     Write-Host "  -Force  다른 호스트·카테고리·7일 넘은 result.json 으로도 적용(주의)"
     Write-Host "  .\fix.ps1 -Rollback <output\host_03_fix_TS 디렉터리>        백업에서 원복"
     exit 0
@@ -42,6 +45,9 @@ $CategoryNum = "03"
 $CategoryName = "Web (IIS)"
 
 Import-Module (Join-Path $LibDir "Common.psm1") -Force
+
+# G-01(1.6.0): -Policy 에는 -Operator 필수, -Operator 단독 거부(변경 없음)
+if (-not (Test-FixPolicyArgs -Policy $Policy -Operator $Operator)) { exit 2 }
 
 # 실제로 바꾸는 경우(적용/원복)에만: 권한 확인 + 동시 실행 잠금(lib/Common.psm1, 운영 안전 기준 F1/F6).
 # 잠금은 아래 try/finally 로 정상 종료·오류·Ctrl+C 모두에서 해제한다.
@@ -78,6 +84,10 @@ try {
     $GuideByCode = @{}
     foreach ($it in $Guide.items) { $GuideByCode[$it.code] = $it }
 
+    # G-01(1.6.0): 정책 모드 - 형식 오류(줄 번호)·카테고리 불일치·만료·없는 코드·호스트 미등록이면 아무것도 바꾸지 않고 중단
+    $FixPolicy = Initialize-FixPolicy -Policy $Policy -CategoryNum $CategoryNum -KnownCodes @($Guide.items | ForEach-Object { $_.code })
+    if ($FixPolicy -and -not $FixPolicy.Ok) { exit 2 }
+
     # X-06: 이 컴퓨터·이 카테고리의 진단 결과인지 확인(실제 적용할 때만 - dry-run 은 무엇이든 미리보기 가능)
     if ($Apply -and -not (Test-FixResultTarget -ResultJson $ResultJson -Category "Web" -Force:$Force)) {
         exit 2
@@ -95,27 +105,37 @@ try {
     }
 
     # -Apply 시 실제로 바뀔 항목(auto 는 항목별 확인 없이 적용)을 먼저 보여주고 1회 확인(-Yes 로 생략)
-    if ($Apply -and -not (Confirm-FixPlan -Codes $VulnCodes -GuideByCode $GuideByCode -Yes:$Yes -FixDir (Join-Path $ScriptDir "fixes\iis"))) {
+    # 정책 모드는 정책 승인이 이 확인을 대신한다(G-01)
+    if ($Apply -and -not $FixPolicy -and -not (Confirm-FixPlan -Codes $VulnCodes -GuideByCode $GuideByCode -Yes:$Yes -FixDir (Join-Path $ScriptDir "fixes\iis"))) {
         Write-Host "중단 — 아무것도 변경하지 않았습니다. (비대화형 실행은 -Yes 로 이 확인을 생략할 수 있음)"
         exit 0
     }
 
     if (-not $OutBase) { $OutBase = Join-Path (Split-Path -Parent $ScriptDir) "output" }
     New-FixOutputDir -BaseDir $OutBase -CategoryNum $CategoryNum | Out-Null
+    if ($FixPolicy) { Start-FixAudit -Policy $FixPolicy -Operator $Operator -CategoryNum $CategoryNum -Apply:$Apply }
 
     Write-Host "=== 자동 조치 (도구 v$($Script:ToolVersion) / 가이드 $($Script:GuideVersion)) ===" -ForegroundColor Cyan
     Write-Host "카테고리   : $CategoryName"
     Write-Host "모드       : $(if ($Apply) { '실제 적용' } else { 'DRY-RUN (미리보기만, 아무 것도 바꾸지 않음)' })"
     Write-Host "대상 항목  : $($VulnCodes.Count)개 (진단 결과 중 VULN$(if ($Items) { ', -Items 필터 적용' }))"
+    if ($FixPolicy) { Write-Host "정책       : $($FixPolicy.Path) (승인자 $($FixPolicy.Approver), 만료 $($FixPolicy.Expires), 호스트 구역 [host:$($FixPolicy.HostSection)], 실행자 $Operator)" }
     Write-Host "----------------------------------------------------------------------"
 
-    $nApplied = 0; $nSkipped = 0; $nDeclined = 0; $nFailed = 0; $nManual = 0; $nPreview = 0
+    $nApplied = 0; $nSkipped = 0; $nDeclined = 0; $nFailed = 0; $nManual = 0; $nPreview = 0; $nPolicySkipped = 0
+    $failedCodes = @()
     $abortRun = $false
 
     foreach ($code in $VulnCodes) {
         $meta = $GuideByCode[$code]
         $title = if ($meta) { $meta.title } else { $code }
         $grade = if ($meta -and $meta.fix) { $meta.fix } else { "manual" }
+
+        $fixFile = Join-Path $ScriptDir "fixes\iis\$code.ps1"
+        $checkFile = Join-Path $ScriptDir "checks\iis\$code.ps1"
+
+        # G-01/G-02(1.6.0): 정책 미승인·호스트 제외·irreversible 플래그 없는 원복 불가/업무 영향 항목은 POLICY_SKIPPED
+        if (-not (Test-FixPolicyItem -Policy $FixPolicy -Code $code -Title $title -Grade $grade -FixFile $fixFile)) { $nPolicySkipped++; continue }
 
         if ($grade -eq "manual") {
             Write-Host "[$code] $title"
@@ -124,9 +144,6 @@ try {
             $nManual++
             continue
         }
-
-        $fixFile = Join-Path $ScriptDir "fixes\iis\$code.ps1"
-        $checkFile = Join-Path $ScriptDir "checks\iis\$code.ps1"
 
         if (-not (Test-Path $fixFile)) {
             Write-Host "[$code] $title"
@@ -139,13 +156,12 @@ try {
         if (-not $Apply) {
             Write-Host "[$code] $title"
             Write-Host "  등급: $grade (dry-run — 실제 적용하려면 -Apply 추가)"
-            $chg = Get-FixRollbackNote -File $fixFile -Label "변경"; if ($chg) { Write-Host "  변경: $chg" }
-            $rbn = Get-FixRollbackNote -File $fixFile; if ($rbn) { Write-Host "  원복: $rbn" -ForegroundColor Yellow }
+            Show-FixItemNotes -File $fixFile -Policy $FixPolicy -Code $code
             $nPreview++
             continue
         }
 
-        if ($grade -eq "confirm") {
+        if ($grade -eq "confirm" -and -not $FixPolicy) {
             if (-not (Read-FixConfirm -Prompt "[$code] $title`n  등급: confirm — 실제로 적용하시겠습니까? [y/N]")) {
                 Write-Host "  건너뜀 (사용자 미확인)"
                 "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`tDECLINED`t사용자가 확인하지 않음" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
@@ -193,7 +209,7 @@ try {
             $rbs = if (@($Global:FixRollbackFailures).Count -eq 0) { "FAILED_ROLLED_BACK" } else { "FAILED_NOT_ROLLED_BACK" }
             if ($rbs -eq "FAILED_NOT_ROLLED_BACK") { Write-Host "  원복하지 못한 부분(수동 확인 필요): $($Global:FixRollbackFailures -join ' / ')" -ForegroundColor Yellow }
             "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`t$rbs`tFixStatus=$($Global:FixStatus) detail=$($Global:FixDetail) recheck=$($Global:CheckStatus) $($Global:FixRollbackFailures -join ' / ')" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
-            $nFailed++
+            $nFailed++; $failedCodes += $code
         }
         Remove-Variable -Name FixCode -Scope Global -ErrorAction SilentlyContinue
         if ($abortRun) {
@@ -204,14 +220,9 @@ try {
     }
 
     Write-Host "----------------------------------------------------------------------"
-    if ($Apply) {
-        Write-Host "적용 완료: $nApplied, 실패(원복됨): $nFailed, 확인거부: $nDeclined, 스크립트없음: $nSkipped, 수동조치: $nManual"
-        Write-Host "백업 위치: $Global:FixBackupDir"
-        Write-Host "원복하려면: .\fix.ps1 -Rollback $Global:FixOutDir"
-    } else {
-        Write-Host "DRY-RUN 미리보기: $nPreview 건 (-Apply 로 실제 적용), 스크립트없음: $nSkipped, 수동조치: $nManual"
+    Write-FixRunSummary -Apply:$Apply -PolicyMode:([bool]$FixPolicy) -FailedCodes $failedCodes -Counts @{
+        Applied = $nApplied; Failed = $nFailed; Declined = $nDeclined; Skipped = $nSkipped; Manual = $nManual; Preview = $nPreview; PolicySkipped = $nPolicySkipped
     }
-    Write-Host "로그: $Global:FixLog"
 } finally {
     Exit-FixLock -Mutex $FixLock
 }

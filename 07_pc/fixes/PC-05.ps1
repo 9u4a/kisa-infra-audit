@@ -1,5 +1,6 @@
 ﻿# PC-05 (상) 항목의 불필요한 서비스 제거 [fix: auto]
 # 변경: RemoteRegistry/SSDPSRV/upnphost/WerSvc/TapiSrv/Fax 중 실행 중이거나 시작 유형이 사용 안 함이 아닌 서비스를 중지 + 시작 유형 사용 안 함
+# 영향: 실행 중인 RemoteRegistry/SSDPSRV/upnphost/WerSvc/TapiSrv/Fax 서비스 중지·사용 안 함 — 이 서비스를 쓰던 기능(원격 관리·팩스 등) 중단
 # checks/PC-05.ps1 과 동일한 대상 목록 중 Running 이거나 시작 유형이 Disabled 가 아닌 서비스를
 # 중지+비활성화한다(A8: check 가 트리거 시작으로 잠시 Stopped 인 서비스도 취약으로 보므로 같은 기준).
 

@@ -883,11 +883,12 @@ function New-FixOutputDir {
     $Global:FixLog = Join-Path $Global:FixOutDir "changes.log"
     # 감사 로그(운영 안전 기준 F6): 누가 언제 어느 컴퓨터에서 바꿨는지 첫 줄에 남긴다. 각 기록 줄 앞에는
     # fix.ps1 이 시각을 붙인다(형식: 시각<TAB>코드<TAB>등급<TAB>결과<TAB>상세).
-    "# 조치 실행 시작 $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') / 컴퓨터 $($env:COMPUTERNAME) / 실행자 $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) / 도구 v$($Script:ToolVersion)" |
+    "# 조치 실행 시작 $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') / 컴퓨터 $($env:COMPUTERNAME) / 실행자 $(Get-FixLoginUser) / 도구 v$($Script:ToolVersion)" |
         Out-File -FilePath $Global:FixLog -Encoding utf8
     $Global:FixSecPolicyBackupFile = $null
     $Global:FixSecPolicyCodes = @()
     $Global:FixRollbackFailures = @()
+    $Global:FixAuditFile = $null   # 정책 모드(Start-FixAudit)에서만 설정
     return $Global:FixOutDir
 }
 
@@ -985,8 +986,277 @@ function Confirm-FixPlan {
         $chg = if ($FixDir) { Get-FixRollbackNote -File (Join-Path $FixDir "$c.ps1") -Label "변경" } else { "" }
         if ($chg -and $g -in @("auto", "confirm")) { Write-Host "            └ 변경: $chg" }
         if ($rb -and $g -in @("auto", "confirm")) { Write-Host "            └ 원복: $rb" -ForegroundColor Yellow }
+        $imp = if ($FixDir) { Get-FixRollbackNote -File (Join-Path $FixDir "$c.ps1") -Label "영향" } else { "" }
+        if ($imp -and $g -in @("auto", "confirm")) { Write-Host "            └ 영향: $imp" -ForegroundColor Yellow }
     }
     return (Read-FixConfirm -Prompt "위 목록대로 진행하시겠습니까? (auto $nAuto 건은 추가 확인 없이 적용됨) [y/N]")
+}
+
+function Show-FixItemNotes {
+    <# dry-run 항목 표시: 조치 파일 머리말의 변경/원복/영향 + (정책 모드면) 정책 판정 #>
+    param([Parameter(Mandatory)][string]$File, $Policy = $null, [string]$Code = "")
+    $chg = Get-FixRollbackNote -File $File -Label "변경"; if ($chg) { Write-Host "  변경: $chg" }
+    $rbn = Get-FixRollbackNote -File $File; if ($rbn) { Write-Host "  원복: $rbn" -ForegroundColor Yellow }
+    $imp = Get-FixRollbackNote -File $File -Label "영향"; if ($imp) { Write-Host "  영향: $imp" -ForegroundColor Yellow }
+    if ($Policy -and $Code) {
+        $d = Get-FixPolicyDecision -Policy $Policy -Code $Code -FixFile $File
+        if ($d.Approved) { Write-Host "  정책: $($d.Reason) - 적용 예정" }
+    }
+}
+
+# ---- 조치 정책 모드 (1.6.0 G-01·G-02·G-03) ---------------------------------------------
+# 정책 파일(-Policy) 이 미리 승인한 항목만 비대화형으로 적용한다. 형식은 sh(lib/common_fix.sh)·Python(05_network)과 같다:
+#   머리말: category=NN / expires=YYYY-MM-DD / approver=이름 (각 정확히 1회) + 승인 코드 줄("코드" 또는 "코드:irreversible")
+#   [host:이름] 구역: "-코드"(그 호스트에서 제외) 줄만. [host:*] = 이름이 맞는 구역이 없을 때 적용. 둘 다 없으면 거부.
+#   UTF-8(BOM 허용)·CRLF 허용, 줄 앞뒤 공백 제거, 빈 줄·# 주석 무시. 형식 오류는 줄 번호와 함께 모아 보고(진입점 exit 2).
+# 조치 파일 머리말에 "# 원복:"(F4) 또는 "# 영향:"(F5) 이 있으면 정책에 "코드:irreversible" 로 적혀 있어야 적용한다(G-02).
+
+function Get-FixHostName {
+    <# 진단 결과(result.json host)·정책 [host:] 비교에 쓰는 호스트 이름(Windows 는 COMPUTERNAME) #>
+    if ($env:COMPUTERNAME) { return $env:COMPUTERNAME }
+    return [System.Environment]::MachineName
+}
+
+function Get-FixLoginUser {
+    <# 실제 로그인 계정(감사 기록 login_user). Linux pwsh 에서는 WindowsIdentity 가 없어 UserName 으로 대신 #>
+    try { return [System.Security.Principal.WindowsIdentity]::GetCurrent().Name } catch { }
+    return [System.Environment]::UserName
+}
+
+function Test-FixPolicyArgs {
+    <# -Policy 에는 -Operator 필수, -Operator 단독은 거부. 통과하면 $true(진입점은 $false 면 exit 2) #>
+    param([string]$Policy = "", [string]$Operator = "")
+    if ($Policy -and -not "$Operator".Trim()) {
+        Write-Host "오류: -Policy 에는 -Operator <조치 실행자 이름> 이 필요합니다(감사 기록용, 변경 없음)." -ForegroundColor Red
+        return $false
+    }
+    if (-not $Policy -and $Operator) {
+        Write-Host "오류: -Operator 는 -Policy <정책 파일> 과 함께만 쓸 수 있습니다(변경 없음)." -ForegroundColor Red
+        return $false
+    }
+    if ($Operator -match '[\x00-\x1f\x7f]') {
+        Write-Host "오류: -Operator 에 제어 문자(줄바꿈 등)를 쓸 수 없습니다(감사 기록 위조 방지, 변경 없음)." -ForegroundColor Red
+        return $false
+    }
+    return $true
+}
+
+function Read-FixPolicy {
+    <# 정책 파일을 읽고 검증한다. 반환 객체: Ok(bool), Errors(문자열 배열 - "줄 N: ..."), Path(절대 경로), Sha256(소문자 hex),
+       Category, Expires, Approver, Codes(코드 → irreversible 여부, 대소문자 구분), HostName, HostSection(맞은 구역 이름 또는 "*"),
+       Excluded(이 호스트에서 제외할 코드). 코드는 -KnownCodes(카테고리 guide.json 항목 코드)에 있어야 한다(오타 방지). #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$CategoryNum,
+        [Parameter(Mandatory)][string[]]$KnownCodes,
+        [string]$HostName = "",
+        [string]$Today = ""      # yyyy-MM-dd (테스트용, 기본은 오늘)
+    )
+    if (-not $HostName) { $HostName = Get-FixHostName }
+    if (-not $Today) { $Today = (Get-Date).ToString("yyyy-MM-dd") }
+    $res = [PSCustomObject]@{
+        Ok = $false; Errors = @(); Path = ""; Sha256 = ""; Category = ""; Expires = ""; Approver = ""
+        Codes = (New-Object 'System.Collections.Generic.Dictionary[string,bool]' ([System.StringComparer]::Ordinal))
+        HostName = $HostName; HostSection = ""; Excluded = @()
+    }
+    $errs = New-Object System.Collections.Generic.List[string]
+    try {
+        $full = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).ProviderPath
+        $text = [System.IO.File]::ReadAllText($full, (New-Object System.Text.UTF8Encoding($false)))
+        $res.Path = $full
+        $res.Sha256 = (Get-FileHash -LiteralPath $full -Algorithm SHA256 -ErrorAction Stop).Hash.ToLowerInvariant()
+    } catch {
+        $res.Errors = @("정책 파일을 읽을 수 없음: $Path ($($_.Exception.Message))")
+        return $res
+    }
+    $text = $text.TrimStart([char]0xFEFF)
+    $known = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+    foreach ($k in $KnownCodes) { [void]$known.Add("$k") }
+
+    $hdr = @{}                 # 키 → @{ Value; Line }
+    $codeLine = @{}            # 승인 코드 → 처음 나온 줄 (Codes 와 같은 키, 대소문자 구분은 Codes 로)
+    $sections = @{}            # 소문자 호스트 이름 → @{ Name; Line; Excl(HashSet) }
+    $cur = $null               # $null = 머리말 구역
+    $lines = $text -split "`n"
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        $ln = $i + 1
+        $t = $lines[$i].Trim()
+        if ($t -eq "" -or $t.StartsWith("#")) { continue }
+        if ($t -match '^\[host:(.*)\]$') {
+            $name = $Matches[1].Trim()
+            $cur = @{ Name = $name; Line = $ln; Excl = (New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)) }
+            if (-not $name) { $errs.Add("줄 ${ln}: [host:] 구역의 호스트 이름이 비어 있음"); continue }
+            $key = $name.ToLowerInvariant()
+            if ($sections.ContainsKey($key)) { $errs.Add("줄 ${ln}: [host:$name] 구역 중복(처음: 줄 $($sections[$key].Line))") }
+            else { $sections[$key] = $cur }
+            continue
+        }
+        if ($t.StartsWith("[")) {
+            $errs.Add("줄 ${ln}: 알 수 없는 구역 '$t' ([host:이름] 만 허용)")
+            $cur = @{ Name = ""; Line = $ln; Excl = (New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)) }
+            continue
+        }
+        if ($null -eq $cur) {
+            if ($t -match '^([^=]*)=(.*)$') {
+                $k = $Matches[1].Trim(); $v = $Matches[2].Trim()
+                if ($k -cnotin @("category", "expires", "approver")) { $errs.Add("줄 ${ln}: 알 수 없는 키 '$k' (category/expires/approver 만 허용)") }
+                elseif ($hdr.ContainsKey($k)) { $errs.Add("줄 ${ln}: $k= 중복(처음: 줄 $($hdr[$k].Line))") }
+                else { $hdr[$k] = @{ Value = $v; Line = $ln } }
+                continue
+            }
+            if ($t -match '^([A-Za-z]+-[0-9]+)(:(.*))?$') {
+                $code = $Matches[1]; $flag = $Matches[3]; $hasFlag = [bool]$Matches[2]
+                if ($hasFlag -and $flag -cne "irreversible") { $errs.Add("줄 ${ln}: 알 수 없는 표시 '${code}:$flag' (':irreversible' 만 허용)"); continue }
+                if (-not $known.Contains($code)) { $errs.Add("줄 ${ln}: guide.json 에 없는 코드 '$code' (카테고리 $CategoryNum)"); continue }
+                if ($res.Codes.ContainsKey($code)) { $errs.Add("줄 ${ln}: 코드 $code 중복(처음: 줄 $($codeLine[$code]))"); continue }
+                $res.Codes[$code] = $hasFlag
+                $codeLine[$code] = $ln
+                continue
+            }
+            $errs.Add("줄 ${ln}: 해석할 수 없는 줄 '$t' (키=값, 코드, 코드:irreversible, [host:이름] 만 허용)")
+            continue
+        }
+        if ($t -match '^-([A-Za-z]+-[0-9]+)$') {
+            $code = $Matches[1]
+            if (-not $known.Contains($code)) { $errs.Add("줄 ${ln}: guide.json 에 없는 코드 '$code' (카테고리 $CategoryNum)"); continue }
+            if (-not $cur.Excl.Add($code)) { $errs.Add("줄 ${ln}: [host:$($cur.Name)] 구역에서 -$code 중복") }
+            continue
+        }
+        $errs.Add("줄 ${ln}: [host:] 구역에는 '-코드'(제외) 줄만 허용 - '$t'")
+    }
+
+    foreach ($k in @("category", "expires", "approver")) {
+        if (-not $hdr.ContainsKey($k)) { $errs.Add("머리말에 $k= 가 없음(첫 [host:] 구역 앞에 정확히 1회 필요)") }
+    }
+    if ($hdr.ContainsKey("category")) {
+        $c = $hdr["category"]; $res.Category = $c.Value
+        if ($c.Value -cnotin @("01", "02", "03", "05", "07", "08")) { $errs.Add("줄 $($c.Line): category=$($c.Value) 는 허용되지 않음(01/02/03/05/07/08)") }
+        elseif ($c.Value -ne $CategoryNum) { $errs.Add("줄 $($c.Line): category=$($c.Value) 가 실행 카테고리($CategoryNum)와 다름") }
+    }
+    if ($hdr.ContainsKey("expires")) {
+        $e = $hdr["expires"]; $res.Expires = $e.Value
+        $d = [datetime]::MinValue
+        if ($e.Value -notmatch '^\d{4}-\d{2}-\d{2}$' -or -not [datetime]::TryParseExact($e.Value, "yyyy-MM-dd", [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$d)) {
+            $errs.Add("줄 $($e.Line): expires=$($e.Value) 는 YYYY-MM-DD 날짜가 아님")
+        } elseif ([string]::CompareOrdinal($Today, $e.Value) -gt 0) {
+            $errs.Add("줄 $($e.Line): 정책이 만료됨(expires=$($e.Value), 오늘 $Today)")
+        }
+    }
+    if ($hdr.ContainsKey("approver")) {
+        $a = $hdr["approver"]; $res.Approver = $a.Value
+        if (-not $a.Value) { $errs.Add("줄 $($a.Line): approver= 가 비어 있음") }
+    }
+    $hk = "$HostName".ToLowerInvariant()
+    $sec = $null
+    if ($hk -and $hk -ne "*" -and $sections.ContainsKey($hk)) { $sec = $sections[$hk] }
+    elseif ($sections.ContainsKey("*")) { $sec = $sections["*"] }
+    if ($sec) { $res.HostSection = $sec.Name; $res.Excluded = @($sec.Excl) }
+    else { $errs.Add("정책에 없는 호스트: $HostName ([host:$HostName] 또는 [host:*] 구역이 필요)") }
+
+    $res.Errors = @($errs)
+    $res.Ok = ($errs.Count -eq 0)
+    return $res
+}
+
+function Get-FixPolicyDecision {
+    <# 정책 모드에서 한 항목의 적용 여부. 반환 @{ Approved; Reason } - 미승인 사유는 "정책 미승인..." 또는 "irreversible 플래그 필요: ..." #>
+    param([Parameter(Mandatory)]$Policy, [Parameter(Mandatory)][string]$Code, [string]$FixFile = "")
+    if (-not $Policy.Codes.ContainsKey($Code)) { return @{ Approved = $false; Reason = "정책 미승인" } }
+    if (@($Policy.Excluded | Where-Object { $_ -ceq $Code }).Count -gt 0) {
+        return @{ Approved = $false; Reason = "정책 미승인(호스트 제외: [host:$($Policy.HostSection)])" }
+    }
+    $irr = $Policy.Codes[$Code]
+    if ($FixFile) {
+        $notes = @()
+        $rb = Get-FixRollbackNote -File $FixFile; if ($rb) { $notes += "원복: $rb" }
+        $imp = Get-FixRollbackNote -File $FixFile -Label "영향"; if ($imp) { $notes += "영향: $imp" }
+        if ($notes.Count -gt 0 -and -not $irr) {
+            return @{ Approved = $false; Reason = "irreversible 플래그 필요: $($notes -join ' / ')" }
+        }
+    }
+    return @{ Approved = $true; Reason = $(if ($irr) { "정책 승인(irreversible)" } else { "정책 승인" }) }
+}
+
+function Test-FixPolicyItem {
+    <# 진입점 항목 루프 맨 앞에서 호출: 정책 모드가 아니거나 승인된 항목이면 $true. 미승인이면 화면·changes.log 에
+       POLICY_SKIPPED 를 남기고 $false (진입점은 건너뛰고 정책 제외 건수를 센다) #>
+    param($Policy, [Parameter(Mandatory)][string]$Code, [string]$Title = "", [string]$Grade = "", [string]$FixFile = "")
+    if (-not $Policy) { return $true }
+    $d = Get-FixPolicyDecision -Policy $Policy -Code $Code -FixFile $FixFile
+    if ($d.Approved) { return $true }
+    Write-Host "[$Code] $Title"
+    Write-Host "  POLICY_SKIPPED — $($d.Reason)" -ForegroundColor Yellow
+    if ($Global:FixLog) {
+        "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$Code`t$Grade`tPOLICY_SKIPPED`t$($d.Reason)" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+    }
+    return $false
+}
+
+function Initialize-FixPolicy {
+    <# 진입점용: -Policy 가 없으면 $null(대화형 모드), 있으면 Read-FixPolicy 결과. 형식 오류면 줄 번호와 함께 출력하고
+       Ok=$false 객체를 돌려준다(진입점은 exit 2 - 아무것도 바꾸지 않음) #>
+    param([string]$Policy = "", [Parameter(Mandatory)][string]$CategoryNum, [Parameter(Mandatory)][string[]]$KnownCodes)
+    if (-not $Policy) { return $null }
+    $p = Read-FixPolicy -Path $Policy -CategoryNum $CategoryNum -KnownCodes $KnownCodes
+    if (-not $p.Ok) {
+        Write-Host "정책 파일 거부($Policy) - 아무것도 바꾸지 않고 중단:" -ForegroundColor Red
+        $p.Errors | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    }
+    return $p
+}
+
+function Write-FixAuditLine {
+    param([Parameter(Mandatory)][string[]]$Lines)
+    if (-not $Global:FixAuditFile) { return }
+    $nl = [System.Environment]::NewLine
+    [System.IO.File]::AppendAllText($Global:FixAuditFile, (($Lines -join $nl) + $nl), (New-Object System.Text.UTF8Encoding($false)))
+    if ($Global:FixLog) { $Lines | ForEach-Object { "# $_" } | Out-File -FilePath $Global:FixLog -Append -Encoding utf8 }
+}
+
+function Start-FixAudit {
+    <# G-03: 정책 모드 감사 기록 시작. New-FixOutputDir 직후 호출 - 출력 폴더 audit.txt 와 changes.log 머리(# 로 시작)에 키=값 기록.
+       비밀값은 쓰지 않는다(S5) #>
+    param([Parameter(Mandatory)]$Policy, [Parameter(Mandatory)][string]$Operator, [Parameter(Mandatory)][string]$CategoryNum, [switch]$Apply)
+    $Global:FixAuditFile = Join-Path $Global:FixOutDir "audit.txt"
+    Write-FixAuditLine -Lines @(
+        "operator=$($Operator.Trim())",
+        "login_user=$(Get-FixLoginUser)",
+        "approver=$($Policy.Approver)",
+        "policy_file=$($Policy.Path)",
+        "policy_sha256=$($Policy.Sha256)",
+        "policy_expires=$($Policy.Expires)",
+        "started_at=$((Get-Date).ToString("yyyy-MM-dd'T'HH:mm:sszzz"))",
+        "host=$(Get-FixHostName)",
+        "category=$CategoryNum",
+        "mode=$(if ($Apply) { 'apply' } else { 'dry-run' })"
+    )
+}
+
+function Write-FixRunSummary {
+    <# 진입점 종료 요약(건수 + 실패 코드 목록) + 정책 모드면 감사 기록 마무리(finished_at·건수).
+       Counts 키: Applied, Failed, Declined, Skipped, Manual, Preview, PolicySkipped #>
+    param([Parameter(Mandatory)][hashtable]$Counts, [string[]]$FailedCodes = @(), [switch]$Apply, [switch]$PolicyMode)
+    $n = @{}
+    foreach ($k in @("Applied", "Failed", "Declined", "Skipped", "Manual", "Preview", "PolicySkipped")) { $n[$k] = if ($Counts.ContainsKey($k)) { [int]$Counts[$k] } else { 0 } }
+    $pol = if ($PolicyMode) { ", 정책 제외(POLICY_SKIPPED): $($n.PolicySkipped)" } else { "" }
+    if ($Apply) {
+        Write-Host "적용 완료: $($n.Applied), 실패(원복됨): $($n.Failed), 확인거부: $($n.Declined), 스크립트없음: $($n.Skipped), 수동조치: $($n.Manual)$pol"
+        if (@($FailedCodes).Count -gt 0) { Write-Host "실패 항목: $(@($FailedCodes) -join ', ')" -ForegroundColor Yellow }
+        Write-Host "백업 위치: $Global:FixBackupDir"
+        Write-Host "원복하려면: .\fix.ps1 -Rollback $Global:FixOutDir"
+    } else {
+        Write-Host "DRY-RUN 미리보기: $($n.Preview) 건 (-Apply 로 실제 적용), 스크립트없음: $($n.Skipped), 수동조치: $($n.Manual)$pol"
+    }
+    if ($PolicyMode -and $Global:FixAuditFile) {
+        Write-FixAuditLine -Lines @(
+            "finished_at=$((Get-Date).ToString("yyyy-MM-dd'T'HH:mm:sszzz"))",
+            "applied=$($n.Applied)", "failed=$($n.Failed)", "declined=$($n.Declined)", "skipped=$($n.Skipped)",
+            "manual=$($n.Manual)", "preview=$($n.Preview)", "policy_skipped=$($n.PolicySkipped)",
+            "failed_codes=$(@($FailedCodes) -join ',')"
+        )
+        Write-Host "감사 기록: $Global:FixAuditFile"
+    }
+    Write-Host "로그: $Global:FixLog"
 }
 
 function Enter-FixLock {
@@ -1903,4 +2173,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion
