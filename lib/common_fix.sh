@@ -93,8 +93,11 @@ fix_prepare_dir() {
     FIX_LOG="$FIX_OUT_DIR/changes.log"
     # 감사 로그(운영 안전 기준 F6): 누가 언제 어느 호스트에서 바꿨는지 첫 줄에 남기고, 각 줄 앞에는
     # fix_log_stamp 가 시각을 붙인다(형식: 시각<TAB>코드<TAB>등급<TAB>결과<TAB>상세).
+    # 1.6.0 G-03: 정책 모드면 그 앞(맨 앞)에 감사 기록(키=값 줄, audit.txt 와 같은 내용)을 둔다.
+    : > "$FIX_LOG"
+    fix_audit_begin
     printf '# 조치 실행 시작 %s / 호스트 %s / 실행자 %s(uid=%s, sudo=%s) / 도구 v%s\n' \
-        "$(date '+%Y-%m-%d %H:%M:%S %z')" "$_host" "$(id -un 2>/dev/null)" "$(id -u 2>/dev/null)" "${SUDO_USER:-없음}" "$TOOL_VERSION" > "$FIX_LOG"
+        "$(date '+%Y-%m-%d %H:%M:%S %z')" "$_host" "$(id -un 2>/dev/null)" "$(id -u 2>/dev/null)" "${SUDO_USER:-없음}" "$TOOL_VERSION" >> "$FIX_LOG"
 }
 
 # fix_log_stamp — 표준입력의 각 줄 앞에 시각을 붙인다(changes.log 기록용)
@@ -548,7 +551,252 @@ fix_change_note() {
     [ -f "$1" ] && sed -n '1,12s/^# 변경: //p' "$1" | head -n1
 }
 
+# fix_impact_note <조치 파일> — 조치 파일 머리말의 "# 영향: ..." 표기(1.6.0 G-02). 적용하는 순간 운영 중인 업무가 끊길 수 있는
+# 조치(서비스·프로세스 중지, 세션 끊김, 계정 잠금·쉘 변경, 쓰는 중인 접근 차단, 서비스 재시작)만 붙인다(F5). 없으면 빈 값.
+fix_impact_note() {
+    [ -f "$1" ] && sed -n '1,12s/^# 영향: //p' "$1" | head -n1
+}
+
+# ---- 조치 정책 모드 (1.6.0 G-01·G-02·G-03) ------------------------------------------------------------
+# fix.sh --policy <파일> --operator <이름>: 승인된 항목만 묻지 않고 적용한다(무인 조치). 정책 파일은 sh·PowerShell·Python 이
+# 같은 규칙으로 읽는 줄 단위 텍스트다(UTF-8, BOM·CRLF 허용, 줄 앞뒤 공백 무시, 맨 앞 # 은 주석):
+#   머리말(첫 [host: 앞): category=<01|02|03|05|07|08> · expires=YYYY-MM-DD(그날까지 유효) · approver=<이름> 각 정확히 1회,
+#                        승인 코드 한 줄씩 "코드" 또는 "코드:irreversible"(guide.json 에 있는 코드만, 중복 금지). 다른 키=값 은 거부.
+#   [host:이름] 구역   : "-코드" 줄만(그 호스트에서 제외, 이름은 대소문자 무시). [host:*] 는 이름이 맞는 구역이 없는 모든 호스트.
+#   실행 호스트(host_name)와 같은 구역 → 없으면 [host:*] → 둘 다 없으면 거부. 형식 오류는 줄 번호와 함께 보고하고 exit 2(변경 없음).
+# G-02: 머리말에 "# 원복:"(F4) 또는 "# 영향:"(F5) 이 있는 조치는 정책에 "코드:irreversible" 로 적혀 있어야 적용한다.
+# 정책은 확인(fix_confirm_plan·confirm 등급 y/N)만 대신한다 - X-06(fix_check_result_target)·비밀번호 직접 입력(터미널 필요)은 그대로.
+POLICY_SET=0; POLICY_FILE=""; POLICY_OPERATOR=""; POLICY_OPERATOR_SET=0
+POLICY_CODES=" "; POLICY_IRREV=" "; POLICY_EXCL=" "; POLICY_SECTION=""; POLICY_APPROVER=""; POLICY_EXPIRES=""
+POLICY_SHA256=""; POLICY_ABS=""; POLICY_HOST=""; POLICY_REASON=""; AUDIT_FILE=""
+
+# fix_policy_args_check <ROLLBACK_DIR> — 옵션 조합 확인(fix.sh 가 옵션 해석 직후 부른다). 잘못되면 변경 없이 exit 2.
+fix_policy_args_check() {
+    if [ "$POLICY_OPERATOR_SET" -eq 1 ] && [ "$POLICY_SET" -ne 1 ]; then
+        log_error "--operator 는 --policy <정책 파일> 과 함께만 씁니다(변경 없음)."; exit 2
+    fi
+    [ "$POLICY_SET" -eq 1 ] || return 0
+    # 원복(--rollback)은 정책과 무관하다 - 정책 옵션은 무시하고 원복만 한다(sh·PowerShell 공통 해석)
+    if [ -n "${1:-}" ]; then
+        log_warn "--rollback 에서는 --policy/--operator 를 쓰지 않습니다(무시하고 원복만 진행)."
+        POLICY_SET=0; return 0
+    fi
+    if [ -z "$POLICY_FILE" ]; then log_error "--policy 에 정책 파일 경로가 필요합니다(변경 없음)."; exit 2; fi
+    _pa_op=$(printf '%s' "$POLICY_OPERATOR" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    if [ -z "$_pa_op" ]; then
+        log_error "정책 모드(--policy)에는 실제 실행자 이름 --operator <이름> 이 필요합니다(감사 기록 G-03, 변경 없음)."; exit 2
+    fi
+    # 감사 기록이 키=값 한 줄이라 줄바꿈·탭이 들어간 이름은 받지 않는다(기록 위조 방지)
+    _pa_nl='
+'
+    case "$_pa_op" in *"$_pa_nl"*)
+        log_error "--operator 이름에 제어 문자(줄바꿈·탭 등)를 쓸 수 없습니다(변경 없음)."; exit 2 ;;
+    esac
+    if [ "$(printf '%s' "$_pa_op" | tr -d '\001-\037\177')" != "$_pa_op" ]; then
+        log_error "--operator 이름에 제어 문자(줄바꿈·탭 등)를 쓸 수 없습니다(변경 없음)."; exit 2
+    fi
+    POLICY_OPERATOR=$_pa_op
+    return 0
+}
+
+# fix_sha256 <파일> — SHA-256 16진수(소문자). sha256sum → shasum -a 256 → openssl 순서, 셋 다 없으면 1.
+fix_sha256() {
+    _sh_v=""
+    if command -v sha256sum >/dev/null 2>&1; then _sh_v=$(sha256sum < "$1" 2>/dev/null | awk '{ print $1 }')
+    elif command -v shasum >/dev/null 2>&1; then _sh_v=$(shasum -a 256 < "$1" 2>/dev/null | awk '{ print $1 }')
+    elif command -v openssl >/dev/null 2>&1; then _sh_v=$(openssl dgst -sha256 < "$1" 2>/dev/null | awk '{ print $NF }')
+    fi
+    _sh_v=$(printf '%s' "$_sh_v" | tr '[:upper:]' '[:lower:]')
+    case "$_sh_v" in ????????????????????????????????????????????????????????????????) ;; *) return 1 ;; esac
+    case "$_sh_v" in *[!0-9a-f]*) return 1 ;; esac
+    printf '%s\n' "$_sh_v"
+}
+
+# _policy_parse <정책 파일> <카테고리 번호> <guide.json> <호스트> <오늘 YYYY-MM-DD> — 정책 파일을 검증·해석한다(표준출력).
+#   오류: "ERR<TAB>줄 번호(또는 -)<TAB>사유" 줄(하나라도 있으면 거부) / 정상: APPROVER·EXPIRES·SECTION·CODE<TAB>코드<TAB>irreversible(0|1)<TAB>제외(0|1)
+# 줄 번호는 파일의 실제 줄(주석·빈 줄 포함, 1부터). 바이트 단위(LC_ALL=C)라 호스트 이름 대소문자 무시는 ASCII 만 해당한다.
+_policy_parse() {
+    awk -v cat="$2" -v codes="$(guide_list_codes "$3" | tr '\n' ' ')" -v host="$4" -v today="$5" -v bom="$(printf '\357\273\277')" '
+        function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+        function err(ln, msg) { print "ERR\t" ln "\t" msg; nerr++ }
+        function isdate(s,   y, m, d) {
+            if (s !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) return 0
+            m = substr(s, 6, 2) + 0; d = substr(s, 9, 2) + 0
+            return (m >= 1 && m <= 12 && d >= 1 && d <= 31)
+        }
+        BEGIN { n = split(codes, cl, " "); for (i = 1; i <= n; i++) valid[cl[i]] = 1; insect = 0; na = 0; nerr = 0 }
+        {
+            line = $0
+            if (NR == 1 && substr(line, 1, 3) == bom) line = substr(line, 4)
+            sub(/\r$/, "", line)
+            line = trim(line)
+            if (line == "" || substr(line, 1, 1) == "#") next
+            if (substr(line, 1, 1) == "[") {
+                if (line !~ /^\[host:[^]]*\]$/) { err(NR, "구역 형식 오류(허용: [host:이름]): " line); next }
+                oname = trim(substr(line, 7, length(line) - 7)); name = tolower(oname)
+                if (name == "") { err(NR, "호스트 이름이 비어 있음: " line); next }
+                if (name in sect) err(NR, "같은 호스트 구역이 두 번 나옴: " line)
+                else orig[name] = oname
+                sect[name] = 1; cur = name; insect = 1; next
+            }
+            if (insect) {
+                if (line !~ /^-[A-Z]+-[0-9]+$/) { err(NR, "호스트 구역에는 \"-코드\" 줄만 쓸 수 있음: " line); next }
+                c = substr(line, 2)
+                if (!(c in valid)) err(NR, "이 카테고리 guide.json 에 없는 코드: " c)
+                else if ((cur, c) in excl) err(NR, "같은 구역에서 같은 코드를 두 번 제외함: " c)
+                excl[cur, c] = 1; next
+            }
+            p = index(line, "=")
+            if (p > 0) {
+                k = trim(substr(line, 1, p - 1)); v = trim(substr(line, p + 1))
+                if (k != "category" && k != "expires" && k != "approver") { err(NR, "알 수 없는 키: " k); next }
+                if (k in hdr) { err(NR, k "= 가 두 번 나옴"); next }
+                hdr[k] = v; hl[k] = NR; next
+            }
+            c = line; irr = 0
+            if (c ~ /:irreversible$/) { c = substr(c, 1, length(c) - 13); irr = 1 }
+            if (c !~ /^[A-Z]+-[0-9]+$/) { err(NR, "형식 오류(코드 또는 코드:irreversible 이어야 함): " line); next }
+            if (!(c in valid)) { err(NR, "이 카테고리 guide.json 에 없는 코드: " c); next }
+            if (c in appr) { err(NR, "같은 코드가 두 번 나옴: " c); next }
+            appr[c] = irr; order[++na] = c
+        }
+        END {
+            if (!("category" in hdr)) err("-", "머리말에 category= 가 없음")
+            else if (hdr["category"] != cat) err(hl["category"], "category=" hdr["category"] " 는 이 조치 카테고리(" cat ")와 다름")
+            if (!("expires" in hdr)) err("-", "머리말에 expires= 가 없음")
+            else if (!isdate(hdr["expires"])) err(hl["expires"], "expires 는 YYYY-MM-DD 형식이어야 함: " hdr["expires"])
+            else if (today > hdr["expires"]) err(hl["expires"], "정책 유효기간이 지났음(expires=" hdr["expires"] ", 오늘 " today ")")
+            if (!("approver" in hdr)) err("-", "머리말에 approver= 가 없음")
+            else if (hdr["approver"] == "") err(hl["approver"], "approver 가 비어 있음")
+            if (nerr) exit
+            lh = tolower(host)
+            if (lh in sect) s = lh
+            else if ("*" in sect) s = "*"
+            else { err("-", "정책에 없는 호스트: " host " ([host:" host "] 또는 [host:*] 구역 필요)"); exit }
+            print "APPROVER\t" hdr["approver"]; print "EXPIRES\t" hdr["expires"]; print "SECTION\t" orig[s]
+            for (i = 1; i <= na; i++) { c = order[i]; print "CODE\t" c "\t" appr[c] "\t" (((s, c) in excl) ? 1 : 0) }
+        }
+    ' "$1"
+}
+
+# fix_policy_load — --policy 가 있으면 정책 파일을 읽어 POLICY_* 를 채운다(GUIDE_JSON·CATEGORY_NUM 필요). 거부 사유가 있으면
+# 줄 번호와 함께 모두 보여 주고 exit 2(아무것도 바꾸지 않음). SHA-256 도구가 없으면 감사 기록을 남길 수 없어 거부(G-03).
+fix_policy_load() {
+    [ "$POLICY_SET" -eq 1 ] || return 0
+    if [ ! -f "$POLICY_FILE" ] || [ ! -r "$POLICY_FILE" ]; then
+        log_error "정책 파일을 읽을 수 없습니다(변경 없음): $POLICY_FILE"; exit 2
+    fi
+    if [ ! -f "$GUIDE_JSON" ]; then log_error "$GUIDE_JSON 이 없습니다."; exit 2; fi
+    POLICY_SHA256=$(fix_sha256 "$POLICY_FILE") || {
+        log_error "SHA-256 도구(sha256sum/shasum/openssl)가 없어 정책 파일 지문을 감사 기록에 남길 수 없습니다 - 정책 모드를 쓸 수 없습니다(변경 없음)."
+        exit 2
+    }
+    POLICY_ABS="$(cd "$(dirname "$POLICY_FILE")" && pwd)/$(basename "$POLICY_FILE")"
+    POLICY_HOST=$(host_name)
+    _pl_out=$(_policy_parse "$POLICY_FILE" "$CATEGORY_NUM" "$GUIDE_JSON" "$POLICY_HOST" "$(date '+%Y-%m-%d')")
+    _pl_tab=$(printf '\t')
+    if printf '%s\n' "$_pl_out" | grep -q "^ERR$_pl_tab"; then
+        printf '%s\n' "$_pl_out" | grep "^ERR$_pl_tab" | while IFS="$_pl_tab" read -r _pl_x _pl_ln _pl_msg; do
+            log_error "정책 파일 거부($POLICY_FILE:$_pl_ln): $_pl_msg"
+        done
+        log_error "정책 파일을 고친 뒤 다시 실행하세요 - 아무것도 변경하지 않았습니다."
+        exit 2
+    fi
+    POLICY_CODES=" "; POLICY_IRREV=" "; POLICY_EXCL=" "
+    while IFS="$_pl_tab" read -r _pl_k _pl_a _pl_b _pl_c; do
+        case "$_pl_k" in
+            APPROVER) POLICY_APPROVER=$_pl_a ;;
+            EXPIRES) POLICY_EXPIRES=$_pl_a ;;
+            SECTION) POLICY_SECTION=$_pl_a ;;
+            CODE)
+                POLICY_CODES="$POLICY_CODES$_pl_a "
+                [ "$_pl_b" = "1" ] && POLICY_IRREV="$POLICY_IRREV$_pl_a "
+                [ "$_pl_c" = "1" ] && POLICY_EXCL="$POLICY_EXCL$_pl_a " ;;
+        esac
+    done <<EOF
+$_pl_out
+EOF
+    return 0
+}
+
+# fix_policy_approved <코드> — 정책 모드에서 이 호스트에 승인된 코드면 0. 아니면 1 + POLICY_REASON. 정책 모드가 아니면 항상 0.
+fix_policy_approved() {
+    POLICY_REASON=""
+    [ "$POLICY_SET" -eq 1 ] || return 0
+    case "$POLICY_CODES" in *" $1 "*) ;; *) POLICY_REASON="정책 미승인"; return 1 ;; esac
+    case "$POLICY_EXCL" in *" $1 "*) POLICY_REASON="정책 미승인(호스트 제외: [host:$POLICY_SECTION])"; return 1 ;; esac
+    return 0
+}
+
+# fix_policy_irrev_ok <코드> <조치 파일> — G-02: 머리말에 원복/영향 표기가 있는 조치는 정책에 코드:irreversible 이 있어야 0.
+fix_policy_irrev_ok() {
+    POLICY_REASON=""
+    [ "$POLICY_SET" -eq 1 ] || return 0
+    _pi_rb=$(fix_rollback_note "$2"); _pi_im=$(fix_impact_note "$2")
+    [ -n "$_pi_rb" ] || [ -n "$_pi_im" ] || return 0
+    case "$POLICY_IRREV" in *" $1 "*) return 0 ;; esac
+    POLICY_REASON="irreversible 플래그 필요: ${_pi_rb:+원복: $_pi_rb}${_pi_rb:+${_pi_im:+ / }}${_pi_im:+영향: $_pi_im}"
+    return 1
+}
+
+# fix_iso_now — ISO 8601 로컬 시각 + 오프셋(2026-11-09T10:00:00+09:00)
+fix_iso_now() {
+    date '+%Y-%m-%dT%H:%M:%S%z' | sed 's/\([+-][0-9][0-9]\)\([0-9][0-9]\)$/\1:\2/'
+}
+
+# fix_login_user — 실제 로그인 사용자(G-03): SUDO_USER → logname → id -un
+fix_login_user() {
+    if [ -n "${SUDO_USER:-}" ]; then printf '%s\n' "$SUDO_USER"; return; fi
+    _lu=$(logname 2>/dev/null) && [ -n "$_lu" ] && { printf '%s\n' "$_lu"; return; }
+    id -un 2>/dev/null || echo unknown
+}
+
+# fix_audit_begin — 정책 모드 감사 기록(G-03)을 audit.txt(키=값, BOM 없는 UTF-8)와 FIX_LOG 맨 앞("# 키=값" 주석 줄)에 남긴다
+# (fix_prepare_dir 가 부른다). 종료 건수 키(fix_audit_finish)는 PowerShell 과 같다: applied·failed·declined·skipped·manual·preview·
+# policy_skipped·failed_codes(콤마 구분) + sh 전용 partial(일부 적용, 남은 부분 수동).
+# 비밀값은 쓰지 않는다(S5) - 실행자·승인자 이름, 정책 경로·지문, 시각, 대상만.
+fix_audit_begin() {
+    [ "$POLICY_SET" -eq 1 ] || return 0
+    AUDIT_FILE="$FIX_OUT_DIR/audit.txt"
+    {
+        printf 'operator=%s\n' "$POLICY_OPERATOR"
+        printf 'login_user=%s\n' "$(fix_login_user)"
+        printf 'approver=%s\n' "$POLICY_APPROVER"
+        printf 'policy_file=%s\n' "$POLICY_ABS"
+        printf 'policy_sha256=%s\n' "$POLICY_SHA256"
+        printf 'policy_expires=%s\n' "$POLICY_EXPIRES"
+        printf 'policy_host_section=%s\n' "$POLICY_SECTION"
+        printf 'started_at=%s\n' "$(fix_iso_now)"
+        printf 'host=%s\n' "$(host_name)"
+        printf 'category=%s\n' "$CATEGORY_NUM"
+        printf 'mode=%s\n' "$([ "${APPLY:-0}" -eq 1 ] && echo apply || echo dry-run)"
+        printf 'tool_version=%s\n' "$TOOL_VERSION"
+    } > "$AUDIT_FILE"
+    sed 's/^/# /' "$AUDIT_FILE" >> "$FIX_LOG"
+}
+
+# fix_audit_finish [aborted 사유] — 종료 시각과 건수 요약을 audit.txt·FIX_LOG 끝에 남긴다.
+fix_audit_finish() {
+    [ "$POLICY_SET" -eq 1 ] && [ -n "$AUDIT_FILE" ] || return 0
+    {
+        printf 'finished_at=%s\n' "$(fix_iso_now)"
+        [ -n "${1:-}" ] && printf 'aborted=%s\n' "$1"
+        printf 'applied=%s\nfailed=%s\ndeclined=%s\nskipped=%s\nmanual=%s\npreview=%s\npolicy_skipped=%s\npartial=%s\n' \
+            "${N_APPLIED:-0}" "${N_FAILED:-0}" "${N_DECLINED:-0}" "${N_SKIPPED:-0}" "${N_MANUAL:-0}" "${N_PREVIEW:-0}" "${N_POLICY_SKIPPED:-0}" "${N_PARTIAL:-0}"
+        printf 'failed_codes=%s\n' "$(printf '%s' "${FAILED_CODES:-}" | sed 's/^ //; s/ /,/g')"
+    } > "$AUDIT_FILE.end"
+    cat "$AUDIT_FILE.end" >> "$AUDIT_FILE"; sed 's/^/# /' "$AUDIT_FILE.end" >> "$FIX_LOG"; rm -f "$AUDIT_FILE.end"
+}
+
+# fix_policy_banner — 정책 모드면 실행 배너에 정책 요약 한 줄
+fix_policy_banner() {
+    [ "$POLICY_SET" -eq 1 ] || return 0
+    echo "정책       : $POLICY_ABS (승인자 $POLICY_APPROVER, ~$POLICY_EXPIRES, 구역 [host:$POLICY_SECTION], 실행자 $POLICY_OPERATOR) - 승인 항목만, 확인 없이"
+    echo "감사 기록  : ${AUDIT_FILE:-없음}"
+}
+
 fix_confirm_plan() {
+    [ "$POLICY_SET" -eq 1 ] && return 0
     [ "${YES:-0}" -eq 1 ] && return 0
     echo "다음 항목을 실제로 변경합니다:"
     _n_auto=0
@@ -557,13 +805,15 @@ fix_confirm_plan() {
         _t=$(guide_field "$GUIDE_JSON" "$_c" "title")
         _rb=$(fix_rollback_note "${FIX_FILE_DIR:-.}/$_c.sh")
         _chg=$(fix_change_note "${FIX_FILE_DIR:-.}/$_c.sh")
+        _imp=$(fix_impact_note "${FIX_FILE_DIR:-.}/$_c.sh")
         case "$_g" in
             auto) printf '  [auto]    %-8s %s  ← 개별 확인 없이 적용\n' "$_c" "$_t"; _n_auto=$((_n_auto + 1)) ;;
             confirm) printf '  [confirm] %-8s %s  ← 적용 직전 항목별로 다시 확인\n' "$_c" "$_t" ;;
         esac
         case "$_g" in auto|confirm)
             [ -n "$_chg" ] && printf '            └ 변경: %s\n' "$_chg"
-            [ -n "$_rb" ] && printf '            └ 원복: %s\n' "$_rb" ;;
+            [ -n "$_rb" ] && printf '            └ 원복: %s\n' "$_rb"
+            [ -n "$_imp" ] && printf '            └ 영향: %s\n' "$_imp" ;;
         esac
     done
     printf '위 목록대로 진행하시겠습니까? (auto %s건은 추가 확인 없이 적용됨) [y/N] ' "$_n_auto"
@@ -830,11 +1080,18 @@ fix_select_vuln_codes() {
 #   반환값 3(fix_abort_item, 백업 실패 등)이면 실행 전체를 exit 3 으로 끝낸다(F1).
 fix_items() {
     _fi_fdir=$1; _fi_cdir=$2; _fi_postfix=${3:-}; _fi_postcheck=${4:-}
-    N_APPLIED=0; N_SKIPPED=0; N_DECLINED=0; N_FAILED=0; N_MANUAL=0; N_PREVIEW=0; N_PARTIAL=0
+    N_APPLIED=0; N_SKIPPED=0; N_DECLINED=0; N_FAILED=0; N_MANUAL=0; N_PREVIEW=0; N_PARTIAL=0; N_POLICY_SKIPPED=0
+    FAILED_CODES=""
     for _fi_code in $VULN_CODES; do
         _fi_title=$(guide_field "$GUIDE_JSON" "$_fi_code" "title")
         _fi_grade=$(guide_field "$GUIDE_JSON" "$_fi_code" "fix")
         [ -z "$_fi_grade" ] && _fi_grade="manual"
+
+        # 1.6.0 G-01: 정책 모드면 승인(·호스트 제외 아님)된 항목만 다룬다 - 나머지는 POLICY_SKIPPED(dry-run 도 같은 판정을 미리 보여 줌)
+        if ! fix_policy_approved "$_fi_code"; then
+            _fi_policy_skip "$_fi_code" "$_fi_title" "$_fi_grade"
+            continue
+        fi
 
         if [ "$_fi_grade" = "manual" ]; then
             echo "[$_fi_code] $_fi_title"
@@ -855,16 +1112,30 @@ fix_items() {
             continue
         fi
 
+        # G-02: 원복 불가(# 원복:)·업무 중단 가능(# 영향:) 조치는 정책에 코드:irreversible 이 있어야 한다
+        if ! fix_policy_irrev_ok "$_fi_code" "$_fi_fix"; then
+            _fi_policy_skip "$_fi_code" "$_fi_title" "$_fi_grade"
+            continue
+        fi
+
         if [ "$APPLY" -ne 1 ]; then
             echo "[$_fi_code] $_fi_title"
             echo "  등급: $_fi_grade (dry-run — 실제 적용하려면 --apply 추가)"
+            if [ "$POLICY_SET" -eq 1 ]; then
+                case "$POLICY_IRREV" in *" $_fi_code "*) echo "  정책: 적용 예정(승인됨, irreversible)" ;; *) echo "  정책: 적용 예정(승인됨)" ;; esac
+            fi
             _fi_chg=$(fix_change_note "$_fi_fix"); [ -n "$_fi_chg" ] && echo "  변경: $_fi_chg"
             _fi_rbn=$(fix_rollback_note "$_fi_fix"); [ -n "$_fi_rbn" ] && echo "  원복: $_fi_rbn"
+            _fi_imp=$(fix_impact_note "$_fi_fix"); [ -n "$_fi_imp" ] && echo "  영향: $_fi_imp"
             N_PREVIEW=$((N_PREVIEW + 1))
             continue
         fi
 
-        if [ "$_fi_grade" = "confirm" ]; then
+        # 정책 모드: confirm 등급의 항목별 y/N 은 정책 승인으로 대신한다(비밀번호 직접 입력처럼 터미널이 필요한 조치는 조치 안에서 그대로 건너뜀)
+        if [ "$_fi_grade" = "confirm" ] && [ "$POLICY_SET" -eq 1 ]; then
+            echo "[$_fi_code] $_fi_title"
+            echo "  등급: confirm — 정책 승인으로 항목별 확인 생략(승인자 $POLICY_APPROVER)"
+        elif [ "$_fi_grade" = "confirm" ]; then
             printf '[%s] %s\n  등급: confirm — 실제로 적용하시겠습니까? [y/N] ' "$_fi_code" "$_fi_title"
             # /dev/tty 가 있어도 제어 터미널이 없는 비대화형 실행(docker exec 파이프, 크론)에서는 읽기가 실패한다 - 실패는
             # 흡수하고 항상 안전한 기본값(미확인)으로 처리한다(set -u 에서 _fi_ans 미할당으로 죽던 문제 포함).
@@ -886,7 +1157,7 @@ fix_items() {
         # X-04(1.3.4): 조치는 서브셸에서 실행한다(run_fix_isolated) - 중간에 죽어도 FIX_STATUS=ERROR 로 돌아와 아래 실패 경로가
         # 원복·FAILED_* 기록 후 다음 항목으로 간다. 3 = fix_abort_item: 서브셸이 이미 원복·ABORTED 기록 → 실행 전체 중단(F1).
         _fi_rc=0; run_fix_isolated "$_fi_fix" || _fi_rc=$?
-        [ "$_fi_rc" -eq 3 ] && exit 3
+        if [ "$_fi_rc" -eq 3 ]; then fix_audit_finish "fix_abort_item($_fi_code)"; exit 3; fi
         if [ -n "$_fi_postfix" ]; then "$_fi_postfix" "$_fi_code"; fi
 
         if [ "$FIX_STATUS" = "SKIPPED" ]; then
@@ -929,10 +1200,18 @@ fix_items() {
             fix_rollback_item "$_fi_code"
             if [ -z "$FIX_ROLLBACK_FAILS" ]; then _fi_rbs="FAILED_ROLLED_BACK"; else _fi_rbs="FAILED_NOT_ROLLED_BACK"; echo "  원복하지 못한 부분(수동 확인 필요):$FIX_ROLLBACK_FAILS"; fi
             printf '%s\t%s\t%s\tFIX_STATUS=%s detail=%s recheck=%s %s\n' "$_fi_code" "$_fi_grade" "$_fi_rbs" "$FIX_STATUS" "$FIX_DETAIL" "$CHECK_STATUS" "$(printf '%s' "$FIX_ROLLBACK_FAILS" | tr '\n' ' ')" | fix_log_stamp >> "$FIX_LOG"
-            N_FAILED=$((N_FAILED + 1))
+            N_FAILED=$((N_FAILED + 1)); FAILED_CODES="$FAILED_CODES $_fi_code"
         fi
         unset FIX_CODE
     done
+}
+
+# _fi_policy_skip <코드> <제목> <등급> — 정책으로 건너뛴 항목 기록(POLICY_REASON 을 사유로)
+_fi_policy_skip() {
+    echo "[$1] $2"
+    echo "  정책으로 건너뜀(변경 없음) — $POLICY_REASON"
+    printf '%s\t%s\tPOLICY_SKIPPED\t%s\n' "$1" "$3" "$POLICY_REASON" | fix_log_stamp >> "$FIX_LOG"
+    N_POLICY_SKIPPED=$((N_POLICY_SKIPPED + 1))
 }
 
 # fix_print_summary <원복 명령> -- 건수·백업 위치·원복 방법·로그 경로 출력
@@ -940,10 +1219,17 @@ fix_print_summary() {
     echo "------------------------------------------------------------------------"
     if [ "$APPLY" -eq 1 ]; then
         echo "적용 완료: $N_APPLIED, 일부 적용(남은 부분 수동): $N_PARTIAL, 실패(원복됨): $N_FAILED, 확인거부: $N_DECLINED, 건너뜀(스크립트없음·조치로 해소 불가): $N_SKIPPED, 수동조치: $N_MANUAL"
+        # 1.6.0 G-01: 무인 실행에서도 실패 항목을 놓치지 않게 코드 목록을 따로 보여 준다
+        [ -n "${FAILED_CODES:-}" ] && echo "실패 항목: $(printf '%s' "$FAILED_CODES" | sed 's/^ //; s/ /, /g') (원복 결과는 로그 참고)"
         echo "백업 위치: $FIX_BACKUP_DIR"
         echo "원복하려면: $1 --rollback $FIX_OUT_DIR"
     else
         echo "DRY-RUN 미리보기: $N_PREVIEW 건 (--apply 로 실제 적용), 스크립트없음: $N_SKIPPED, 수동조치: $N_MANUAL"
+    fi
+    if [ "$POLICY_SET" -eq 1 ]; then
+        echo "정책으로 건너뜀(미승인·호스트 제외·irreversible 플래그 없음): ${N_POLICY_SKIPPED:-0}건"
+        echo "감사 기록: $AUDIT_FILE"
+        fix_audit_finish
     fi
     echo "로그: $FIX_LOG"
 }

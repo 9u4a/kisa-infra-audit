@@ -1,6 +1,7 @@
 # D-01 (상) 기본 계정의 비밀번호, 정책 등을 변경하여 사용 [Oracle] — 조치 [fix: confirm]
 # 변경: 초기 비밀번호 그대로인 OPEN 계정(DBA_USERS_WITH_DEFPWD)마다 ALTER USER "계정" ACCOUNT LOCK(SYSTEM 은 잠그지 않고 비밀번호 변경 수동 안내)
 # 원복: 가능 — 잠근 계정을 다시 UNLOCK 함
+# 영향: 초기 비밀번호 기본 계정 즉시 잠금(ACCOUNT LOCK) — 이 계정으로 접속하던 앱·스크립트 접속 실패
 # checks/oracle/D-01.sh 와 같은 범위(초기 비밀번호 그대로이고 OPEN 인 계정 - DBA_USERS_WITH_DEFPWD)를 잠근다(비밀번호를
 # 추측해 바꾸는 대신 계정 잠금 - 가이드가 제시한 두 대안 중 스크립트가 안전하게 할 수 있는 쪽).
 # SYSTEM 은 필수 관리 계정이라 잠그지 않는다(lockout 방지) - 초기 비밀번호 그대로인 SYSTEM 이 있으면 비밀번호 변경이

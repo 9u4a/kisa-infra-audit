@@ -1,6 +1,7 @@
 # U-36 (상) r 계열 서비스 비활성화 — 조치
 # 변경: rlogin/rsh/rexec.socket 정지·비활성화, /etc/xinetd.d/rlogin·rsh·rexec·shell·login disable=yes, inetd.conf login·shell·exec 줄 주석, r 데몬 프로세스 종료
 # 원복: 일부 — systemd 서비스 상태는 되돌리지만, 직접 종료한 프로세스(inetd 계열 등)는 다시 띄우지 않음
+# 영향: 실행 중인 rlogin/rsh/rexec 서비스 중지·데몬 종료 — r 계열 원격 접속 세션·스크립트 끊김
 run_fix() {
     fix_service_disable rlogin.socket rsh.socket rexec.socket
     fix_xinetd_disable /etc/xinetd.d/rlogin /etc/xinetd.d/rsh /etc/xinetd.d/rexec /etc/xinetd.d/shell /etc/xinetd.d/login

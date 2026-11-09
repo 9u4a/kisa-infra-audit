@@ -1,5 +1,6 @@
 # WEB-09 (상) 웹 서비스 프로세스 권한 제한 — 조치 [fix: confirm]
 # 변경: root 로만 구동 시 Apache: User <www-data|apache|nginx|http|daemon> 설정 후 graceful 재적용, Nginx: user 지시자 설정 후 reload, Tomcat 은 수동
+# 영향: Apache/Nginx 실행 계정 변경 후 graceful/reload 로 즉시 적용 — 새 계정이 읽을 수 없는 문서·로그·소켓이 있으면 웹 서비스 오류
 # checks/WEB-09.sh 는 /proc 상의 "실행 중인" 프로세스 UID 를 직접 확인하므로, 설정 파일만
 # 고쳐서는 재검증을 통과할 수 없다(마스터 프로세스가 이미 root 로 뜬 상태이기 때문). Apache의
 # "graceful"/Nginx의 "reload" 는 기존 연결을 끊지 않고 새 자식/워커 프로세스만 새 계정으로

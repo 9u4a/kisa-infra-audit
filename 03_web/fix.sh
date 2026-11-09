@@ -13,6 +13,8 @@
 #   fix.sh -r <result.json> -i WEB-01,WEB-16 --apply  지정 항목만 실제 적용
 #   fix.sh -r <result.json> --apply --yes         적용 전 변경 목록 확인(1회)을 생략(confirm 등급은 항상 개별 y/N)
 #   fix.sh -r <result.json> --apply --force       result.json 의 호스트·카테고리 불일치·7일 경과 확인을 무시(X-06)
+#   fix.sh -r <result.json> --policy <정책 파일> --operator <실행자> [--apply]
+#                                                정책 모드(무인): 정책에 승인된 항목만 확인 없이 적용, 감사 기록(audit.txt)
 #   fix.sh --rollback <output/host_03_fix_TS 디렉터리>   백업에서 원복
 #
 # guide.json 의 fix 등급: auto(영향 없음, 즉시 적용) / confirm(서비스 영향 가능, 항목별 확인
@@ -38,12 +40,12 @@ ROLLBACK_DIR=""
 OUT_BASE="$SCRIPT_DIR/../output"
 
 usage() {
-    sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
     # 값이 필요한 옵션을 값 없이 주면 set -u 오류(parameter not set)로 죽었다(실무 적용 검증 P-24) - 사용법 오류로 끝낸다
-    case "$1" in -r|-i|-o|--rollback) [ $# -ge 2 ] || { echo "오류: $1 옵션에 값이 필요합니다 (-h 로 사용법 확인)" >&2; exit 2; } ;; esac
+    case "$1" in -r|-i|-o|--rollback|--policy|--operator) [ $# -ge 2 ] || { echo "오류: $1 옵션에 값이 필요합니다 (-h 로 사용법 확인)" >&2; exit 2; } ;; esac
     case "$1" in
         -r) RESULT_JSON=$2; shift 2 ;;
         -i) ITEM_FILTER=$2; shift 2 ;;
@@ -52,10 +54,15 @@ while [ $# -gt 0 ]; do
         --yes) YES=1; shift ;;
         --force) FORCE=1; shift ;;
         --rollback) ROLLBACK_DIR=$2; shift 2 ;;
+        --policy) POLICY_SET=1; POLICY_FILE=$2; shift 2 ;;
+        --operator) POLICY_OPERATOR_SET=1; POLICY_OPERATOR=$2; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) echo "알 수 없는 옵션: $1" >&2; usage; exit 2 ;;
     esac
 done
+
+# 1.6.0 G-01: --policy/--operator 조합 확인(잘못되면 변경 없이 exit 2)
+fix_policy_args_check "$ROLLBACK_DIR"
 
 # 실제로 바꾸는 경우(적용/원복)에만: root 확인 + 동시 실행 잠금(lib/common.sh, 운영 안전 기준 F1/F6)
 if [ "$APPLY" -eq 1 ] || [ -n "$ROLLBACK_DIR" ]; then
@@ -83,6 +90,9 @@ if [ ! -f "$GUIDE_JSON" ]; then
     exit 2
 fi
 
+# 1.6.0 G-01: 정책 파일 검증(카테고리·유효기간·호스트·코드, 형식 오류는 줄 번호와 함께 exit 2)
+fix_policy_load
+
 # X-06(1.3.4): 이 호스트·카테고리의 진단 결과인지, 너무 오래되지 않았는지 확인(불일치는 --force 없이는 exit 2).
 # 카테고리 이름은 run.sh 의 CATEGORY_NAME(result.json "category")과 같은 값이어야 한다
 fix_check_result_target "$RESULT_JSON" "웹 서비스"
@@ -100,6 +110,7 @@ echo "${C_BOLD}=== 자동 조치 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VE
 echo "카테고리   : $CATEGORY_NAME (Apache/Nginx/Tomcat — IIS는 fix.ps1 사용)"
 echo "모드       : $([ "$APPLY" -eq 1 ] && echo '실제 적용' || echo 'DRY-RUN (미리보기만, 아무 것도 바꾸지 않음)')"
 echo "대상 항목  : ${TOTAL}개 (진단 결과 중 VULN$( [ -n "$ITEM_FILTER" ] && echo ", -i 필터 적용"))"
+fix_policy_banner
 echo "------------------------------------------------------------------------"
 
 # 설정 문법 검사 기준선(운영 안전 기준 F2): 적용 전에 통과하던 엔진만 항목마다 다시 검사해, 조치가

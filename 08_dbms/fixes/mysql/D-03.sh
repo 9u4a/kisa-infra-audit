@@ -1,5 +1,6 @@
 # D-03 (상) 비밀번호 사용 기간 및 복잡도를 기관의 정책에 맞도록 설정 [MySQL] — 조치 [fix: confirm]
 # 변경: INSTALL COMPONENT 'file://component_validate_password', SET PERSIST default_password_lifetime = 90
+# 영향: default_password_lifetime = 90 즉시 적용 — 비밀번호를 90일 넘게 바꾸지 않은 계정은 바로 만료되어 앱의 새 접속 실패
 # checks/mysql/D-03.sh: 취약 = validate_password 컴포넌트 미설치 & 기간 제한 미설정.
 # 컴포넌트를 설치하고(기본 정책: MEDIUM) 만료 기간을 가이드 권고값(90일)으로 설정한다.
 run_fix() {

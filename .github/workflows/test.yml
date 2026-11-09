@@ -55,6 +55,16 @@ jobs:
         # 예외는 lib/tests/fix_exempt.json 에 사유 필수(no-vuln-path 는 check 에 VULN 경로가 없는지 기계 확인).
         run: python3 lib/tests/guide_consistency.py
 
+      - name: 조치 운영 영향 분류표 최신 여부(1.6.0 G-02)
+        # docs/FIX_IMPACT.md 는 조치 파일 머리말(# 원복:·# 영향:)과 guide.json fix 등급에서 생성한다 - 머리말을 바꾸고 다시 생성하지
+        # 않으면 실패(python3 lib/tests/fix_impact.py 로 생성해 커밋).
+        run: python3 lib/tests/fix_impact.py --check
+
+      - name: 조치 정책 파일 해석 단위 테스트(1.6.0 G-01)
+        # 정책 파일(category·expires·approver·승인 코드·[host:] 구역) 정상 해석과 각종 거부(exit 2, 줄 번호), BOM/CRLF,
+        # irreversible 판정, SHA-256 을 dash 로 확인한다(대상 변경 없음). 실제 fix.sh 정책 모드 적용은 linux-integration(01_unix).
+        run: sh lib/tests/policy_parse_test.sh
+
       - name: PSScriptAnalyzer (전체 *.ps1 / *.psm1)
         shell: pwsh
         run: |
