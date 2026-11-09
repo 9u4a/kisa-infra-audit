@@ -1,5 +1,6 @@
 ﻿# W-16 (상) 공유 권한 및 사용자 그룹 설정 [fix: confirm]
 # 변경: 일반 공유(기본 관리 공유 ADMIN$/C$/IPC$/print$, DC 의 SYSVOL/NETLOGON 제외 - 사용자 숨김 공유 포함)에서 Everyone 공유 권한 제거
+# 영향: 공유에서 Everyone 권한 제거 — Everyone 권한으로 그 공유를 쓰던 사용자·프로그램의 접근이 즉시 거부됨
 # checks/W-16.ps1: 취약 = 일반(비관리용) 공유에 Everyone 권한이 부여된 경우.
 # 해당 공유들에서 Everyone 권한만 제거한다(기본 관리 공유는 W-17 에서 별도 처리).
 
