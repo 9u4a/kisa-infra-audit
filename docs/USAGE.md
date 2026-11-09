@@ -143,6 +143,38 @@ python 05_network/fix.py -f running-config.txt -r <result.json> -i N-01,N-06   #
 - `report.html` — 브라우저로 열람 (오프라인 단일 파일)
 - `summary.txt` / `run.log` — 요약 · 실행 로그
 
+## 조치 정책 모드 (무인 조치, 1.6.0)
+confirm 항목까지 y/N 없이 적용하려면 승인자가 작성한 정책 파일을 준다. 실제 적용은 여전히 `--apply`/`-Apply` 가 필요하고, 없으면 정책을
+적용한 dry-run 이다.
+```text
+# 정책 파일 (UTF-8, 줄 단위, # 주석)
+category=01            # 실행 카테고리와 같아야 함(01/02/03/05/07/08)
+expires=2026-12-31     # 그날까지 유효
+approver=홍길동
+U-01
+U-18
+U-36:irreversible      # 원복 불가·업무 영향 항목(docs/FIX_IMPACT.md "필요")은 :irreversible 이 있어야 적용
+
+[host:web01]           # 호스트별 제외(대소문자 무시)
+-U-18
+
+[host:*]               # 나머지 호스트 허용. 실행 호스트에 맞는 구역도 [host:*] 도 없으면 거부
+```
+```sh
+sh 01_unix/fix.sh -r <result.json> --policy policy.txt --operator 김점검            # 정책 적용 dry-run
+sh 01_unix/fix.sh -r <result.json> --policy policy.txt --operator 김점검 --apply    # 무인 적용
+```
+```powershell
+._windowsix.ps1 -ResultJson <result.json> -Policy policy.txt -Operator 김점검 -Apply
+```
+```sh
+python 05_network/fix.py -f running-config.txt -r <result.json> --policy policy.txt --operator 김점검
+```
+- 대상 = 진단 VULN ∩ `-i` ∩ 정책 승인 − 호스트 제외. 나머지는 `POLICY_SKIPPED`(사유: 정책 미승인 / 호스트 제외 / irreversible 플래그 필요).
+- 코드·키는 대소문자 구분. 없는 코드·중복·알 수 없는 키·만료·카테고리 불일치는 줄 번호와 함께 exit 2(아무것도 바꾸지 않음).
+- `--force` 는 결과 파일 확인(X-06)만 무시하고 정책 검사는 무시하지 않는다. 비밀번호 직접 입력 조치는 비대화형이면 건너뛴다.
+- 출력 폴더 `audit.txt` 에 실행자·로그인 계정·승인자·정책 SHA-256·시각·건수·실패 코드가 남는다.
+
 ## 통합 런처 (한 호스트에서 적용 가능한 모든 카테고리 한 번에)
 ```sh
 sh audit.sh                 # Unix 계열: 01_unix + 03_web + 08_dbms(엔진 감지 시)
@@ -160,6 +192,15 @@ python lib/merge.py --dir output -c 01 -o output/merged_unix        # output/ �
 ```
 여러 호스트에서 같은 카테고리를 진단한 결과를 모아 호스트별 준수율 순위, 전사 공통 취약 항목
 순위를 `merged_report.html`로 봅니다. 분석자 PC 전용이며 대상 시스템에는 접근하지 않습니다.
+
+조치 전후 비교와 수동점검 사람 판정(1.6.0):
+```sh
+python lib/merge.py --diff output/before output/after -c 01 -o output/diff                 # 조치 전 / 후 결과 폴더
+python lib/merge.py output -c 01 --verdicts manual_verdicts_web01.json -o output/merged    # 사람 판정 반영
+```
+- `--diff` 는 신규 취약(맨 위)·조치 완료·미조치·확인 필요·변화 없음 양호로 나눠 `diff_report.html`·`diff.csv`·`diff_summary.txt` 를 만든다.
+- `report.html` 에서 수동점검 항목을 펼쳐 취약/양호와 사유를 입력하고 `manual_verdicts.json` 을 내려받는다. 같은 진단 결과(host·category·
+  생성 시각)에만 반영되며 result.json 은 바뀌지 않는다.
 
 ## 가이드 데이터 추출·정리
 모든 check/fix 구현은 가이드 PDF가 아니라, 아래 스크립트가 생성한 `guide.json`/`guide.md`를

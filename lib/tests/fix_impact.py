@@ -26,10 +26,11 @@ FAMILIES = {
     "01_unix": [("", "sh", "Unix(sh)")],
     "02_windows": [("", "ps1", "Windows")],
     "03_web": [("", "sh", "Apache/Nginx/Tomcat(sh)"), ("iis", "ps1", "IIS")],
+    "05_network": [("cisco_ios", "py", "Cisco IOS(명령어 생성)")],
     "07_pc": [("", "ps1", "PC")],
     "08_dbms": [("mysql", "sh", "MySQL"), ("postgres", "sh", "PostgreSQL"), ("oracle", "sh", "Oracle"), ("mssql", "ps1", "MSSQL")],
 }
-TITLES = {"01_unix": "01 Unix 서버", "02_windows": "02 Windows 서버", "03_web": "03 웹 서비스", "07_pc": "07 PC", "08_dbms": "08 DBMS"}
+TITLES = {"01_unix": "01 Unix 서버", "02_windows": "02 Windows 서버", "03_web": "03 웹 서비스", "05_network": "05 네트워크 장비", "07_pc": "07 PC", "08_dbms": "08 DBMS"}
 HEAD_LINES = 12
 NOTE_RE = {"rb": re.compile(r"^# 원복: (.*\S)\s*$"), "im": re.compile(r"^# 영향: (.*\S)\s*$")}
 
