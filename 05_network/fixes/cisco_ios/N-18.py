@@ -1,4 +1,5 @@
 # N-18 (상) SNMP Community String 복잡성 설정 [Cisco IOS] - 조치 명령어 생성
+# 영향: SNMP community 재발급 — 기존 문자열을 쓰는 NMS·모니터링 수집 중단
 # checks/cisco_ios/N-18.py: VULN = public/private 기본값 또는 복잡성 기준(3종류 이상 조합,
 # 8자리 이상) 미달 Community String 존재. 기존 문자열은 평문으로 남기지 않는 증적 원칙과 달리,
 # 이 스크립트 자체가 실제 적용 대상이라 새로 생성한 문자열을 담아야 한다(parsers/cisco_ios.py

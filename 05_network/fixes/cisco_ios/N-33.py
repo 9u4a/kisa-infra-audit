@@ -1,4 +1,5 @@
 # N-33 (중) Proxy ARP 차단 [Cisco IOS] - 조치 명령어 생성
+# 영향: 인터페이스 Proxy ARP 중지 — 게이트웨이 없이 Proxy ARP 에 기대던 단말의 통신 끊김
 # checks/cisco_ios/N-33.py: VULN = no ip proxy-arp 설정이 없는(기본값=활성화) IP 인터페이스 존재.
 import re
 
