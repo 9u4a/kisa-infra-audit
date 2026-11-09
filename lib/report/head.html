@@ -53,7 +53,13 @@
   .detail h4{margin:10px 0 4px;font-size:12.5px;color:var(--muted);text-transform:uppercase;}
   .detail pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin:4px 0;}
   footer{color:var(--muted);font-size:12px;margin-top:24px;text-align:center;}
-  @media print{ .toolbar{display:none;} body{background:#fff;} .card,table{border-color:#ccc;} }
+  .mv-panel{display:none;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--manual);border-radius:10px;padding:10px 14px;margin:12px 0;}
+  .mv-panel input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;}
+  .mv-panel button{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;}
+  .mv-box{border:1px dashed var(--manual);border-radius:8px;padding:8px 12px;margin:6px 0;}
+  .mv-box textarea{width:100%;min-height:48px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:inherit;font-size:13px;}
+  .mv-tag{display:inline-block;margin-left:4px;padding:0 6px;border-radius:999px;font-size:11px;border:1px solid var(--manual);color:var(--manual);}
+  @media print{ .toolbar,.mv-panel{display:none;} body{background:#fff;} .card,table{border-color:#ccc;} }
 </style>
 </head>
 <body>
@@ -67,6 +73,13 @@
 
 <div class="cards" id="cards"></div>
 <div class="bar" id="dist-bar"></div>
+
+<div class="mv-panel" id="mv-panel">
+  <span id="mv-status"></span>
+  <span class="spacer" style="flex:1"></span>
+  <label>판정자 <input id="mv-by" type="text" placeholder="이름"></label>
+  <button id="mv-dl" type="button">manual_verdicts.json 내려받기</button>
+</div>
 
 <div class="toolbar">
   <select id="f-status">
