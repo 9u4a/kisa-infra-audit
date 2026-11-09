@@ -1,4 +1,5 @@
 # N-08 (중) VTY 접속 시 안전한 프로토콜 사용 [Cisco IOS] - 조치 명령어 생성
+# 영향: transport input ssh — 텔넷으로 쓰던 원격 관리 접속 차단
 # checks/cisco_ios/N-08.py: VULN = VTY 라인이 telnet을 허용(또는 transport input 기본값).
 # transport input ssh 를 적용하기 전에 SSH 서비스 자체(도메인명/RSA 키/ip ssh version 2)가
 # 먼저 구성되어 있어야 한다 - 안 되어 있는 상태로 적용하면 VTY 접근이 전부 끊어질 수 있다.

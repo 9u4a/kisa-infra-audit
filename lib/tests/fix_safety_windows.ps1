@@ -307,6 +307,61 @@ if ($Cases.Count -gt 0) {
     foreach ($c in $codes) { if ($end.Map[$c] -ne $base.Map[$c]) { Write-Host "  경고: 재현 케이스 정리 후 ${c} 판정이 처음과 다름(처음 $($base.Map[$c]) / 지금 $($end.Map[$c]))" } }
 }
 
+# ⑧ 정책 모드(1.6.0 G-01·G-02·G-03, 02_windows): -Policy/-Operator 로 -Yes 없이 비대화형 적용 - confirm 등급(W-07)이 확인 질문 없이
+#    적용되고, 정책에 없는 항목(W-59)·irreversible 플래그 없는 원복 불가/업무 영향 항목(W-17)·호스트 구역에서 제외한 항목(W-13)은
+#    POLICY_SKIPPED, audit.txt 에 실행자·승인자·정책 해시·건수가 남는지. W-17/W-59/W-13 은 결과 파일에만 VULN 으로 넣는다(적용되면 안 됨).
+if ($Category -eq "02_windows") {
+    Write-Host "[$Category] 정책 모드 비대화형 적용(W-07 confirm)"
+    $lsa = "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+    $orig = (Get-ItemProperty -Path $lsa -Name EveryoneIncludesAnonymous -ErrorAction SilentlyContinue).EveryoneIncludesAnonymous
+    $pTmp = Join-Path $env:TEMP "fs_${Category}_policy"
+    Remove-Item -Recurse -Force $pTmp -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force -Path $pTmp | Out-Null
+    try {
+        New-ItemProperty -Path $lsa -Name EveryoneIncludesAnonymous -PropertyType DWord -Value 1 -Force | Out-Null
+        $pPre = Invoke-Diag "policy_pre" "W-07"
+        if ($pPre.Map["W-07"] -ne "VULN") { throw "W-07 준비 후 진단이 VULN 이 아님($($pPre.Map['W-07']))" }
+        $pj = Get-Content -Raw -Encoding UTF8 $pPre.Path | ConvertFrom-Json
+        $pj.items = @($pj.items) + @(@("W-17", "W-59", "W-13") | ForEach-Object { [PSCustomObject]@{ code = $_; status = "VULN"; detail = "policy test"; evidence = "" } })
+        $pRes = Join-Path $pTmp "result.json"
+        $pj | ConvertTo-Json -Depth 6 | Out-File -FilePath $pRes -Encoding utf8
+        $pPol = Join-Path $pTmp "policy.txt"
+        @("# fix_safety 정책 모드 케이스", "category=02", "expires=$((Get-Date).AddDays(1).ToString('yyyy-MM-dd'))", "approver=CI 승인자", "W-07", "W-17", "W-13", "", "[host:$($env:COMPUTERNAME)]", "-W-13") |
+            Out-File -FilePath $pPol -Encoding utf8
+        $pOut = Join-Path $pTmp "out"
+        $pLog = "" | & powershell -NoProfile -NonInteractive -File $fixPs1 -ResultJson $pRes -Items "W-07,W-17,W-59,W-13" -OutBase $pOut -Policy $pPol -Operator "ci-policy" -Apply 2>&1 | Out-String
+        $pRc = $LASTEXITCODE
+        $pRun = Get-ChildItem -Path $pOut -Directory -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        if ($pRc -ne 0 -or -not $pRun) { throw "정책 모드 적용 실행 실패(exit=$pRc)`n$pLog" }
+        if ($pLog -match "비대화형 실행이라 '아니오'로 처리") { $fail += "정책 모드: 확인 질문이 생략되지 않음`n$pLog" }
+        $pRows = @{}; foreach ($x in (Read-ChangesLog $pRun)) { $pRows[$x.Code] = $x }
+        if (-not $pRows["W-07"] -or $pRows["W-07"].Result -ne "APPLIED") { $fail += "정책 모드: W-07(confirm) 이 APPLIED 가 아님($(if ($pRows['W-07']) { "$($pRows['W-07'].Result): $($pRows['W-07'].Detail)" } else { '기록 없음' }))`n$pLog" }
+        $wantSkip = @{ "W-17" = '^irreversible 플래그 필요: '; "W-59" = '^정책 미승인$'; "W-13" = '^정책 미승인\(호스트 제외' }
+        foreach ($c in $wantSkip.Keys) {
+            $x = $pRows[$c]
+            if (-not $x -or $x.Result -ne "POLICY_SKIPPED" -or $x.Detail -notmatch $wantSkip[$c]) { $fail += "정책 모드: $c 가 POLICY_SKIPPED($($wantSkip[$c])) 가 아님($(if ($x) { "$($x.Result): $($x.Detail)" } else { '기록 없음' }))" }
+        }
+        $aud = @{}
+        foreach ($l in (Get-Content -Encoding UTF8 (Join-Path $pRun "audit.txt") -ErrorAction SilentlyContinue)) { $i = $l.IndexOf("="); if ($i -gt 0) { $aud[$l.Substring(0, $i)] = $l.Substring($i + 1) } }
+        $audWant = @{ operator = "ci-policy"; approver = "CI 승인자"; mode = "apply"; category = "02"; applied = "1"; policy_skipped = "3"; failed_codes = "" }
+        foreach ($k in $audWant.Keys) { if (-not $aud.ContainsKey($k) -or $aud[$k] -ne $audWant[$k]) { $fail += "정책 모드: audit.txt $k='$($aud[$k])' (기대 '$($audWant[$k])')" } }
+        foreach ($k in @("login_user", "policy_file", "policy_sha256", "policy_expires", "started_at", "host", "finished_at")) { if (-not $aud[$k]) { $fail += "정책 모드: audit.txt 에 $k 없음" } }
+        if ($aud["policy_sha256"] -and $aud["policy_sha256"] -ne (Get-FileHash -LiteralPath $pPol -Algorithm SHA256).Hash.ToLowerInvariant()) { $fail += "정책 모드: audit.txt policy_sha256 불일치" }
+        $pPost = Invoke-Diag "policy_post" "W-07"
+        if ($pPost.Map["W-07"] -ne "GOOD") { $fail += "정책 모드: 적용 후 W-07 이 GOOD 이 아님($($pPost.Map['W-07']))" }
+        $pRb = "" | & powershell -NoProfile -NonInteractive -File $fixPs1 -Rollback $pRun 2>&1 | Out-String
+        $now = (Get-ItemProperty -Path $lsa -Name EveryoneIncludesAnonymous -ErrorAction SilentlyContinue).EveryoneIncludesAnonymous
+        if ($now -ne 1) { $fail += "정책 모드: 원복 후 EveryoneIncludesAnonymous=$now (기대 1)`n$pRb" }
+        else { Write-Host "  정책 모드 확인: W-07 APPLIED → GOOD → 원복(1), W-17/W-59/W-13 POLICY_SKIPPED, audit.txt" }
+    } catch {
+        $fail += "정책 모드 케이스 예외: $($_.Exception.Message)"
+    } finally {
+        if ($null -eq $orig) { Remove-ItemProperty -Path $lsa -Name EveryoneIncludesAnonymous -ErrorAction SilentlyContinue }
+        else { New-ItemProperty -Path $lsa -Name EveryoneIncludesAnonymous -PropertyType DWord -Value ([int]$orig) -Force | Out-Null }
+        Remove-Item -Recurse -Force $pTmp -ErrorAction SilentlyContinue
+    }
+}
+
 if ($fail.Count -gt 0) {
     Write-Host "FAIL: $Category/fix-safety"; $fail | ForEach-Object { Write-Host "  - $_" }
     Write-Host "----- apply log -----"; Write-Host $applyLog; Write-Host "----- rollback log -----"; Write-Host $rbLog

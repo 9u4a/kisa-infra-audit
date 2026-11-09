@@ -1,4 +1,5 @@
 # N-20 (상) SNMP Community 권한 설정 [Cisco IOS] - 조치 명령어 생성
+# 영향: SNMP community RW→RO — SNMP 로 설정을 바꾸던 관리 도구 동작 중단
 # checks/cisco_ios/N-20.py: VULN = 읽기-쓰기(RW, 또는 RO/RW 미지정 시 기본값인 RW) 권한의
 # SNMP community 설정 존재. 기존 community 문자열/ACL은 유지하고 권한만 RO로 재발급한다.
 # 주의: ACL이 없는 라인은 건드리지 않는다 - 그런 라인은 N-19(ACL 설정)도 함께 VULN이라

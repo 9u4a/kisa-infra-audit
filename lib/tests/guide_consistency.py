@@ -19,6 +19,8 @@ WEB-05 confirm 인데 Apache/Nginx/Tomcat 조치 없음, WEB-17 auto 인데 조�
   R4 조치 스크립트에 대응하는 check 가 없으면 FAIL.
   R5 조치 스크립트 머리말(앞 12줄)에 "# 변경: <무엇을 어떤 값으로>" 가 없으면 FAIL - dry-run·적용 전 확인 목록이 이 줄을
      보여 준다(실무 적용 검증 P-24, lib/common.sh fix_change_note / lib/Common.psm1 Get-FixRollbackNote -Label 변경).
+  R6 "# 원복: ..."(F4)·"# 영향: ..."(F5, 1.6.0 G-02) 은 앞 12줄 안에 내용과 함께 있어야 한다 - 진입점이 앞 12줄만 읽어 정책 모드의
+     :irreversible 요구와 docs/FIX_IMPACT.md(lib/tests/fix_impact.py)를 정하므로, 밖에 있으면 조용히 무시된다.
 
 사용법: python lib/tests/guide_consistency.py   (불일치 0 이면 exit 0)
 """
@@ -88,9 +90,15 @@ def main() -> int:
             for code in sorted(fixes - checks):
                 errors.append(f"{label} {code}: 조치 스크립트에 대응하는 check 가 없음(R4)")
             for code in sorted(fixes):
-                head = (ROOT / cat / "fixes" / fam / f"{code}.{ext}").read_text(encoding="utf-8-sig").splitlines()[:12]
+                body = (ROOT / cat / "fixes" / fam / f"{code}.{ext}").read_text(encoding="utf-8-sig").splitlines()
+                head = body[:12]
                 if not any(re.match(r"# 변경: \S", ln) for ln in head):
                     errors.append(f"{label} {code}: 조치 머리말(앞 12줄)에 '# 변경: ...' 이 없음(R5)")
+                for tag in ("원복", "영향"):
+                    if any(ln.startswith(f"# {tag}:") for ln in body[12:]):
+                        errors.append(f"{label} {code}: '# {tag}:' 가 앞 12줄 밖에 있음 - 진입점이 읽지 못함(R6)")
+                    if any(re.match(rf"# {tag}:\s*$", ln) for ln in head):
+                        errors.append(f"{label} {code}: '# {tag}:' 내용이 비어 있음(R6)")
             for code in sorted(set(ex) - checks):
                 errors.append(f"{label} {code}: check 가 없는 항목의 면제(R3)")
         for code in sorted(manual_ok.get(cat, {})):

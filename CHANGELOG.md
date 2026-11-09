@@ -5,6 +5,28 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+### Added
+- **조치 정책 모드(G-01)**: `fix.sh --policy <파일> --operator <이름>` / `fix.ps1 -Policy <파일> -Operator <이름>` / `05_network/fix.py --policy`.
+  승인자가 작성한 줄 단위 정책 파일(머리말 `category=`·`expires=`·`approver=`, 승인 코드, `[host:이름]`·`[host:*]` 구역의 `-코드` 제외)로
+  적용 전 목록 확인과 confirm 항목별 y/N 을 대신한다(무인 조치). 설정값은 가이드 값 고정. 카테고리 불일치·만료·없는 코드·중복·정책에 없는
+  호스트 등 형식 오류는 줄 번호와 함께 exit 2(아무것도 바꾸지 않음). 정책에 없는 VULN 항목은 `POLICY_SKIPPED`. sh·PowerShell·Python 이
+  같은 규칙으로 읽는다(`lib/common_fix.sh`, `lib/Common.psm1` Read-FixPolicy 등, `lib/fix_policy.py`). 형식은 docs/USAGE.md.
+- **irreversible 플래그·운영 영향 분류표(G-02, 구 D4)**: 조치 파일 머리말 `# 영향:`(F5, 적용 순간 서비스 중지·세션 끊김·계정 잠금·접근 차단·
+  재시작) 신설 - 01 16·02 11·03 5·05 18·07 3·08 11개 조치. `# 원복:`(F4) 또는 `# 영향:` 이 있는 항목은 정책에 `코드:irreversible` 로 적어야
+  적용된다. `docs/FIX_IMPACT.md`(220개 조치 중 82개 해당)를 `lib/tests/fix_impact.py` 가 생성하고 CI 가 `--check` 로 최신인지 확인.
+  guide_consistency R6: 원복·영향 머리말은 앞 12줄 안.
+- **감사 기록(G-03)**: 정책 모드에서 출력 폴더 `audit.txt` 와 조치 로그 머리에 실행자(--operator)·실제 로그인 계정·승인자·정책 파일 경로·
+  SHA-256·유효기간·시작/종료 시각·건수·실패 코드를 남긴다. `--operator` 에 제어 문자가 있으면 거부(감사 기록 위조 방지).
+- **조치 전후 비교(G-04)**: `merge.py --diff <전> <후>` - 호스트+카테고리+환경+코드로 맞춰 신규 취약(맨 위)·조치 완료·미조치·확인 필요
+  (MANUAL·ERROR 관련, 한쪽에만 있음, 취약→해당없음)·변화 없음 양호로 분류해 `diff_report.html`·`diff.csv`·`diff_summary.txt`.
+- **수동점검 사람 판정(G-05)**: report.html·병합 보고서에서 MANUAL 항목에 취약/양호+사유를 입력해 `manual_verdicts.json` 으로 내려받고
+  `merge.py --verdicts` 로 최종·비교 보고서에 반영(result.json 불변, "사람 판정 / 원래 수동점검" 구분 표시, CSV 에 original_status·judged 열).
+  host·category·generated_from 이 맞는 판정만 반영(재진단 결과에는 다시 판정).
+- **네트워크 명령어 생성에 정책 적용(G-06)**: 05_network/fix.py 가 정책 승인 항목만 명령어를 만들고 나머지는 사유와 함께 제외 목록·audit.txt.
+
+### Changed
+- oracle D-01 조치 머리말의 `# 원복: 가능 …` 삭제 - `# 원복:` 은 "완전 원복 불가" 표기라 정상 원복되는 항목에 붙어 있으면 안 된다.
+
 ### Fixed
 - 08_dbms oracle 테스트: 기본 상태 진단을 DB 준비(OS 인증) 직후 바로 돌려, 리스너·FREEPDB1 등록이 덜 끝나면 SYSTEM@FREEPDB1 사전
   접속 점검이 실패해 전 항목 ERROR(17건 불일치)로 FAIL 하던 일시 실패(CI run 42181792315) - run.sh 가 exit 4 면 30초 간격 최대 6회 재시도.

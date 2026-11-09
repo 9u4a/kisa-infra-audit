@@ -14,6 +14,8 @@
 #   fix.sh -e mysql -r <result.json> -i D-01,D-05 --apply   지정 항목만 실제 적용
 #   fix.sh -e mysql -r <result.json> --apply --yes          적용 전 변경 목록 확인(1회) 생략(confirm 은 항상 개별 y/N)
 #   fix.sh -e mysql -r <result.json> --apply --force        result.json 의 호스트·카테고리·엔진 불일치·7일 경과 확인을 무시(X-06)
+#   fix.sh -e mysql -r <result.json> --policy <정책 파일> --operator <실행자> [--apply]
+#                                                          정책 모드(무인): 승인 항목만 확인 없이 적용, 감사 기록(audit.txt)
 #   fix.sh -e mysql --rollback <output/host_08_fix_TS 디렉터리>  백업에서 원복
 
 set -u
@@ -37,12 +39,12 @@ ROLLBACK_DIR=""
 OUT_BASE="$SCRIPT_DIR/../output"
 
 usage() {
-    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
     # 값이 필요한 옵션을 값 없이 주면 set -u 오류(parameter not set)로 죽었다(실무 적용 검증 P-24) - 사용법 오류로 끝낸다
-    case "$1" in -r|-i|-e|-o|--rollback|--host|--port|--user|--db|--socket) [ $# -ge 2 ] || { echo "오류: $1 옵션에 값이 필요합니다 (-h 로 사용법 확인)" >&2; exit 2; } ;; esac
+    case "$1" in -r|-i|-e|-o|--rollback|--host|--port|--user|--db|--socket|--policy|--operator) [ $# -ge 2 ] || { echo "오류: $1 옵션에 값이 필요합니다 (-h 로 사용법 확인)" >&2; exit 2; } ;; esac
     case "$1" in
         -r) RESULT_JSON=$2; shift 2 ;;
         -i) ITEM_FILTER=$2; shift 2 ;;
@@ -52,6 +54,8 @@ while [ $# -gt 0 ]; do
         --yes) YES=1; shift ;;
         --force) FORCE=1; shift ;;
         --rollback) ROLLBACK_DIR=$2; shift 2 ;;
+        --policy) POLICY_SET=1; POLICY_FILE=$2; shift 2 ;;
+        --operator) POLICY_OPERATOR_SET=1; POLICY_OPERATOR=$2; shift 2 ;;
         --host) DB_HOST=$2; shift 2 ;;
         --port) DB_PORT=$2; shift 2 ;;
         --user) DB_USER=$2; shift 2 ;;
@@ -62,12 +66,18 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# 1.6.0 G-01: --policy/--operator 조합 확인(잘못되면 변경 없이 exit 2)
+fix_policy_args_check "$ROLLBACK_DIR"
+
 if [ -z "$ENGINE_OVERRIDE" ]; then
     echo "오류: -e mysql|postgres|oracle 로 엔진을 지정해야 합니다(MSSQL은 fix.ps1 사용)." >&2
     usage
     exit 2
 fi
 DBMS_ENGINE="$ENGINE_OVERRIDE"
+
+# 1.6.0 G-01: 정책 파일 검증(카테고리·유효기간·호스트·코드) - 거부될 실행으로 DB 에 접속하지 않도록 사전 접속 점검보다 먼저
+fix_policy_load
 
 DB_ERR_FILE=$(mktemp 2>/dev/null) || {
     DB_ERR_FILE="${TMPDIR:-/tmp}/.dbms_fix_err.$$"
@@ -127,6 +137,7 @@ echo "${C_BOLD}=== 자동 조치 (도구 v${TOOL_VERSION} / 가이드 ${GUIDE_VE
 echo "카테고리   : $CATEGORY_NAME (엔진: $DBMS_ENGINE — MSSQL은 fix.ps1 사용)"
 echo "모드       : $([ "$APPLY" -eq 1 ] && echo '실제 적용' || echo 'DRY-RUN (미리보기만, 아무 것도 바꾸지 않음)')"
 echo "대상 항목  : ${TOTAL}개 (진단 결과 중 VULN$( [ -n "$ITEM_FILTER" ] && echo ", -i 필터 적용"))"
+fix_policy_banner
 echo "------------------------------------------------------------------------"
 
 fix_items "$SCRIPT_DIR/fixes/$DBMS_ENGINE" "$SCRIPT_DIR/checks/$DBMS_ENGINE"

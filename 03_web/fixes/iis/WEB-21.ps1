@@ -1,5 +1,6 @@
 ﻿# WEB-21 (중) HTTP 리디렉션 [IIS] — 조치 [fix: confirm]
 # 변경: https 바인딩이 있는 사이트의 system.webServer/security/access sslFlags 에 Ssl 추가(SSL 필수, https 바인딩 없는 사이트는 건너뜀)
+# 영향: SSL 필수 설정 — https 바인딩이 있는 사이트에 http 로 접속하던 사용자·연동 시스템 요청 거부(403.4)
 # checks/iis/WEB-21.ps1 과 동일한 기준: https 바인딩이 있는 사이트만 sslFlags 에 Ssl 을 추가해
 # HTTP 평문 접근을 차단한다(SSL 필수 설정 = 리디렉션은 아니지만 평문 통신 차단이라는 목적은
 # 동일 - check 도 이를 GOOD 으로 인정). https 바인딩이 아예 없는 사이트는 인증서가 없어

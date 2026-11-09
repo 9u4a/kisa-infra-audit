@@ -1,5 +1,6 @@
 ﻿# WEB-10 (상) 불필요한 프록시 설정 제한 [IIS] — 조치 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # 변경: IIS ARR system.webServer/proxy enabled=true → false(APPHOST 서버 전역)
+# 영향: ARR 프록시 끄기 — 이 서버를 역방향 프록시로 거쳐 가던 백엔드 서비스 접속 중단
 
 if (-not (Test-IisAvailable)) {
     $Global:FixStatus = "NA"; $Global:FixDetail = "IIS 가 설치되어 있지 않음"; $Global:FixEvidence = ""

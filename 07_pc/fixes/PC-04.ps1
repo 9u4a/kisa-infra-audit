@@ -1,6 +1,7 @@
 ﻿# PC-04 (상) 공유 폴더 제거 [fix: confirm — 1.3.0 재분류, guide.json deviation 참고]
 # 변경: LanmanServer\Parameters\AutoShareWks=0(서버 OS 는 AutoShareServer) + 기본 공유 즉시 삭제(거부 시 Server 재시작) + 일반 공유 Everyone 권한 제거
 # 원복: 일부 — 레지스트리는 되돌리지만 중지한 기본 공유는 Server 서비스 재시작/재부팅 후에야 다시 생김(실행 중 삭제가 거부되면 조치가 Server 서비스를 재시작 - SMB 연결 끊김)
+# 영향: 기본 공유 즉시 삭제(거부 시 Server 서비스 재시작)·일반 공유 Everyone 권한 제거 — 공유 사용자 접근 거부, 현재 SMB 연결 끊김
 # checks/PC-04.ps1: 취약 = 기본(관리용) 공유가 존재하거나, 일반 공유에 Everyone 권한이 있는 경우.
 # AutoShareWks=0 설정(다음 재시작부터 적용) + 현재 활성 기본 공유 즉시 제거 + 일반 공유의
 # Everyone 권한 제거. 기본 공유 제거는 02_windows/fixes/W-17.ps1 과 동일한 이유로 즉시 제거만

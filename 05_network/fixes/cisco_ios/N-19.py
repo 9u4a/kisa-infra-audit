@@ -1,4 +1,5 @@
 # N-19 (상) SNMP ACL 설정 [Cisco IOS] - 조치 명령어 생성
+# 영향: SNMP community 에 ACL·RO 적용 — 허용 목록 밖 NMS 의 SNMP 조회·변경 차단
 # checks/cisco_ios/N-19.py: VULN = ACL이 지정되지 않은 SNMP community 설정 존재. 허용할
 # 관리 시스템 IP는 설정 텍스트만으로 알 수 없으므로 자리표시자를 반드시 교체해야 한다. 기존
 # community 문자열은 그대로 유지(재발급)하면서 ACL을 추가한다.

@@ -101,6 +101,66 @@
       return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;";
     });
   }
+  function escAttr(s){ return esc(s).replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+
+  // ---- 수동점검 사람 판정(1.6.0 G-05) ----------------------------------------------------------------
+  // MANUAL 항목에 취약/양호 + 사유를 입력해 manual_verdicts.json 으로 내려받는다(서버 없음). result.json 은
+  // 바뀌지 않으며, lib/merge.py --verdicts 가 이 파일을 최종·비교 보고서에 "사람 판정"으로 반영한다.
+  // 입력 중인 값은 이 브라우저에만 임시 보관한다(localStorage, 실패해도 동작에는 영향 없음).
+  var mv = {};
+  var mvKey = "kisa-mv:" + (result ? (result.host + "|" + result.category + "|" + result.generated_at) : "");
+  try { mv = JSON.parse(window.localStorage.getItem(mvKey) || "{}") || {}; } catch(e){ mv = {}; }
+  function mvSave(){ try { window.localStorage.setItem(mvKey, JSON.stringify(mv)); } catch(e){ /* 저장 불가 무시 */ } }
+  function mvGet(code){ if (!mv[code]) mv[code] = {verdict: "", reason: ""}; return mv[code]; }
+  function pad2(n){ return (n < 10 ? "0" : "") + n; }
+  function isoLocal(d){
+    var off = -d.getTimezoneOffset(), sign = off >= 0 ? "+" : "-"; off = Math.abs(off);
+    return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate())+"T"+pad2(d.getHours())+":"+pad2(d.getMinutes())+":"+pad2(d.getSeconds())
+      + sign + pad2(Math.floor(off/60)) + ":" + pad2(off%60);
+  }
+  var mvPanel = document.getElementById("mv-panel");
+  var mvBy = document.getElementById("mv-by");
+  try { var mvByStored = window.localStorage.getItem("kisa-mv-by"); if (mvByStored) mvBy.value = mvByStored; } catch(e){ /* 무시 */ }
+  function mvUpdateStatus(){
+    var n = 0;
+    rows.forEach(function(r){ if (r.status === "MANUAL" && mv[r.code] && mv[r.code].verdict) n++; });
+    document.getElementById("mv-status").textContent = "수동점검 " + counts.MANUAL + "건 중 " + n + "건 사람 판정 입력됨 (항목을 펼쳐 입력)";
+  }
+  function mvBox(r){
+    var v = mvGet(r.code), nm = "mv-" + escAttr(r.code);
+    return '<h4>사람 판정 (수동점검)</h4><div class="mv-box">'
+      + '<label><input type="radio" class="mv-v" data-code="'+escAttr(r.code)+'" name="'+nm+'" value="VULN"'+(v.verdict === "VULN" ? " checked" : "")+'> 취약</label> '
+      + '<label><input type="radio" class="mv-v" data-code="'+escAttr(r.code)+'" name="'+nm+'" value="GOOD"'+(v.verdict === "GOOD" ? " checked" : "")+'> 양호</label> '
+      + '<label><input type="radio" class="mv-v" data-code="'+escAttr(r.code)+'" name="'+nm+'" value=""'+(v.verdict ? "" : " checked")+'> 미판정</label>'
+      + '<textarea class="mv-r" data-code="'+escAttr(r.code)+'" placeholder="판정 사유(필수)">'+esc(v.reason)+'</textarea>'
+      + '</div>';
+  }
+  function mvDownload(){
+    var by = mvBy.value.trim();
+    if (!by) { alert("판정자를 입력하세요."); mvBy.focus(); return; }
+    var now = isoLocal(new Date()), out = [], bad = [];
+    rows.forEach(function(r){
+      if (r.status !== "MANUAL" || !mv[r.code]) return;
+      var v = mv[r.code], reason = (v.reason || "").trim();
+      if (!v.verdict && !reason) return;
+      if (!v.verdict || !reason) { bad.push(r.code); return; }
+      out.push({code: r.code, verdict: v.verdict, reason: reason, judged_by: by, judged_at: now});
+    });
+    if (bad.length) { alert("판정(취약/양호)과 사유를 모두 입력하세요: " + bad.join(", ")); return; }
+    if (!out.length) { alert("입력한 판정이 없습니다."); return; }
+    var obj = {host: result.host, category: result.category, generated_from: result.generated_at, verdicts: out};
+    var blob = new Blob([JSON.stringify(obj, null, 2) + "\n"], {type: "application/json"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "manual_verdicts.json";
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.parentNode.removeChild(a); }, 1000);
+  }
+  if (result && counts.MANUAL > 0) {
+    mvPanel.style.display = "flex";
+    document.getElementById("mv-dl").addEventListener("click", mvDownload);
+    mvBy.addEventListener("input", function(){ try { window.localStorage.setItem("kisa-mv-by", mvBy.value); } catch(e){ /* 무시 */ } });
+    mvUpdateStatus();
+  }
 
   function render(){
     var st = fStatus.value, sv = fSeverity.value, tx = fText.value.trim().toLowerCase();
@@ -120,9 +180,12 @@
         + '<td class="sev">'+esc(r.severity)+'</td>'
         + '<td>'+esc(r.title)+'</td>'
         + '<td class="sev">'+esc(r.group_no)+'. '+esc(r.group_name)+'</td>'
-        + '<td><span class="badge '+esc(r.status)+'">'+esc(STATUS_LABEL[r.status] || r.status)+'</span></td>'
+        + '<td><span class="badge '+esc(r.status)+'">'+esc(STATUS_LABEL[r.status] || r.status)+'</span>'
+        + (r.status === "MANUAL" && mv[r.code] && mv[r.code].verdict ? '<span class="mv-tag">사람 판정: '+esc(STATUS_LABEL[mv[r.code].verdict])+'</span>' : '')
+        + '</td>'
         + '</tr>';
       html += '<tr class="detail-row" id="'+rid+'" style="display:none"><td colspan="5"><div class="detail">'
+        + (r.status === "MANUAL" ? mvBox(r) : '')
         + '<h4>판정 근거</h4><div>'+(esc(r.detail) || '-')+'</div>'
         + (r.evidence ? '<h4>증적</h4><pre>'+esc(r.evidence)+'</pre>' : '')
         + '<h4>판단 기준 (가이드 원문)</h4><div>양호: '+esc(r.criteria_good)+'</div><div>취약: '+esc(r.criteria_vuln)+'</div>'
@@ -137,6 +200,18 @@
         var target = document.getElementById(tr.getAttribute("data-target"));
         if (target) target.style.display = (target.style.display === "none") ? "table-row" : "none";
       });
+    });
+    Array.prototype.forEach.call(tbody.querySelectorAll("input.mv-v"), function(el){
+      el.addEventListener("change", function(){
+        mvGet(el.getAttribute("data-code")).verdict = el.value; mvSave(); mvUpdateStatus();
+        var tag = el.value ? '<span class="mv-tag">사람 판정: '+esc(STATUS_LABEL[el.value])+'</span>' : '';
+        var dr = el.closest ? el.closest("tr.detail-row") : null;
+        var ir = dr ? dr.previousElementSibling : null;
+        if (ir) { var cell = ir.lastElementChild; var old = cell.querySelector(".mv-tag"); if (old) cell.removeChild(old); cell.insertAdjacentHTML("beforeend", tag); }
+      });
+    });
+    Array.prototype.forEach.call(tbody.querySelectorAll("textarea.mv-r"), function(el){
+      el.addEventListener("input", function(){ mvGet(el.getAttribute("data-code")).reason = el.value; mvSave(); });
     });
   }
 

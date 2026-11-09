@@ -111,6 +111,28 @@ else
     echo "FAIL: fix-apply - $(printf '%s' "$out" | tr '\n' ' ')"; fail=1
 fi
 
+# ---- 조치 정책 모드 (fixtures/policy_mode.sh, 1.6.0 G-01·G-02·G-03) ------------------------------------
+# 정책 거부(카테고리·유효기간·호스트·--operator, --force 로도 우회 불가)는 exit 2·변경 없음, dry-run 은 정책 판정만 보여 줌,
+# 비대화형 --apply(--yes 없음)에서 승인된 confirm(U-67)이 y/N 없이 적용(U-12 는 재검증 실패 → 원복·failed_codes), 미승인·호스트 제외·irreversible 플래그 없는 원복/영향 표기
+# 항목은 POLICY_SKIPPED, audit.txt·changes.log 맨 앞 감사 기록(실행자·승인자·정책 SHA-256·시각·건수).
+pol_expect='REJ_CAT=2/1 REJ_CAT_FORCE=2 REJ_EXP=2/1 REJ_HOST=2/1 REJ_NOOP=2 REJ_OPONLY=2 REJ_STATE=unchanged
+DRY_RC=0 DRY_PREVIEW_U12=yes DRY_SKIP=U-05,U-11,U-16,U-34, DRY_MODE=mode=dry-run DRY_STATE=unchanged
+POL_RC=0 POL_U-18=APPLIED POL_U-12=FAILED_ROLLED_BACK POL_U-67=APPLIED POL_U-36=APPLIED POL_U-16=POLICY_SKIPPED POL_U-05=POLICY_SKIPPED POL_U-34=POLICY_SKIPPED
+POL_U-11=POLICY_SKIPPED WHY_U-11=unapproved WHY_U-16=excluded WHY_U-34=irrev-rollback WHY_U-05=irrev-impact POL_PROMPTS=0/0
+POL_U18_STATE=400 POL_U12_STATE=rolled-back POL_FAILED_SUMMARY=U-12 AUD_FAILED_CODES=U-12 AUD_OPERATOR=김점검 AUD_APPROVER=홍길동 AUD_LOGIN=root AUD_FILE=/tmp/policy.txt AUD_SHA=match
+AUD_EXPIRES=2099-12-31 AUD_HOST=match AUD_CAT=01/apply AUD_START=iso AUD_END=iso AUD_COUNTS=applied:3,failed:1,policy_skipped_ge4:yes
+LOG_HEAD=audit LOG_TAIL=finished SUMMARY=policy'
+pol_out=$(docker run --rm "$IMAGE" sh 01_unix/tests/fixtures/policy_mode.sh)
+pol_fail=""
+for kv in $pol_expect; do
+    printf '%s\n' "$pol_out" | grep -qxF "$kv" || pol_fail="$pol_fail $kv"
+done
+if [ -z "$pol_fail" ]; then
+    echo "PASS: fix-policy ($(printf '%s' "$pol_out" | tr '\n' ' '))"
+else
+    echo "FAIL: fix-policy - 기대와 다름:$pol_fail / 실제: $(printf '%s' "$pol_out" | tr '\n' ' ')"; fail=1
+fi
+
 # ---- 항목별 양방향 케이스 (fixtures/cases, 1.4.0) ------------------------------------
 # 전역 vuln/hardened 픽스처로 만들 수 없는 상태(서비스 설치+활성/비활성, 서로 배타적인 설정)를 항목마다 새 systemd 컨테이너
 # (Dockerfile.cases)에서 만들어 판정을 확인하고, VULN 케이스는 조치 → 재검증 → 원복 → 상태 동일까지 본다(run_cases.sh).
