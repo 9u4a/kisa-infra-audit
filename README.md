@@ -56,7 +56,7 @@ PC 보안 점검 솔루션의 "점검 → 원클릭 조치 → 재점검" 흐름
 | 카테고리 | 검증한 대상(버전) | 실행 위치 | 양방향 확인 / 면제 |
 |---|---|---|---|
 | 01_unix | Debian 12.15, OpenSSH 9.2p1 (POSIX sh) | Docker `debian:12` | 58 / 9 |
-| 01_unix rhel 계열 | Rocky Linux 9.8 (authselect minimal PAM, OpenSSH 9.9p1, cronie, systemd 252) | Docker `rockylinux/rockylinux:9` | Debian 과 같은 케이스 + rhel 전용(authselect faillock·su wheel) 총 82건, 진단 실기 안전 검사 |
+| 01_unix rhel 계열 | Rocky Linux 9.8 (authselect minimal PAM, OpenSSH 9.9p1, cronie, systemd 252) | Docker `rockylinux/rockylinux:9` | Debian 과 같은 케이스 + rhel 전용(authselect faillock·미관리 PAM·su wheel) 총 83건, 진단 실기 안전 검사 |
 | 02_windows | Windows Server 2025 Datacenter (10.0.26100, en-US), PowerShell 5.1.26100 | GitHub `windows-2025` 러너 (IIS·FTP·DNS·SNMP 기능 설치) | 49 / 15 |
 | 02_windows Server 2022 | Windows Server 2022 Datacenter (en-US), PowerShell 5.1 | GitHub `windows-2022` 러너 (주간·수동 job) | 02_windows·07_pc 같은 케이스(OS 차이는 케이스 `expect_os` 에 사유 기록) |
 | 03_web Apache | Apache httpd 2.4.69 (공식 이미지) | Docker `httpd:2.4` | 16 / 10 |

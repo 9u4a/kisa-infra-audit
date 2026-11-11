@@ -31,6 +31,13 @@ c_U_03__authselect_faillock_deny5() {
     sed -i 's/^#[[:space:]]*deny[[:space:]]*=.*/deny = 5/' /etc/security/faillock.conf
 }
 c_U_03__authselect_no_faillock() { printf 'deny = 5\n' >> /etc/security/faillock.conf; }
+# authselect 가 관리하지 않는 PAM(G-07 Rocky 9 kickstart 최소 설치 실측: authselect current "기존 구성이 없습니다", system-auth 는 일반 파일).
+# Rocky 9 authselect 1.2 에는 opt-out 이 없어 링크를 실제 파일로 바꾸고 authselect.conf 를 지워 같은 상태를 만든다
+c_U_03__authselect_unmanaged() {
+    for f in system-auth password-auth; do cp --remove-destination "$(readlink -f /etc/pam.d/$f)" "/etc/pam.d/$f"; done
+    rm -f /etc/authselect/authselect.conf
+    printf 'deny = 5\n' >> /etc/security/faillock.conf
+}
 c_U_06__su_wheel_required() { sed -i 's/^#\(auth[[:space:]]*required[[:space:]]*pam_wheel\.so use_uid\)$/\1/' /etc/pam.d/su; }
 c_U_06__su_wheel_trust_only() {
     sed -i 's/^#\(auth[[:space:]]*sufficient[[:space:]]*pam_wheel\.so trust use_uid\)$/\1/' /etc/pam.d/su

@@ -46,6 +46,7 @@ G-07 실환경 VM 검증(한글 Windows Server 2022 독립·도메인 컨트롤�
 - 검사 도구(lib/tests): DC 에서 상태 스냅샷이 `Get-LocalGroupMember` 로 실패(WinNT 공급자로 대체), DC 에서 비관리자 실행 검사(S6) 생략
   (로컬 계정 없음 - 독립 서버·CI 에서 확인), W-23 FTP 케이스 정리가 FTP 역할만 있는 서버에서 `Get-Website` "클래스가 등록되지 않았습니다"로
   실패해 사이트·SNMP 상태가 다음 단계로 새던 것(appcmd 로 삭제), 임계값 0 에서 W-08 "W-04 먼저"를 정상 결과로 인정.
+- **U-03 이 rhel 기본 상태에서 늘 "자동 조치 불가"**: Rocky/RHEL 9 기본 authselect 프로필(minimal·sssd)은 pam_faillock 이 꺼져 있어 조치가 PAM 스택 구성을 사람에게 넘겼다(G-07). PAM 이 authselect 관리이고 프로필이 수정되지 않았으면(`authselect check`) `authselect enable-feature with-faillock` 을 먼저 적용하고 faillock.conf deny=5 를 설정한다. /etc/authselect·/var/lib/authselect 의 실제 파일을 백업해 원복한다(rhel 케이스 authselect-no-faillock 이 NOFIX → GOOD, 원복 동일). PAM 이 authselect 관리가 아니면(G-07 VM 의 kickstart 최소 설치) 프로필 강제 선택·PAM 직접 편집은 하지 않고 수동 절차를 안내한다(rhel 케이스 authselect-unmanaged 추가).
 - 회귀 테스트: `lib/tests/fix_restore_tests.ps1`(보안 정책 원복 INF·긴 백업 이름, 시스템 무변경) - CI static-analysis(pwsh 7)·windows(5.1).
 - 08_dbms oracle 테스트: 기본 상태 진단을 DB 준비(OS 인증) 직후 바로 돌려, 리스너·FREEPDB1 등록이 덜 끝나면 SYSTEM@FREEPDB1 사전
   접속 점검이 실패해 전 항목 ERROR(17건 불일치)로 FAIL 하던 일시 실패(CI run 42181792315) - run.sh 가 exit 4 면 30초 간격 최대 6회 재시도.
