@@ -70,8 +70,20 @@ function Get-WinStateSnapshot {
     # Get-SmbShareAccess 결과가 비었다가 다시 나온다(CI run 42146025845 W-23 원복 비교에서 ADMIN$/C$/D$ 권한 줄만 새로 생김).
     $s.shares = (@(Get-SmbShare | ForEach-Object { "$($_.Name)|$($_.Path)" }) +
         @(Get-SmbShare | Where-Object { -not $_.Special } | Get-SmbShareAccess | ForEach-Object { "$($_.Name)|$($_.AccountName)|$($_.AccessRight)" }) | Sort-Object) -join "`n"
-    $s.accounts = ((Get-LocalUser | ForEach-Object { "$($_.Name)|$($_.Enabled)" }) +
-        (Get-LocalGroupMember -SID S-1-5-32-544 | ForEach-Object { "admin|$($_.Name)" })) -join "`n"
+    # 도메인 컨트롤러에는 로컬 SAM 이 없어 Get-LocalUser/Get-LocalGroupMember 가 "그룹을 찾지 못했습니다"로 실패한다(G-07 DC 실측) →
+    # DC 에서는 WinNT 공급자(도메인 계정·BUILTIN\Administrators)로 같은 형식의 줄을 만든다
+    if ((Get-CimInstance Win32_ComputerSystem).DomainRole -ge 4) {
+        try {
+            $adm = (New-Object Security.Principal.SecurityIdentifier "S-1-5-32-544").Translate([Security.Principal.NTAccount]).Value.Split('\')[-1]
+            $dom = [ADSI]"WinNT://$env:USERDOMAIN"; $dom.Children.SchemaFilter.Add("User") | Out-Null
+            $u = @($dom.Children | ForEach-Object { "$($_.Name)|$(-not ([int]$_.UserFlags.Value -band 2))" })
+            $g = @(([ADSI]"WinNT://$env:COMPUTERNAME/$adm,group").Invoke("Members") | ForEach-Object { "admin|$(([ADSI]$_).Name)" })
+            $s.accounts = (($u | Sort-Object) + ($g | Sort-Object)) -join "`n"
+        } catch { $errs += "DC 계정 조회 실패: $($_.Exception.Message)" }
+    } else {
+        $s.accounts = ((Get-LocalUser | ForEach-Object { "$($_.Name)|$($_.Enabled)" }) +
+            (Get-LocalGroupMember -SID S-1-5-32-544 | ForEach-Object { "admin|$($_.Name)" })) -join "`n"
+    }
     $s.tasks = (Get-ScheduledTask | Sort-Object TaskPath, TaskName | ForEach-Object { "$($_.TaskPath)$($_.TaskName)|$($_.State)" } |
         Where-Object { $_ -notmatch 'MicrosoftEdgeUpdate|Office|OneDrive' }) -join "`n"
     $iisFiles = @("$env:windir\System32\inetsrv\config\applicationHost.config") +

@@ -28,6 +28,25 @@
 - oracle D-01 조치 머리말의 `# 원복: 가능 …` 삭제 - `# 원복:` 은 "완전 원복 불가" 표기라 정상 원복되는 항목에 붙어 있으면 안 된다.
 
 ### Fixed
+G-07 실환경 VM 검증(한글 Windows Server 2022 독립·도메인 컨트롤러, 한글 Windows 11, Rocky Linux 9 + SELinux enforcing)에서 CI 러너로는
+드러나지 않던 조치·원복 결함을 찾아 고쳤다. 같은 VM 스냅샷에서 고친 뒤 다시 돌려 확인했다(KNOWN_ISSUES G-07).
+- **보안 정책 전체 원복이 바꾸지 않은 정책을 망가뜨림**(lib/Common.psm1 Restore-FixSecPolicyBackup): `-Rollback` 이 secedit 스냅샷을
+  통째로 다시 넣어 ① DC 기본 `NullSessionPipes`(netlogon·samr·lsarpc, 첫 원소가 빈 다중 문자열)를 비우고 ② 한글 Windows 11 의
+  `SeServiceLogonRight` 에서 지역화 계정명("제한된 서비스\모든 제한된 서비스")을 뺐다. 조치가 바꾼 키를 백업 폴더 `changed-keys.txt` 에
+  남기고 원복은 그 키만 스냅샷 값으로 되돌린다(`[Registry Values]` 는 쓰지 않음, 예전 백업은 `[Registry Values]` 만 빼고 전체).
+- **W-17/PC-04 가 도메인 컨트롤러를 멈춤**: 기본 공유 삭제가 거부되면 Server 서비스를 재시작하는데, DC 에서 종속 Netlogon 이 다시
+  올라오지 못해 LanmanServer 까지 멈춘 채 SYSVOL·NETLOGON·IPC$ 공유가 모두 사라졌다. DC 에서는 재시작하지 않고 ERROR(레지스트리 원복),
+  그 밖에서는 재시작이 실패해도 Server 서비스와 원래 돌던 종속 서비스를 다시 올리고 못 올린 서비스를 오류에 남긴다.
+- **서비스 원복이 "실행 중 + 사용 안 함" 상태를 되돌리지 못함**(W-29/W-30 SNMP): 시작 유형부터 Disabled 로 되돌린 뒤 시작해 오류 1058.
+  이 조합은 잠시 수동으로 두고 시작한 뒤 Disabled 로 되돌린다. 서비스 원복 실패 기록에 가장 안쪽 Win32 오류를 함께 남긴다.
+- **W-23 FTP 백업 실패**: IIS 설정 필터로 만든 백업 파일 이름이 MAX_PATH(260자)를 넘었다. 60자를 넘는 백업 이름은 앞 40자 + SHA-256 16자로
+  줄인다(Get-FixBackupFileName - registry·webconfig·acl·remove 공통, 원복은 파일 내용으로 자원을 찾는다).
+- **W-08 이 잠금 임계값 0 에서 원복 불가 실패를 남김**: 임계값이 0 이면 잠금 기간이 저장되지 않아 적용 후에도 VULN → 항목 단위로 되돌릴
+  수 없는 보안 정책 변경이 FAILED_NOT_ROLLED_BACK 으로 남았다. 이제 아무것도 바꾸지 않고 "W-04(임계값)를 먼저 조치"로 끝낸다.
+- 검사 도구(lib/tests): DC 에서 상태 스냅샷이 `Get-LocalGroupMember` 로 실패(WinNT 공급자로 대체), DC 에서 비관리자 실행 검사(S6) 생략
+  (로컬 계정 없음 - 독립 서버·CI 에서 확인), W-23 FTP 케이스 정리가 FTP 역할만 있는 서버에서 `Get-Website` "클래스가 등록되지 않았습니다"로
+  실패해 사이트·SNMP 상태가 다음 단계로 새던 것(appcmd 로 삭제), 임계값 0 에서 W-08 "W-04 먼저"를 정상 결과로 인정.
+- 회귀 테스트: `lib/tests/fix_restore_tests.ps1`(보안 정책 원복 INF·긴 백업 이름, 시스템 무변경) - CI static-analysis(pwsh 7)·windows(5.1).
 - 08_dbms oracle 테스트: 기본 상태 진단을 DB 준비(OS 인증) 직후 바로 돌려, 리스너·FREEPDB1 등록이 덜 끝나면 SYSTEM@FREEPDB1 사전
   접속 점검이 실패해 전 항목 ERROR(17건 불일치)로 FAIL 하던 일시 실패(CI run 42181792315) - run.sh 가 exit 4 면 30초 간격 최대 6회 재시도.
 

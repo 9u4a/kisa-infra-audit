@@ -144,6 +144,11 @@ jobs:
         shell: pwsh
         run: ./lib/tests/fix_policy_tests.ps1
 
+      # G-07(1.6.0 실환경 VM 검증) 회귀: 보안 정책 원복은 바꾼 키만(DC NullSessionPipes·한글 계정명 유실), 긴 백업 이름 축약(MAX_PATH)
+      - name: 조치 원복 단위 테스트(pwsh 7)
+        shell: pwsh
+        run: ./lib/tests/fix_restore_tests.ps1
+
   network:
     # 05_network 는 오프라인 설정파일 분석이라 Docker/실제 장비가 필요 없다 - Cisco IOS
     # vuln/hardened 픽스처 2종으로 38항목 전체 판정 로직을 회귀 테스트한다(실제 장비
@@ -209,6 +214,8 @@ jobs:
         shell: powershell
         run: |
           .\lib\tests\fix_policy_tests.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\lib\tests\fix_restore_tests.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       # 1.4.0: 02_windows/07_pc 의 -Bootstrap 은 기대값과의 차이만 출력한다(파일을 쓰지 않음 - 도구 출력을 정답으로 굳히지 않기 위해).
 

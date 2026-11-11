@@ -115,6 +115,8 @@ foreach ($c in @($base.Map.Keys | Where-Object { $base.Map[$_] -eq "VULN" -and $
     $r = $rows | Where-Object Code -eq $c | Select-Object -First 1
     $why = if ($r) { "$($r.Result): $($r.Detail)" } else { "changes.log 기록 없음" }
     if ($KnownAutoNotApplied.ContainsKey($c)) { Write-Host "  알려진 미적용: $c ($($KnownAutoNotApplied[$c])) - $why" }
+    # G-07: 잠금 임계값 0 인 서버에서 W-04 가 승인되지 않으면 W-08 은 아무것도 바꾸지 않고 "W-04 먼저"로 끝나는 것이 설계(fixes/W-08.ps1)
+    elseif ($c -eq "W-08" -and $r -and $r.Result -eq "FAILED_ROLLED_BACK" -and $r.Detail -match "W-04") { Write-Host "  선행 조건 미충족: W-08 (임계값 0 - W-04 먼저) - $why" }
     else { $fail += "${c}: auto 등급·조치 전 VULN 인데 APPLIED 가 아님($why)" }
 }
 
@@ -214,7 +216,12 @@ Set-WebConfigurationProperty -PSPath $apphost -Filter "system.applicationHost/si
 '@; Cleanup = @'
 $ErrorActionPreference = 'Stop'
 Import-Module WebAdministration
-foreach ($n in @('kisa_ftp_inherit', 'kisa_ftp_explicit')) { if (Get-Website | Where-Object { $_.Name -eq $n }) { Remove-Website -Name $n } }
+# G-07: FTP 역할만 있는 서버(웹 서버 W3SVC 없음)에서는 Get-Website 가 "클래스가 등록되지 않았습니다"로 실패해 사이트가 남았다 → appcmd 로 지운다
+$appcmd = Join-Path $env:windir 'System32\inetsrv\appcmd.exe'
+foreach ($n in @('kisa_ftp_inherit', 'kisa_ftp_explicit')) {
+    $null = & $appcmd list site $n 2>&1
+    if ($LASTEXITCODE -eq 0) { & $appcmd delete site $n | Out-Null; if ($LASTEXITCODE -ne 0) { throw "appcmd delete site $n 실패(rc=$LASTEXITCODE)" } }
+}
 $st = Get-Content -Raw -Path (Join-Path $env:TEMP 'kisa_case_w23_ftp.json') | ConvertFrom-Json
 Set-WebConfigurationProperty -PSPath 'MACHINE/WEBROOT/APPHOST' -Filter 'system.applicationHost/sites/siteDefaults/ftpServer/security/authentication/anonymousAuthentication' -Name enabled -Value ([bool]$st.SiteDefaults)
 Stop-Service -Name FTPSVC -Force

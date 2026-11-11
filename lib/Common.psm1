@@ -1299,6 +1299,20 @@ function Save-FixBackupJson {
     return $File
 }
 
+function Get-FixBackupFileName {
+    <# 백업 파일 이름(확장자 제외). 자원 경로를 그대로 쓰면 IIS 설정 필터처럼 긴 이름이 MAX_PATH(260자)를 넘어 백업이
+       실패한다(G-07: 한글 Server 2022 W-23 FTP - 'C:\Users\Administrator\AppData\Local\Temp\...' 아래 300자 넘음).
+       60자를 넘으면 앞 40자 + SHA-256 앞 16자로 줄인다 - 같은 자원은 늘 같은 이름(재백업 시 첫 백업 보존 유지).
+       원복은 이름이 아니라 JSON/메타 파일 내용으로 자원을 찾으므로 이름이 바뀌어도 된다. #>
+    param([Parameter(Mandatory)][string]$Raw, [string]$Pattern = '[\\:/\s\[\]@=''"*?<>|]')
+    $safe = $Raw -replace $Pattern, '_'
+    if ($safe.Length -le 60) { return $safe }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $h = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Raw)) | Select-Object -First 8 | ForEach-Object { $_.ToString("x2") }) }
+    finally { $sha.Dispose() }
+    return $safe.Substring(0, 40) + "~" + $h
+}
+
 function Get-FixItemBackupDir {
     <# 현재 $Global:FixCode 에 대응하는 백업 디렉터리를 만들고 경로를 반환 #>
     param([string]$Sub = "")
@@ -1313,7 +1327,7 @@ function Get-FixItemBackupDir {
 function Backup-FixRegistryValue {
     param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Name)
     $dir = Get-FixItemBackupDir -Sub "registry"
-    $safe = ("$Path--$Name") -replace '[\\:\s]', '_'
+    $safe = Get-FixBackupFileName -Raw "$Path--$Name"
     $file = Join-Path $dir "$safe.json"
     if (Test-Path -LiteralPath $file) { return $file }
     $existed = $false; $value = $null; $kind = $null
@@ -1427,11 +1441,24 @@ function Restore-FixServiceBackup {
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
     if (-not $o.Found) { return }
     try {
+        # G-07: "실행 중인데 시작 유형은 사용 안 함"(실행 후 사용 안 함으로 바꾼 서비스)을 백업했다가 시작 유형부터 Disabled 로 되돌리고
+        # 시작해 오류 1058 로 원복이 실패했다(한글 Server 2022 SNMP, 독립·DC 모두 실측). 이 조합이면 잠시 수동으로 두고 시작한 뒤
+        # Disabled 로 되돌린다.
+        if ($o.Status -eq "Running" -and $o.StartType -eq "Disabled") {
+            Set-Service -Name $o.Name -StartupType Manual -ErrorAction Stop
+            Start-Service -Name $o.Name -ErrorAction Stop
+            Set-Service -Name $o.Name -StartupType Disabled -ErrorAction Stop
+            return
+        }
         Set-Service -Name $o.Name -StartupType $o.StartType -ErrorAction Stop
         if ($o.Status -eq "Running") { Start-Service -Name $o.Name -ErrorAction Stop }
         # F-W41(1.4.0): 조치가 시작한 서비스(원래 중지)는 다시 중지한다 - 예전에는 시작 유형만 되돌려 구동 상태가 남았다
         elseif ($o.Status -eq "Stopped" -and (Get-Service -Name $o.Name).Status -ne "Stopped") { Stop-Service -Name $o.Name -Force -ErrorAction Stop }
-    } catch { Add-FixRollbackFailure "서비스 원복 실패 $($o.Name): $($_.Exception.Message)" }
+    } catch {
+        # 바깥 메시지("서비스를 시작할 수 없습니다")만으로는 원인을 알 수 없어 가장 안쪽 예외(Win32 오류)를 함께 남긴다
+        $e = $_.Exception; while ($e.InnerException) { $e = $e.InnerException }
+        Add-FixRollbackFailure "서비스 원복 실패 $($o.Name): $($_.Exception.Message)$(if ($e -ne $_.Exception) { " ($($e.Message))" })"
+    }
 }
 
 function Disable-FixService {
@@ -1472,9 +1499,23 @@ function Remove-FixDefaultShares {
     }
     $restarted = $false
     if ($refused.Count -gt 0) {
+        # G-07: 도메인 컨트롤러에서 Server 서비스를 재시작하면 종속된 Netlogon 이 다시 올라오지 못해("Netlogon 서비스를 시작하지
+        # 못했습니다") LanmanServer 까지 멈춘 채 남았고 SYSVOL/NETLOGON/IPC$ 공유가 모두 사라졌다(한글 Server 2022 DC 실측).
+        # DC 에서는 재시작하지 않는다 - 남은 공유는 Remaining 으로 돌려 조치가 ERROR(→ 레지스트리 원복)로 끝난다.
+        if ((Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).DomainRole -ge 4) {
+            throw "도메인 컨트롤러라 Server 서비스를 재시작하지 않음(SYSVOL/NETLOGON 중단 위험) - 기본 공유 제거는 재부팅을 계획해 수동 조치: $($refused -join ', ')"
+        }
         $deps = @(Get-Service -Name LanmanServer -DependentServices | Where-Object { $_.Status -eq "Running" } | ForEach-Object { $_.Name })
-        Restart-Service -Name LanmanServer -Force -ErrorAction Stop
+        $restartError = $null
+        try { Restart-Service -Name LanmanServer -Force -ErrorAction Stop } catch { $restartError = $_.Exception.Message }
+        # 재시작이 실패해도(종속 서비스 시작 실패 등) Server 서비스와 원래 돌던 종속 서비스를 다시 올린다 - 예전에는 예외로 바로 빠져나가
+        # Server 서비스가 멈춘 채 남을 수 있었다
+        if ((Get-Service -Name LanmanServer).Status -ne "Running") { Start-Service -Name LanmanServer -ErrorAction SilentlyContinue }
         foreach ($d in $deps) { Start-Service -Name $d -ErrorAction SilentlyContinue }
+        $notUp = @(@("LanmanServer") + $deps | Where-Object { (Get-Service -Name $_ -ErrorAction SilentlyContinue).Status -ne "Running" })
+        if ($restartError -or $notUp.Count -gt 0) {
+            throw "Server 서비스 재시작 실패($restartError)$(if ($notUp.Count -gt 0) { " - 다시 시작하지 못한 서비스: $($notUp -join ', ')" })"
+        }
         $restarted = $true
     }
     $remaining = @(Get-SmbShare -ErrorAction Stop | Where-Object { & $isDefault $_.Name } | ForEach-Object { $_.Name })
@@ -1532,7 +1573,7 @@ function Backup-FixPathAndRemove {
         throw "[백업 실패] $Path 는 정션/심볼릭 링크라 안전하게 백업·삭제할 수 없음(링크 대상 데이터 손상 위험) - 수동 조치 필요"
     }
     $dir = Get-FixItemBackupDir -Sub "remove"
-    $safe = ($Path -replace '[\\:]', '_')
+    $safe = Get-FixBackupFileName -Raw $Path
     $dest = Join-Path $dir $safe
     try {
         Copy-Item -LiteralPath $Path -Destination $dest -Recurse -Force -ErrorAction Stop
@@ -1618,7 +1659,7 @@ function Backup-FixWebConfigProperty {
     <# -Location: MACHINE/WEBROOT/APPHOST 의 <location path="사이트"> 에 쓰는 경우(잠긴 섹션) #>
     param([Parameter(Mandatory)][string]$Filter, [Parameter(Mandatory)][string]$Name, [string]$PSPath = "IIS:\", [string]$Location = "")
     $dir = Get-FixItemBackupDir -Sub "webconfig"
-    $safe = ("$PSPath--$Location--$Filter--$Name") -replace '[\\:/\s\[\]@=''"*?<>|]', '_'
+    $safe = Get-FixBackupFileName -Raw "$PSPath--$Location--$Filter--$Name"
     $file = Join-Path $dir "$safe.json"
     if (Test-Path -LiteralPath $file) { return $file }
     $loc = @{}; if ($Location) { $loc.Location = $Location }
@@ -1902,7 +1943,7 @@ function Enable-FixFirewallSafely {
 function Backup-FixAcl {
     param([Parameter(Mandatory)][string]$Path)
     $dir = Get-FixItemBackupDir -Sub "acl"
-    $safe = ($Path -replace '[\\:]', '_')
+    $safe = Get-FixBackupFileName -Raw $Path
     $file = Join-Path $dir "$safe.json"
     if (Test-Path -LiteralPath $file) { return $file }
     try { $acl = Get-Acl -Path $Path -ErrorAction Stop }
@@ -2002,9 +2043,14 @@ function Set-FixSecPolicyValue {
     <# $Section 예: "System Access" / "Privilege Rights" / "Kerberos Policy".
        $Values 는 그 섹션에 적용할 key=value 해시테이블(여러 개 가능) #>
     param([Parameter(Mandatory)][string]$Section, [Parameter(Mandatory)][hashtable]$Values)
-    Backup-FixSecPolicy | Out-Null
+    $snap = Backup-FixSecPolicy
     # 이 항목이 보안 정책을 바꿨음을 기록 - 항목 단위 원복 불가를 Restore-FixItem 이 정직하게 보고하도록
     $Global:FixSecPolicyCodes = @($Global:FixSecPolicyCodes) + $Global:FixCode
+    # 바꾼 키를 백업 폴더에 남긴다 - 전체 원복은 이 키만 스냅샷 값으로 되돌린다(G-07: 스냅샷 통째 재적용이
+    # [Registry Values] 의 다중 문자열(DC NullSessionPipes)과 가져올 수 없는 지역화 계정명(한글 Win11
+    # SeServiceLogonRight)을 지웠다)
+    $keyLog = Join-Path (Split-Path -Parent $snap) "changed-keys.txt"
+    foreach ($k in $Values.Keys) { Add-Content -LiteralPath $keyLog -Value "$($Global:FixCode)`t$Section`t$k" -Encoding UTF8 }
     # secedit /configure /db 는 .sdb 옆에 Jet 데이터베이스 부속 파일(.jfm, edb*.log 등)을 만든다 - 예전에는 %TEMP% 에 고정 이름으로
     # 만들고 .inf/.sdb 만 지워 .jfm 이 운영 서버 TEMP 에 남았다(CI fix_safety 실측). 전용 임시 폴더(New-PrivateTempFile)를 써서
     # 폴더째 지운다(예측 가능한 이름으로 정책 파일을 선점·위조당하는 것도 막는다 - 진단 쪽 W-R7 과 같은 이유).
@@ -2043,15 +2089,56 @@ function Set-FixSecPrivilege {
     Set-FixSecPolicyValue -Section "Privilege Rights" -Values @{ $Right = ($Sids -join ",") }
 }
 
+function Get-FixSecPolicyRestoreLines {
+    <# 스냅샷(secedit /export)에서 원복에 쓸 INF 줄을 만든다. changed-keys.txt 가 있으면 이번 실행이 바꾼
+       키만, 없으면(1.6.0 이전 백업) [Registry Values] 를 뺀 전체. 스냅샷에 없던 사용자 권한 키는 "키 =" 로
+       비운다(조치 전에는 그 권한에 계정이 없었다는 뜻).
+       [Registry Values] 를 통째로 다시 넣으면 첫 원소가 빈 다중 문자열(DC 기본 NullSessionPipes)이 비워지고,
+       지역화 계정명(예: "제한된 서비스\모든 제한된 서비스")은 다시 가져오지 못해 권한에서 빠진다(G-07 실측). #>
+    param([Parameter(Mandatory)][string]$SnapshotFile, [string]$KeyLog = "")
+    $snap = [ordered]@{}; $sec = ""
+    foreach ($l in (Get-Content -LiteralPath $SnapshotFile -Encoding Unicode)) {
+        if ($l -match '^\s*\[(.+)\]\s*$') { $sec = $Matches[1]; if (-not $snap.Contains($sec)) { $snap[$sec] = [ordered]@{} }; continue }
+        if ($sec -and $l -match '^\s*([^=]+?)\s*=\s*(.*)$') { $snap[$sec][$Matches[1]] = $Matches[2] }
+    }
+    $want = [ordered]@{}
+    if ($KeyLog -and (Test-Path -LiteralPath $KeyLog)) {
+        foreach ($l in (Get-Content -LiteralPath $KeyLog -Encoding UTF8)) {
+            $c = $l -split "`t"
+            if ($c.Count -lt 3) { continue }
+            if (-not $want.Contains($c[1])) { $want[$c[1]] = [ordered]@{} }
+            if ($snap.Contains($c[1]) -and $snap[$c[1]].Contains($c[2])) { $want[$c[1]][$c[2]] = $snap[$c[1]][$c[2]] }
+            elseif ($c[1] -eq "Privilege Rights") { $want[$c[1]][$c[2]] = "" }
+        }
+    } else {
+        foreach ($s in $snap.Keys) {
+            if ($s -in @("Unicode", "Version", "Registry Values")) { continue }
+            $want[$s] = $snap[$s]
+        }
+    }
+    $lines = @("[Unicode]", "Unicode=yes")
+    foreach ($s in $want.Keys) {
+        if ($want[$s].Count -eq 0) { continue }
+        $lines += "[$s]"
+        foreach ($k in $want[$s].Keys) { $lines += "$k = $($want[$s][$k])" }
+    }
+    $lines += @("[Version]", 'signature="$CHICAGO$"', "Revision=1")
+    return , $lines
+}
+
 function Restore-FixSecPolicyBackup {
-    <# 전체 스냅샷을 통째로 재적용 - 개별 키 단위 원복이 불가능하므로 --rollback 전용 #>
+    <# 이번 실행이 바꾼 보안 정책 키만 스냅샷 값으로 재적용 - --rollback 전용(Get-FixSecPolicyRestoreLines 참고) #>
     if (-not $Global:FixSecPolicyBackupFile -or -not (Test-Path $Global:FixSecPolicyBackupFile)) { return }
     # .sdb 옆에 생기는 .jfm 등 부속 파일까지 지우도록 전용 임시 폴더째 정리한다(Set-FixSecPolicyValue 와 같은 이유)
     $tmpDir = $null
     try {
-        $db = New-PrivateTempFile -FileName "rollback.sdb"
-        $tmpDir = Split-Path -Parent $db
-        & secedit /configure /db $db /cfg $Global:FixSecPolicyBackupFile /areas SECURITYPOLICY, USER_RIGHTS /quiet | Out-Null
+        $keyLog = Join-Path (Split-Path -Parent $Global:FixSecPolicyBackupFile) "changed-keys.txt"
+        $lines = Get-FixSecPolicyRestoreLines -SnapshotFile $Global:FixSecPolicyBackupFile -KeyLog $keyLog
+        $cfg = New-PrivateTempFile -FileName "rollback.inf"
+        $tmpDir = Split-Path -Parent $cfg
+        Set-Content -Path $cfg -Value $lines -Encoding Unicode
+        $db = Join-Path $tmpDir "rollback.sdb"
+        & secedit /configure /db $db /cfg $cfg /areas SECURITYPOLICY, USER_RIGHTS /quiet | Out-Null
         if ($LASTEXITCODE -ne 0) { Add-FixRollbackFailure "보안 정책(secedit) 스냅샷 재적용 실패(exit=$LASTEXITCODE)" }
     } catch {
         Add-FixRollbackFailure "보안 정책(secedit) 스냅샷 재적용 실패: $($_.Exception.Message)"
@@ -2173,4 +2260,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion
