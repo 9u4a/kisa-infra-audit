@@ -70,6 +70,10 @@ PC 보안 점검 솔루션의 "점검 → 원클릭 조치 → 재점검" 흐름
 | 05_network | Cisco IOS 15.2 형식 running-config 텍스트 (실장비 아님), Python 3.12 | Ubuntu 24.04 러너 | 31 / 7 |
 | 07_pc | PC 18항목을 Windows Server 2025 러너에서 실행 (Windows 10/11 클라이언트 실기는 아님) | `windows-2025` 러너 | 12 / 6 |
 | 07_pc 실 PC(수동) | Windows 11 Home 25H2 (10.0.26200, ko-KR), PowerShell 5.1 | 사용자 PC 1대에서 관리자 권한으로 읽기 전용 진단 (2026-11-06) | 18항목 오류 0, 판정 18건을 독립 명령으로 대조, 콘솔 코드페이지 949·65001 결과 동일 |
+| 02_windows 한글 Server(수동 검증, G-07) | Windows Server 2022 Standard 평가판 (10.0.20348) + ko-KR 언어 팩, 표시 언어·시스템 로캘 ko-KR, 코드페이지 949, PowerShell 5.1.20348 | 분석자 PC VMware VM, 독립 서버 (2026-11-10~11) | 진단·조치 안전 검사 + 정책 모드 전체 적용(VULN 16) → 원복: 전부 조치 후 GOOD·원복 후 VULN, 남은 차이는 원복 불가로 고지된 W-17 기본 공유뿐 |
+| 02_windows 도메인 컨트롤러(수동 검증, G-07) | 위 VM 을 g07.lab 새 포리스트 주 DC 로 승격 | 분석자 PC VMware VM (2026-11-11) | 같은 검사(VULN 18): 원복 후 상태 스냅샷 차이 0, DC 에서 비관리자 실행 검사(S6)는 로컬 계정이 없어 생략 |
+| 07_pc 한글 Windows 11(수동 검증, G-07) | Windows 11 Enterprise 평가판 (10.0.26300, ko-KR), PowerShell 5.1.26100 | 분석자 PC VMware VM (2026-11-11) | 진단·조치 안전 검사 + 정책 모드 전체 적용(VULN 5) → 원복: 남은 차이는 원복 불가로 고지된 PC-04 기본 공유뿐 |
+| 01_unix·03_web SELinux(수동 검증, G-07) | Rocky Linux 9.8 (커널 5.14.0-687), SELinux enforcing(targeted), ko_KR.UTF-8, httpd | 분석자 PC VMware VM (2026-11-10) | 01_unix 67항목(VULN 11)·03_web 26항목(VULN 12) 정책 모드 전체 적용 → 원복: 상태 스냅샷(해시·권한·SELinux 컨텍스트) 차이 0, AVC 거부 0, 라벨 불일치 0, 서비스 정상 |
 | 08_dbms MySQL | MySQL 8.4.13 | Docker `mysql:8` | 7 / 19 |
 | 08_dbms PostgreSQL | PostgreSQL 16.15 | Docker `postgres:16` | 5 / 21 |
 | 08_dbms 버전 matrix | MySQL 8.0.46, PostgreSQL 14.24·18.6 | Docker `mysql:8.0`·`postgres:14`·`postgres:18` (주간·수동 job) | 기본 태그와 같은 기대값으로 원격 픽스처·조치·운영 안전·항목별 케이스 |
@@ -154,7 +158,7 @@ sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL; Oracle �
 | 1.4.0 ✅ | 전 항목 양방향 판정 검증(누락 0), 판정·조치 결함 50건 수정(교차검증 X-01~X-09 9건 + 양방향 검증 41건) |
 | 1.4.1 ✅ | 조치 등급·조치 스크립트 일관성 검사, 결정 대기 항목(Q-01~Q-06) 처리 |
 | 1.5.0 ✅ | Rocky 9·RHEL 패키지·Server 2022·MSSQL Express·엔진 버전 matrix·한글 출력 파싱·변이 검증, 진입점 lib 화, 진단 신뢰성 전체 검수(35건 수정) |
-| 1.6.0 🚧 | 정책 파일 기반 무인 조치·irreversible 플래그·감사 기록, 조치 전후 비교, 수동점검 사람 판정(G-01~06 구현, G-07 VM 검증·G-08 외부 검토 남음) |
+| 1.6.0 🚧 | 정책 파일 기반 무인 조치·irreversible 플래그·감사 기록, 조치 전후 비교, 수동점검 사람 판정(G-01~06 구현, G-07 VM 수동 검증 완료, G-08 외부 검토 남음) |
 
 ## 라이선스 · 출처
 - 코드: MIT License ([`LICENSE`](./LICENSE)), 출처 고지 [`NOTICE`](./NOTICE)

@@ -182,7 +182,11 @@ try {
         if ($open.Count -gt 0) { $fail += "S5: 결과 폴더에 일반 사용자 그룹 권한: $($open -join ', ')" }
 
         # ---- 비관리자 실행(S6) - LocalDB 는 사용자별 인스턴스라 08_dbms 는 제외 ----------------------------
-        if ($Category -ne "08_dbms") {
+        # G-07: 도메인 컨트롤러에는 로컬 계정이 없어 New-LocalUser 가 실패하고 작업이 한 번도 돌지 않았다(결과 코드 267011) -
+        # DC 에서는 생략하고 남긴다(같은 검사는 독립 서버·CI 에서 수행)
+        $isDc = (Get-CimInstance Win32_ComputerSystem).DomainRole -ge 4
+        if ($isDc -and $Category -ne "08_dbms") { $notes += "S6 생략: 도메인 컨트롤러는 로컬 비관리자 계정을 만들 수 없음(독립 서버·CI 에서 확인)" }
+        if ($Category -ne "08_dbms" -and -not $isDc) {
             $nrUser = "kisa_nr"; $nrPw = "Nr!" + [guid]::NewGuid().ToString("N").Substring(0, 16)
             $nrRoot = "C:\kisa_nr"
             Remove-Item -Recurse -Force $nrRoot -ErrorAction SilentlyContinue

@@ -87,7 +87,7 @@
 | W-13 | Windows | 콘솔 로그온 시 로컬 계정에서 빈 암호 사용 제한 | auto | - | - | - |
 | W-15 | Windows | 사용자 개인키 사용 시 암호 입력 | auto | - | - | - |
 | W-16 | Windows | 공유 권한 및 사용자 그룹 설정 | confirm | - | 공유에서 Everyone 권한 제거 — Everyone 권한으로 그 공유를 쓰던 사용자·프로그램의 접근이 즉시 거부됨 | 필요 |
-| W-17 | Windows | 하드디스크 기본 공유 제거 | confirm | 일부 — 레지스트리는 되돌리지만 중지한 기본 공유는 Server 서비스 재시작/재부팅 후에야 다시 생김(실행 중 삭제가 거부되면 조치가 Server 서비스를 재시작 - SMB 연결 끊김) | 기본 공유(C$/ADMIN$ 등) 즉시 삭제, 삭제 거부 시 Server 서비스 재시작 — 기본 공유를 쓰는 원격 관리·배포 도구와 현재 SMB 연결 끊김 | 필요 |
+| W-17 | Windows | 하드디스크 기본 공유 제거 | confirm | 일부 — 레지스트리는 되돌리지만 중지한 기본 공유는 Server 서비스 재시작/재부팅 후에야 다시 생김(실행 중 삭제가 거부되면 조치가 Server 서비스를 재시작 - SMB 연결 끊김) | 기본 공유(C$/ADMIN$ 등) 즉시 삭제, 삭제 거부 시 Server 서비스 재시작(도메인 컨트롤러는 재시작하지 않고 ERROR) — 기본 공유를 쓰는 원격 관리·배포 도구와 현재 SMB 연결 끊김 | 필요 |
 | W-18 | Windows | 불필요한 서비스 제거 | confirm | - | 실행 중인 RemoteRegistry/SSDPSRV/upnphost/simptcp/Browser/WerSvc 서비스 중지·사용 안 함 — 이 서비스를 쓰던 원격 관리·검색 기능 중단 | 필요 |
 | W-20 | Windows | NetBIOS 바인딩 서비스 구동 점검 | confirm | - | - | - |
 | W-21 | Windows | 암호화되지 않는 FTP 서비스 비활성화 | confirm | - | 실행 중인 FTP 서비스(FTPSVC) 중지·사용 안 함 — FTP 사용자 접속 끊김 | 필요 |
