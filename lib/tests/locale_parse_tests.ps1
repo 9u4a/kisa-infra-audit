@@ -80,6 +80,19 @@ Write-Host "[W-40 디렉터리 서비스 액세스 - A10]"
 $m = ConvertFrom-AuditPolBackup -Lines (Read-Fixture "auditpol_backup_ko-KR.csv")
 Assert-Equal "ko-KR Directory Service Access present" $m['{0CCE923B-69AE-11D9-BED3-505054503030}'] 0
 
+Write-Host "[W-45 백신 설치 판정 - V-R8]"
+# 수집 결과 조합별 판정(외부 조회 없음). 서버 OS 는 SecurityCenter2 가 없어(조회 실패) 타사 백신을 확인할 수 없다.
+$av = { param($ok, $names, $mp, $srv) (Get-AntivirusInstallVerdict -ScOk $ok -ScNames $names -ScError 'Invalid namespace' -MpEnabled $mp -MpError 'x' -IsServer $srv).Status }
+Assert-Equal "registered AV -> GOOD" (& $av $true @('V3 Lite') $null $false) 'GOOD'
+Assert-Equal "SC empty + Defender on -> GOOD" (& $av $true @() $true $false) 'GOOD'
+Assert-Equal "SC empty + Defender off (client) -> VULN" (& $av $true @() $false $false) 'VULN'
+Assert-Equal "SC empty + Defender query failed (client) -> VULN" (& $av $true @() $null $false) 'VULN'
+Assert-Equal "server no SC + Defender on -> GOOD" (& $av $false @() $true $true) 'GOOD'
+Assert-Equal "server no SC + Defender off -> MANUAL" (& $av $false @() $false $true) 'MANUAL'
+Assert-Equal "server no SC + Defender missing -> MANUAL" (& $av $false @() $null $true) 'MANUAL'
+Assert-Equal "client SC failed + Defender off -> ERROR" (& $av $false @() $false $false) 'ERROR'
+Assert-Equal "blank SC names ignored" (& $av $true @('') $false $false) 'VULN'
+
 if ($script:fail -gt 0) { Write-Host "locale parse tests: $script:fail FAILED"; exit 1 }
 Write-Host "locale parse tests: all passed"
 exit 0

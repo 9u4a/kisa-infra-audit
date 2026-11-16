@@ -444,12 +444,12 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 
 | ID | 중요도 | 내용 | 상태 |
 |---|---|---|---|
-| V-R1 | 중 | IIS 조치 WEB-16(`Invoke-FixIisRemoveServerHeader`, W-33 공용)·WEB-19 는 서버·사이트 단위만 고친다 - 하위 application 재정의가 있으면 재검증 실패·원복(진단은 VULN 으로 정확) | 열림 |
+| V-R1 | 중 | IIS 조치 WEB-16(`Invoke-FixIisRemoveServerHeader`, W-33 공용)·WEB-19 는 서버·사이트 단위만 고친다 - 하위 application 재정의가 있으면 재검증 실패·원복(진단은 VULN 으로 정확) | 해결(1.6.1): 두 조치 모두 진단과 같은 Get-IisSiteConfigPaths 경로(사이트 루트 먼저 → 하위 application·virtual directory)를 고친다. WEB-19 는 handlers 위임이 막혀 경로 쓰기가 실패하면 applicationHost.config location 에서 지운다. IIS 케이스 app-server-header-exposed·app-ssi-handler 의 조치 검증 제외를 풀었다(CI windows) |
 | V-R2 | 하 | Apache Options: `<Location>` 은 직접 켠 것만, IfModule 등 조건부 블록은 활성으로 간주, Options 없는 비 DocumentRoot `<Directory>` 미평가 | 한계 |
 | V-R3 | 하 | MySQL 상대 경로 `!include`·파일 256개 초과, PostgreSQL 2단계 이상 include 미추적. D-07 조치는 여전히 첫 설정 파일만 수정 | 열림 |
-| V-R4 | 하 | 05 SNMP 조치(N-18/19)가 ACL 번호 20 고정 - 기존 `access-list 20 permit any` 가 있으면 조치 후에도 VULN | 열림 |
+| V-R4 | 하 | 05 SNMP 조치(N-18/19)가 ACL 번호 20 고정 - 기존 `access-list 20 permit any` 가 있으면 조치 후에도 VULN | 해결(1.6.1): N-18/N-19 조치가 ACL 20 이 이미 쓰이면 표준 확장 범위 1300-1999 의 빈 번호를 새로 선언한다(`parsers.cisco_ios.free_std_acl_num`, VTY 조치 N-06 의 1-99 와 겹치지 않음). 케이스 N-19 vuln_acl20_taken |
 | V-R5 | 하 | 05 비 IOS 판별은 대표 표지 문자열 의존 - 표지 없는 비 IOS 설정은 IOS 로 볼 수 있음(`end` 없으면 GOOD/NA→ERROR 로 완화) | 한계 |
 | V-R6 | 중 | 기본 설치에서 판정이 엄격해짐: Debian `/etc/crontab`·`/etc/cron.d` 644 → U-37 VULN, Windows 기본 수동 시작 서비스(WerSvc 등) → W-18/PC-05 VULN. 가이드 기준 그대로 | 한계 |
 | V-R7 | 중 | IIS·MSSQL·Oracle·Windows 설정 변경 케이스는 로컬 미실행 - CI(windows-latest/2022, mssql-express, oracle)에서만 검증 | 열림 |
-| V-R8 | 하 | W-45: SecurityCenter2 조회 실패 + Defender 조회가 시간 초과 아닌 이유로 실패하면 VULN | 열림 |
-| V-R9 | 하 | U-12 조치는 `/etc/profile` 만 고쳐 `/etc/profile.d/*` 에 `TMOUT=0` 이 있으면 재검증 VULN → 원복된다(변경은 남지 않음, 1.6.0 정책 모드 테스트에서 발견). 정책 테스트(01 policy_mode)가 이 실패 경로를 기대값으로 쓰므로 고칠 때 함께 바꾼다 | 열림 |
+| V-R8 | 하 | W-45: SecurityCenter2 조회 실패 + Defender 조회가 시간 초과 아닌 이유로 실패하면 VULN | 해결(1.6.1): 판정을 `Get-AntivirusInstallVerdict`(lib/Common.psm1)로 분리 - 보안 센터가 없는 서버 OS 에서 Defender 가 꺼져 있거나 없으면 MANUAL(타사 백신 확인 불가), 클라이언트에서 보안 센터 조회 실패는 ERROR, VULN 은 보안 센터가 응답했는데 백신이 없을 때만. 분기 단위 테스트는 locale_parse_tests.ps1(실제 Defender 끄기는 러너에서 불가 - L-11) |
+| V-R9 | 하 | U-12 조치는 `/etc/profile` 만 고쳐 `/etc/profile.d/*` 에 `TMOUT=0` 이 있으면 재검증 VULN → 원복된다(변경은 남지 않음, 1.6.0 정책 모드 테스트에서 발견). 정책 테스트(01 policy_mode)가 이 실패 경로를 기대값으로 쓰므로 고칠 때 함께 바꾼다 | 해결(1.6.1): 조치가 /etc/profile.d/*.sh 의 TMOUT=0·600 초과 값도 600 으로 바꾼다(600 이하 값·export·따옴표는 유지). 케이스 U-12 profile-d-tmout0, 정책 테스트 실패 경로는 가짜 조치로 재현 |

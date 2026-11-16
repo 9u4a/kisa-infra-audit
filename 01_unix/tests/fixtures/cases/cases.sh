@@ -322,6 +322,12 @@ c_U_62__bind_no_version() {
     u62_banners; echo "Banner /etc/issue.net" >> /etc/ssh/sshd_config
     printf '#!/bin/sh\nexit 0\n' > /usr/local/sbin/named; chmod 755 /usr/local/sbin/named
 }
+# V-R9 U-12: 나중에 읽히는 profile.d 파일의 TMOUT=0 (앞의 300 은 더 엄격한 값이라 조치가 그대로 둬야 함)
+c_U_12__profile_d_tmout0() {
+    echo 'TMOUT=300' > /etc/profile.d/aa-kisa-strict.sh
+    echo 'export TMOUT=0' > /etc/profile.d/zz-kisa-app.sh
+}
+
 # C5 U-55: /usr/bin/false 는 로그인 불가 쉘(U-11 deviation 과 같음) - 예전 VULN
 c_U_55__ftp_usr_bin_false() { ftp_account /usr/bin/false; }
 # C3 U-55/U-11: shadow 를 쓰지 않는 계정(/etc/passwd 두 번째 필드에 해시) - 예전에는 줄 전체를 증적에 남겼다(S5)

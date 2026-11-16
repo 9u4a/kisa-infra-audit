@@ -5,6 +5,22 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+### Fixed
+- **U-12 조치가 /etc/profile.d 의 TMOUT 을 고치지 않음**(V-R9): check 는 /etc/profile → /etc/profile.d/*.sh 순으로 마지막 값을
+  쓰는데 조치는 /etc/profile 만 바꿔, profile.d 에 `TMOUT=0`·600 초과 값이 있으면 재검증 VULN → 원복으로 끝났다. 이제 그 줄의
+  숫자만 600 으로 바꾼다(600 이하로 더 엄격한 값과 export·readonly·따옴표는 그대로, 고치는 파일은 모두 먼저 백업).
+  케이스 U-12 profile-d-tmout0 추가, 정책 모드 테스트의 실패 경로는 컨테이너 안 가짜 조치로 재현한다.
+- **SNMP 조치(N-18/N-19)가 이미 쓰이는 ACL 20 에 permit 을 덧붙임**(V-R4): 기존 `access-list 20 permit any`(다른 용도) 가 있으면
+  조치 뒤에도 any 허용이 남아 N-19 가 VULN 이었다. 20 이 쓰이고 있으면 1300-1999 에서 빈 번호를 골라 새로 선언한다(VTY 조치 N-06 은
+  1-99 라 같은 스크립트에서 겹치지 않음). 케이스 N-19 vuln_acl20_taken 추가.
+- **W-45 가 확인하지 못한 백신을 '미설치'(VULN)로 판정**(V-R8): 서버 OS 는 보안 센터(SecurityCenter2)가 없어, 타사 백신을 쓰느라
+  Defender 가 꺼진 서버가 늘 VULN 이었다. 이제 보안 센터가 없는 서버에서 Defender 가 꺼져 있거나 없으면 MANUAL(타사 백신 수동 확인),
+  클라이언트에서 보안 센터 조회가 실패하면 ERROR, VULN 은 보안 센터가 응답했는데 등록된 백신이 없고 Defender 도 꺼져 있을 때만 낸다
+  (guide.json W-45 deviation 기록). 판정 분기는 `Get-AntivirusInstallVerdict` 로 분리해 `lib/tests/locale_parse_tests.ps1` 에서 단위 테스트.
+- **IIS 조치 WEB-16(W-33 공용)·WEB-19 가 하위 application 재정의를 고치지 않음**(V-R1): 진단은 하위 application·virtual directory
+  까지 보는데 조치는 서버·사이트 루트만 고쳐 재검증 VULN → 원복이었다. 진단과 같은 경로 목록(Get-IisSiteConfigPaths)을 루트부터
+  고치고, WEB-19 는 handlers 섹션 위임이 막혀 있으면 applicationHost.config location 에서 지운다(조회 실패도 이제 ERROR).
+  IIS 케이스 app-server-header-exposed·app-ssi-handler 의 조치 검증을 켰다.
 
 ## [1.6.0] - 2026-11-16
 ### Added
