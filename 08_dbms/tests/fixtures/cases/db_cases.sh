@@ -185,6 +185,7 @@ meta() {
         mysql:no-password-policy) _m=root; _fix=1; _fx=MANUAL ;;
         mysql:validate-password-installed) _m=root ;;
         mysql:mysqld-as-root) _m=root; _fix=1 ;;
+        mysql:mysqld-root-in-include) _m=root; _fix=1 ;;
         mysql:mysqld-as-mysql) _m=root ;;
         mysql:native-password-account) _m=root; _fix=1; _ans="y\ny\n$NEWPW\n$NEWPW\n"; _rb=irreversible ;;
         mysql:root-any-host) _m=root ;;
@@ -267,6 +268,12 @@ EOF
         mysql:validate-password-installed) echo "INSTALL COMPONENT 'file://component_validate_password';" | my ;;
         # D-07 취약: my.cnf user=root 로 재기동(mysqld 가 root 로 구동)
         mysql:mysqld-as-root) cp -p "$MYCNF" "$WORK/my.cnf.orig"; sed -i 's/^user=mysql$/user=root/' "$MYCNF"; restart_mysql ;;
+        # D-07 취약(V-R3): my.cnf 에는 user= 가 없고 !includedir 로 읽히는 conf.d 파일에만 user=root(mysqld 는 처음 나온 --user 를 쓴다)
+        # (예전 조치는 my.cnf 끝 = !includedir 뒤에 user=mysql 을 덧붙여 무시됨 → 재기동 후에도 root 구동 → 재검증 실패·원복)
+        mysql:mysqld-root-in-include)
+            cp -p "$MYCNF" "$WORK/my.cnf.orig"; sed -i '/^user=mysql$/d' "$MYCNF"
+            printf '[mysqld]\nuser=root\n' > /etc/mysql/conf.d/kisa_case.cnf; chmod 644 /etc/mysql/conf.d/kisa_case.cnf
+            restart_mysql ;;
         # D-08 취약: SHA-1 기반 mysql_native_password 계정(서버는 --mysql-native-password=ON 으로 기동)
         mysql:native-password-account) echo "CREATE USER 'kisa_native'@'localhost' IDENTIFIED WITH mysql_native_password BY 'KisaOld#1234';" | my ;;
         # D-10 양호: 모든 호스트(%) 계정을 특정 IP 로 제한
@@ -362,8 +369,12 @@ case_verify() {
         mysql:no-password-policy) [ -z "$(echo "SELECT component_urn FROM mysql.component WHERE component_urn LIKE '%validate_password%';" | my)" ] \
             && [ "$(echo "SELECT @@default_password_lifetime;" | my)" = "0" ] ;;
         mysql:validate-password-installed) [ -n "$(echo "SHOW VARIABLES LIKE 'validate_password.policy';" | my)" ] ;;
-        mysql:mysqld-as-root|mysql:mysqld-as-mysql)
-            _want=999; [ "$CASE" = "mysqld-as-root" ] && _want=0
+        mysql:mysqld-as-root|mysql:mysqld-as-mysql|mysql:mysqld-root-in-include)
+            _want=999; [ "$CASE" != "mysqld-as-mysql" ] && _want=0
+            if [ "$CASE" = "mysqld-root-in-include" ]; then
+                ! grep -q '^user' "$MYCNF" && grep -q '^!includedir /etc/mysql/conf.d/' "$MYCNF" \
+                    && grep -qx 'user=root' /etc/mysql/conf.d/kisa_case.cnf || return 1
+            fi
             for _p in /proc/[0-9]*; do
                 [ "$(cat "$_p/comm" 2>/dev/null)" = "mysqld" ] && [ "$(awk '/^Uid:/ {print $2}' "$_p/status")" = "$_want" ] && return 0
             done
@@ -462,6 +473,8 @@ case_restore() {
             echo "SET PERSIST default_password_lifetime = 0; RESET PERSIST default_password_lifetime;" | my >/dev/null 2>&1 ; : ;;
         mysql:validate-password-installed) echo "UNINSTALL COMPONENT 'file://component_validate_password';" | my ;;
         mysql:mysqld-as-root) cp -p "$WORK/my.cnf.orig" "$MYCNF"; chown -R mysql:mysql /var/lib/mysql; restart_mysql ;;
+        mysql:mysqld-root-in-include)
+            cp -p "$WORK/my.cnf.orig" "$MYCNF"; rm -f /etc/mysql/conf.d/kisa_case.cnf; chown -R mysql:mysql /var/lib/mysql; restart_mysql ;;
         mysql:native-password-account) echo "DROP USER IF EXISTS 'kisa_native'@'localhost';" | my ;;
         mysql:no-any-host) echo "RENAME USER 'root'@'10.0.0.5' TO 'root'@'%';" | my ;;
         mysql:mask-any-host) echo "DROP USER IF EXISTS 'kisa_mask'@'0.0.0.0/0.0.0.0'; RENAME USER 'root'@'10.0.0.5' TO 'root'@'%';" | my ;;

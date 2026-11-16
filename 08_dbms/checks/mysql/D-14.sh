@@ -7,7 +7,10 @@
 # debian.cnf(비밀번호 파일)로 넓혔다(lib/common_db.sh mysql_config_files). 하나라도 위반이면 취약.
 run_check() {
     db_remote_skip "my.cnf 파일 권한" && return
-    files=$(mysql_config_files)
+    all=$(mysql_config_files)
+    # V-R3: 상대 경로 include·256개 초과처럼 다 따라가지 못한 부분이 있으면 나머지가 모두 기준을 지켜도 양호로 보지 않는다(S6)
+    incomplete=$(printf '%s\n' "$all" | sed -n 's/^#incomplete: //p')
+    files=$(printf '%s\n' "$all" | grep -v '^#incomplete:')
     if [ -z "$files" ]; then
         CHECK_STATUS="ERROR"; CHECK_DETAIL="mysql 설정 파일(my.cnf)을 찾을 수 없음"; CHECK_EVIDENCE=""
         return
@@ -30,11 +33,16 @@ $CHECK_EVIDENCE"
 '
     done
     IFS=$old_ifs
-    CHECK_EVIDENCE="$_evidence"
+    CHECK_EVIDENCE="$_evidence${incomplete:+
+[확인하지 못한 설정]
+$incomplete}"
+    _inc1=$(printf '%s\n' "$incomplete" | head -n 1)
     if [ -n "$_bad" ]; then
-        CHECK_STATUS="VULN"; CHECK_DETAIL="다음 설정/비밀번호 파일의 소유자·권한이 부적절함:$_bad${_unk:+ / 확인 못 함:$_unk}"
+        CHECK_STATUS="VULN"; CHECK_DETAIL="다음 설정/비밀번호 파일의 소유자·권한이 부적절함:$_bad${_unk:+ / 확인 못 함:$_unk}${_inc1:+ / 확인 못 한 설정 있음(증적 참고)}"
     elif [ -n "$_unk" ]; then
         CHECK_STATUS="ERROR"; CHECK_DETAIL="다음 파일의 권한을 확인하지 못함:$_unk"
+    elif [ -n "$incomplete" ]; then
+        CHECK_STATUS="ERROR"; CHECK_DETAIL="찾은 설정 파일은 기준을 지키나 서버가 읽는 설정을 다 확인하지 못함: $_inc1"
     else
         CHECK_STATUS="GOOD"; CHECK_DETAIL="서버가 읽는 설정 파일과 비밀번호 파일의 소유자·권한이 적절함:$_ok"
     fi

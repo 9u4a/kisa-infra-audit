@@ -17,6 +17,7 @@
   {"code": "D-03", "engine": "mysql", "name": "validate-password-installed", "expect": "MANUAL"},
   {"code": "D-07", "engine": "mysql", "name": "mysqld-as-mysql", "expect": "GOOD"},
   {"code": "D-07", "engine": "mysql", "name": "mysqld-as-root", "expect": "VULN"},
+  {"code": "D-07", "engine": "mysql", "name": "mysqld-root-in-include", "expect": "VULN"},
   {"code": "D-08", "engine": "mysql", "name": "native-password-account", "expect": "VULN"},
   {"code": "D-10", "engine": "mysql", "name": "no-any-host", "expect": "GOOD"},
   {"code": "D-10", "engine": "mysql", "name": "root-any-host", "expect": "VULN"},

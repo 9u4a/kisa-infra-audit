@@ -1,5 +1,5 @@
 # D-07 (중) root 권한으로 서비스 구동 제한 [MySQL] — 조치 [fix: confirm]
-# 변경: my.cnf user = mysql, @@datadir 의 root 소유 파일을 mysql:mysql 로 chown 후 mysqld 재기동(기동 실패 시 my.cnf 되돌리고 재기동)
+# 변경: 서버가 읽는 설정 파일 전부의 서버 섹션([mysqld]·[server]·[mariadb] 등) user= 를 mysql 로(없으면 my.cnf 에 추가), @@datadir 의 root 소유 파일을 mysql:mysql 로 chown 후 mysqld 재기동(기동 실패 시 설정 되돌리고 재기동)
 # 원복: 일부 — my.cnf·데이터 파일 소유자는 되돌리지만, root 구동으로 돌아가려면 mysqld 재기동이 필요함
 # 영향: mysqld 재기동 — 재기동 동안 DB 접속 끊김
 # checks/mysql/D-07.sh 는 /proc 기반으로 "실행 중인" 프로세스의 uid 를 직접 확인하므로, 설정 파일만 고쳐서는
@@ -28,7 +28,36 @@ run_fix() {
         FIX_STATUS="ERROR"; FIX_DETAIL="데이터 디렉터리(@@datadir)를 확인하지 못해 변경하지 않음 - user=mysql 로 바꾸면 root 소유 파일 때문에 기동에 실패할 수 있음"; FIX_EVIDENCE=""
         return
     fi
+    # V-R3(1.6.1): 서버가 읽는 설정 파일 전부(!include/!includedir 포함)에서 서버 섹션의 user= 가 mysql 이 아닌 줄을 고친다.
+    # 예전에는 첫 설정 파일(mysql_config_path)만, 그것도 섹션 구분 없이 고쳐 ① my.cnf 에 user= 가 없고 include 파일에 user=root 가
+    # 있으면 my.cnf 끝(!includedir 뒤)에 덧붙인 user=mysql 은 무시되어(mysqld 는 처음 나온 --user 만 쓴다, mysql:8 실측) 재기동 후에도
+    # root 구동(재검증 실패 → 원복) ② [client] 의 user= 까지 mysql 로 바꿨다.
+    cfiles=$(mysql_config_paths | grep -v '/debian\.cnf$')
+    edits=""; has_user=0
+    old_ifs=$IFS; IFS='
+'
+    for cf in $cfiles; do
+        IFS=$old_ifs
+        out=$(mysql_user_lines "$cf")
+        case "$out" in *G*) has_user=1 ;; esac
+        bad=$(printf '%s\n' "$out" | sed -n 's/^B //p' | tr '\n' ' ')
+        [ -n "$bad" ] && { has_user=1; edits="$edits
+$cf|$bad"; }
+        IFS='
+'
+    done
+    IFS=$old_ifs
+    # 고칠 파일을 모두 먼저 백업한다(F1 - 백업 실패 시 아무것도 바꾸지 않음)
     fix_backup "$conf"
+    old_ifs=$IFS; IFS='
+'
+    for e in $edits; do
+        IFS=$old_ifs
+        [ -n "$e" ] && fix_backup "${e%%|*}"
+        IFS='
+'
+    done
+    IFS=$old_ifs
     rootfiles=$(find "$datadir" -xdev -user 0 2>/dev/null)
     chowned=0
     old_ifs=$IFS; IFS='
@@ -41,15 +70,28 @@ run_fix() {
 '
     done
     IFS=$old_ifs
-    if grep -qE '^[[:space:]]*user[[:space:]]*=' "$conf"; then
-        fix_sed_inplace "$conf" -E 's/^[[:space:]]*user[[:space:]]*=.*/user = mysql/'
-    else
+    changed=""
+    old_ifs=$IFS; IFS='
+'
+    for e in $edits; do
+        IFS=$old_ifs
+        [ -n "$e" ] || continue
+        cf=${e%%|*}; expr=""
+        for n in ${e#*|}; do expr="$expr${n}s/^([[:space:]]*user[[:space:]]*=).*/\\1 mysql/;"; done
+        fix_sed_inplace "$cf" -E "$expr" && changed="$changed $cf"
+        IFS='
+'
+    done
+    IFS=$old_ifs
+    # 서버 섹션에 user= 가 어디에도 없으면 첫 설정 파일에 [mysqld] user = mysql 을 덧붙인다
+    if [ "$has_user" -eq 0 ]; then
         printf '\n[mysqld]\nuser = mysql\n' >> "$conf"
+        changed="$changed $conf"
     fi
 
     db_restart_or_revert "실행 계정(user=mysql) 변경"
     case "$DB_RESTART_RESULT" in
-        ok) FIX_STATUS="APPLIED"; FIX_DETAIL="$conf 에 user=mysql 설정 후 mysqld 를 재기동해 적용함(기동 확인, $datadir 의 root 소유 파일 ${chowned}개를 mysql 소유로 변경)" ;;
+        ok) FIX_STATUS="APPLIED"; FIX_DETAIL="서버 섹션 user=mysql 설정(${changed# }) 후 mysqld 를 재기동해 적용함(기동 확인, $datadir 의 root 소유 파일 ${chowned}개를 mysql 소유로 변경)" ;;
         no_method) FIX_STATUS="ERROR"; FIX_DETAIL="이 호스트에서 mysqld 재기동 방법을 찾지 못함(systemd/service 없음) - 설정은 되돌림" ;;
         reverted) FIX_STATUS="ERROR"; FIX_DETAIL="user=mysql 로 재기동하자 mysqld 가 뜨지 않아(데이터 디렉터리 소유자 등) 설정을 되돌리고 다시 기동함(서비스 복구 확인됨)" ;;
         *) FIX_STATUS="ERROR"; FIX_DETAIL="재기동 후 mysqld 가 뜨지 않음 - $conf 를 되돌렸으나 기동을 확인하지 못함. 즉시 수동 확인 필요" ;;

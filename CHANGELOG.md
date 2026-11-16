@@ -21,6 +21,15 @@
   까지 보는데 조치는 서버·사이트 루트만 고쳐 재검증 VULN → 원복이었다. 진단과 같은 경로 목록(Get-IisSiteConfigPaths)을 루트부터
   고치고, WEB-19 는 handlers 섹션 위임이 막혀 있으면 applicationHost.config location 에서 지운다(조회 실패도 이제 ERROR).
   IIS 케이스 app-server-header-exposed·app-ssi-handler 의 조치 검증을 켰다.
+- **DB 설정 include 추적 누락**(V-R3):
+  - MySQL 상대 경로 `!include`/`!includedir` 는 설정 파일 위치가 아니라 mysqld 를 띄운 작업 디렉터리 기준으로 풀리는데(mysql:8
+    `my_print_defaults` 실측) 진단 시점에는 그 디렉터리를 알 수 없다. 추측해 따라가지 않고 확인하지 못한 설정으로 알려, 나머지 파일이
+    기준을 지켜도 D-14 를 GOOD 이 아니라 ERROR 로 낸다. 따라갈 파일이 256개를 넘을 때도 같다(예전에는 조용히 잘렸다).
+  - PostgreSQL 설정 값 조회(hba_file 위치 등)가 include 를 한 단계만 펼쳤다 - PostgreSQL 과 같이 10단계까지 따라간다.
+  - MySQL D-07 조치가 첫 설정 파일만, 섹션 구분 없이 `user=` 를 바꿔 ① my.cnf 에 `user=` 가 없고 include 파일에 `user=root` 가 있으면
+    my.cnf 끝(`!includedir` 뒤)에 덧붙인 `user=mysql` 이 무시되어(mysqld 는 처음 나온 `--user` 만 쓴다, mysql:8 실측) 재기동 후에도
+    root 구동(재검증 실패 → 원복) ② `[client]` 의 `user=` 까지 mysql 로 바꿨다. 이제 서버가 읽는 모든 설정 파일에서 서버 섹션의
+    `user=` 만 고친다. `08_dbms/tests/fixtures/db_unit.sh` 단위 검사, 케이스 D-07 mysqld-root-in-include 추가.
 
 ## [1.6.0] - 2026-11-16
 ### Added
