@@ -225,6 +225,11 @@ mysql_config_path() {
 #    실행 중인 서버가 없으면 기본 탐색 경로.
 #  - 각 파일의 !include <파일>, !includedir <폴더>(그 안의 *.cnf) 를 따라간다(같은 파일은 한 번, 최대 256개 - S2).
 #  - /etc/mysql/debian.cnf 가 있으면 함께 넣는다(서버가 읽지는 않지만 가이드 D-14 의 "비밀번호 파일").
+#  - V-R3(1.6.1): 다 확인하지 못했으면 "#incomplete: <사유>" 줄을 함께 낸다(파일 경로가 아님 - 호출부가 걸러 GOOD 을 막는다).
+#    ① 상대 경로 !include/!includedir: mysqld 는 설정 파일 위치가 아니라 기동한 프로세스의 작업 디렉터리 기준으로 푸는데
+#       (mysql:8 my_print_defaults 실측), mysqld 는 기동 뒤 데이터 디렉터리로 옮겨 가 그 디렉터리를 알 수 없다 - 추측해 따라가지 않는다.
+#    ② 따라갈 파일이 256개를 넘어 나머지를 보지 않은 경우(S2 상한).
+#    조치처럼 파일 목록만 필요하면 mysql_config_paths 를 쓴다.
 mysql_config_files() {
     _mcf_std="/etc/my.cnf
 /etc/mysql/my.cnf
@@ -253,7 +258,7 @@ $_mcf_home/.my.cnf}"
     [ "$_mcf_np" -eq 0 ] && _mcf_q=$_mcf_std
     _mcf_q="$_mcf_q
 /etc/mysql/debian.cnf"
-    _mcf_seen=""; _mcf_n=0
+    _mcf_seen=""; _mcf_n=0; _mcf_notes=""
     _mcf_q=$(printf '%s\n' "$_mcf_q" | awk 'NF')
     while [ -n "$_mcf_q" ] && [ "$_mcf_n" -lt 256 ]; do
         _mcf_f=$(printf '%s\n' "$_mcf_q" | head -n 1)
@@ -269,17 +274,41 @@ $_mcf_f"
         [ -n "$_mcf_inc" ] || continue
         _mcf_add=$(printf '%s\n' "$_mcf_inc" | while IFS= read -r _mcf_l; do
             _mcf_v=${_mcf_l#? }
+            case "$_mcf_v" in
+                /*) ;;
+                *) case "$_mcf_l" in F\ *) _mcf_kw='!include' ;; *) _mcf_kw='!includedir' ;; esac
+                   printf '#incomplete: 상대 경로 %s %s (%s) - mysqld 기동 디렉터리 기준이라 확인 불가\n' "$_mcf_kw" "$_mcf_v" "$_mcf_f"
+                   continue ;;
+            esac
             case "$_mcf_l" in
                 F\ *) printf '%s\n' "$_mcf_v" ;;
                 D\ *) [ -d "$_mcf_v" ] && find "$_mcf_v" -maxdepth 1 -type f -name '*.cnf' 2>/dev/null | LC_ALL=C sort ;;
             esac
         done)
+        _mcf_notes="$_mcf_notes
+$(printf '%s\n' "$_mcf_add" | grep '^#incomplete:')"
+        _mcf_add=$(printf '%s\n' "$_mcf_add" | grep -v '^#incomplete:')
         # 포함 파일은 포함한 파일 바로 뒤에 읽히므로 큐 앞쪽에 넣는다(판정에는 순서 무관, 근거 표시 순서만)
         [ -n "$_mcf_add" ] && _mcf_q="$_mcf_add
 $_mcf_q"
         _mcf_q=$(printf '%s\n' "$_mcf_q" | awk 'NF')
     done
-    printf '%s\n' "$_mcf_seen" | awk 'NF'
+    [ -n "$_mcf_q" ] && _mcf_notes="$_mcf_notes
+#incomplete: 따라갈 설정 파일이 256개를 넘어 나머지 $(printf '%s\n' "$_mcf_q" | wc -l | tr -d ' ')개 이상을 확인하지 않음"
+    printf '%s\n%s\n' "$_mcf_seen" "$_mcf_notes" | awk 'NF'
+}
+
+# mysql_config_paths -> mysql_config_files 에서 "#incomplete:" 줄을 뺀 실제 파일 목록(조치용)
+mysql_config_paths() { mysql_config_files | grep -v '^#incomplete:'; }
+
+# mysql_user_lines <설정 파일> -> 서버가 읽는 섹션([mysqld]·[server]·[mysqld-<버전>]·[mysqld_safe]·[mariadb]·[mariadbd]·
+# [mariadb-<버전>])의 user= 줄마다 "G <줄 번호>"(값이 mysql) 또는 "B <줄 번호>"(그 밖의 값). [client] 등 다른 섹션은 보지 않는다.
+mysql_user_lines() {
+    awk '
+        /^[ \t]*\[/ { s = tolower($0); gsub(/[ \t\r\[\]]/, "", s)
+                      srv = (s ~ /^(mysqld|server|mysqld_safe|mariadb|mariadbd)$/ || s ~ /^(mysqld|mariadb)-/); next }
+        srv && /^[ \t]*user[ \t]*=/ { v = $0; sub(/^[^=]*=/, "", v); gsub(/[ \t\r"'\'']/, "", v)
+                                      print (v == "mysql" ? "G " : "B ") NR }' "$1" 2>/dev/null
 }
 
 # ---- DBMS 공통: PostgreSQL 연결/쿼리 ----------------------------------------
@@ -338,34 +367,35 @@ _pg_cmdline_opt() {
         END { if (v != "") print v }'
 }
 
-# _pg_conf_value <postgresql.conf> <설정 이름> -> 설정 파일(include/include_if_exists/include_dir 는 한 단계까지 그 자리에서 펼침)의
-# 마지막 유효 값(따옴표 제거). 없으면 빈 값.
+# _pg_conf_value <postgresql.conf> <설정 이름> -> 설정 파일의 마지막 유효 값(따옴표 제거). 없으면 빈 값.
+# include/include_if_exists/include_dir 는 그 자리에서 펼친다. 상대 경로는 그 지시어가 있는 파일의 디렉터리 기준(PostgreSQL 규칙),
+# include_dir 는 이름순 *.conf(점으로 시작하는 파일 제외). V-R3(1.6.1): 예전에는 한 단계만 펼쳐 include 파일 안의 include 를
+# 놓쳤다 - PostgreSQL 과 같이 10단계까지 따라간다(그보다 깊으면 PostgreSQL 도 기동을 거부한다).
 _pg_conf_value() {
-    _pcv_dir=$(dirname "$1")
-    _pcv_v=""
-    _pcv_lines=$(awk -v k="$2" '
-        { l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t\r]+$/, "", l); if (l == "") next
-          n = l; sub(/[ \t=].*/, "", n); val = l; sub(/^[^ \t=]+[ \t]*=?[ \t]*/, "", val); gsub(/^'\''|'\''$/, "", val)
-          if (n == k) print "V " val
-          else if (n == "include" || n == "include_if_exists") print "F " val
-          else if (n == "include_dir") print "D " val }' "$1" 2>/dev/null)
-    _pcv_tab=$(printf '%s\n' "$_pcv_lines" | while IFS= read -r _pcv_l; do
-        _pcv_x=${_pcv_l#? }
-        case "$_pcv_x" in /*) ;; ?*) _pcv_x="$_pcv_dir/$_pcv_x" ;; esac
-        case "$_pcv_l" in
-            V\ *) printf '%s\n' "${_pcv_l#V }" ;;
-            F\ *) [ -f "$_pcv_x" ] && awk -v k="$2" '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t\r]+$/, "", l)
-                      n = l; sub(/[ \t=].*/, "", n); val = l; sub(/^[^ \t=]+[ \t]*=?[ \t]*/, "", val); gsub(/^'\''|'\''$/, "", val)
-                      if (n == k) print val }' "$_pcv_x" 2>/dev/null ;;
-            D\ *) [ -d "$_pcv_x" ] && for _pcv_f in $(find "$_pcv_x" -maxdepth 1 -type f -name '*.conf' 2>/dev/null | LC_ALL=C sort); do
-                      awk -v k="$2" '{ l = $0; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t\r]+$/, "", l)
-                          n = l; sub(/[ \t=].*/, "", n); val = l; sub(/^[^ \t=]+[ \t]*=?[ \t]*/, "", val); gsub(/^'\''|'\''$/, "", val)
-                          if (n == k) print val }' "$_pcv_f" 2>/dev/null
-                  done ;;
-        esac
-    done)
-    _pcv_v=$(printf '%s\n' "$_pcv_tab" | awk 'NF' | tail -n 1)
-    printf '%s' "$_pcv_v"
+    awk -v k="$2" -v q="'" '
+        function dirof(p) { if (p !~ /\//) return "."; sub(/\/[^\/]*$/, "", p); return (p == "" ? "/" : p) }
+        function parse(file, depth,    line, l, n, val, p, cmd, f, list, cnt, i) {
+            # 같은 파일을 중첩해서 열면 awk 는 스트림을 공유해 안쪽 close 뒤 바깥이 처음부터 다시 읽는다(mawk 무한 반복 실측) -
+            # 지금 읽고 있는 파일을 다시 include 하면 건너뛴다(PostgreSQL 도 순환 include 는 오류)
+            if (depth > 10 || (file in reading)) return
+            reading[file] = 1
+            while ((getline line < file) > 0) {
+                l = line; sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t\r]+$/, "", l); if (l == "") continue
+                n = l; sub(/[ \t=].*/, "", n); val = l; sub(/^[^ \t=]+[ \t]*=?[ \t]*/, "", val)
+                gsub("^" q "|" q "$", "", val)
+                if (n == k) { last = val; continue }
+                if (n != "include" && n != "include_if_exists" && n != "include_dir") continue
+                p = val; if (p !~ /^\//) p = dirof(file) "/" p
+                if (n != "include_dir") { parse(p, depth + 1); continue }
+                cmd = "find \"" p "\" -maxdepth 1 -type f -name \"*.conf\" ! -name \".*\" 2>/dev/null | LC_ALL=C sort"
+                cnt = 0
+                while ((cmd | getline f) > 0) list[++cnt] = f
+                close(cmd)
+                for (i = 1; i <= cnt; i++) parse(list[i], depth + 1)
+            }
+            close(file); delete reading[file]
+        }
+        BEGIN { last = ""; parse(ARGV[1], 0); printf "%s", last; exit }' "$1" 2>/dev/null
 }
 
 # _pg_postmaster_datadir <pid> <명령행 인자(한 줄에 하나)> -> postmaster 의 데이터 디렉터리(PG_VERSION 이 있는 폴더). 순서:

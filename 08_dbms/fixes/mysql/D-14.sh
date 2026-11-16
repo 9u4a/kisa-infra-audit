@@ -2,7 +2,7 @@
 # 변경: 진단과 같은 범위(서버가 읽는 설정 파일 전부 + debian.cnf, lib/common_db.sh mysql_config_files) 중 기준(소유자 root/mysql,
 # 권한 640 이하)을 벗어난 파일만 권한 640, 소유자 root/mysql 이면 유지(그 외는 mysql 로 변경). 이미 640 보다 좁은 파일(600 등)은 그대로.
 run_fix() {
-    files=$(mysql_config_files)
+    files=$(mysql_config_paths)  # V-R3: "#incomplete:" 줄 제외
     if [ -z "$files" ]; then
         FIX_STATUS="ERROR"; FIX_DETAIL="mysql 설정 파일(my.cnf)을 찾을 수 없음"; FIX_EVIDENCE=""
         return
