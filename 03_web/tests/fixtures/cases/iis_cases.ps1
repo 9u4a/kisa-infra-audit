@@ -261,15 +261,15 @@ $IisCases = @{
         Probe = 'if (Test-CaseApp) { Write-Output ("app=True global=" + (Get-SiteVal "system.webServer/security/requestFiltering" "removeServerHeader" $apphost) + " root=" + (Get-SiteVal "system.webServer/security/requestFiltering" "removeServerHeader") + " sub=" + (Get-SiteVal "system.webServer/security/requestFiltering" "removeServerHeader" $caseAppPath)) } else { Write-Output "app=absent" }'
         Setup = 'Save-CaseConfig; Set-WebConfigurationProperty -PSPath $apphost -Filter "system.webServer/security/requestFiltering" -Name removeServerHeader -Value $true; New-CaseApp; Set-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/security/requestFiltering" -Name removeServerHeader -Value $false'
         Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
-        Want = '^app=True global=True root=True sub=False$'
-        Note = '조치(Invoke-FixIisRemoveServerHeader, 02_windows W-33 공용)는 서버 전역·사이트 단위만 고쳐 하위 application 재정의는 남는다 - 조치 검증 제외(진단 판정만 확인)'
+        # V-R1(1.6.1): 조치(Invoke-FixIisRemoveServerHeader, 02_windows W-33 공용)가 하위 application 재정의도 고친다
+        Want = '^app=True global=True root=True sub=False$'; Fix = $true
     }
     # WEB-15/WEB-19 취약: 서버 전역 SSI 핸들러는 지우고 application(kisa_app)에서만 *.shtml → ServerSideIncludeModule 매핑을 다시 추가
     "app-ssi-handler" = @{
         Probe = 'if (Test-CaseApp) { Write-Output ("app=True root_danger=" + (Get-SsiHandlerCount) + " sub_danger=" + (Get-SsiHandlerCount $caseAppPath)) } else { Write-Output ("app=absent root_danger=" + (Get-SsiHandlerCount)) }'
         Setup = 'Save-CaseConfig; Remove-ServerSsiHandlers; New-CaseApp; Add-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/handlers" -Name "." -Value @{ name = "KISA-SSINC-shtml"; path = "*.shtml"; verb = "GET,HEAD,POST"; modules = "ServerSideIncludeModule"; resourceType = "File" }'
         Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
-        Want = '^app=True root_danger=0 sub_danger=1$'
-        Note = '조치(fixes/iis/WEB-19.ps1)는 사이트 루트의 handlers 만 지워 하위 application 에 다시 추가된 SSI 매핑은 남는다 - 조치 검증 제외(진단 판정만 확인). WEB-15 는 guide fix=manual'
+        # V-R1(1.6.1): 조치(fixes/iis/WEB-19.ps1)가 하위 application 에 다시 추가된 SSI 매핑도 지운다(원복 불가 항목). WEB-15 는 guide fix=manual
+        Want = '^app=True root_danger=0 sub_danger=1$'; Fix = $true; NoRollback = $true
     }
 }

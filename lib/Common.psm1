@@ -1772,7 +1772,8 @@ function Set-FixWebConfigProperty {
 function Invoke-FixIisRemoveServerHeader {
     <# IIS Server 응답 헤더 제거(requestFiltering@removeServerHeader = true) - 03_web WEB-16 과 02_windows W-33 이 함께 쓴다.
        F-R3: 진단은 서버 전역 값뿐 아니라 사이트별 유효 값(사이트 web.config·location 재정의)도 본다(W-33 은 실제 응답 헤더).
-       서버 전역이 true 가 아니면 true 로 바꾼 뒤, 사이트마다 다시 읽어 여전히 true 가 아닌(재정의한) 사이트를 true 로 고친다.
+       서버 전역이 true 가 아니면 true 로 바꾼 뒤, 사이트·하위 application/virtual directory 마다 다시 읽어 여전히 true 가 아닌
+       (재정의한) 경로를 true 로 고친다(V-R1, 1.6.1~ 하위 경로 포함).
        예전에는 전역만 바꿔 사이트 재정의가 남으면 재검증 실패 → 원복으로 끝났다(CI: W-33 이 IIS 픽스처의 사이트 재정의로 실측).
        결과는 $Global:FixStatus/Detail(APPLIED/NA/ERROR) #>
     $Global:FixEvidence = ""
@@ -1795,13 +1796,20 @@ function Invoke-FixIisRemoveServerHeader {
         $sites = @(Get-IisSiteNames)
         if ($Global:IisSiteListFailed) { $failed += "사이트 목록 조회 실패: $($Global:IisConfigQueryError)" }
         foreach ($site in $sites) {
+            # V-R1: 진단(WEB-16)과 같이 사이트 루트뿐 아니라 하위 application·virtual directory 의 재정의도 고친다(루트 먼저 -
+            # 루트를 고치면 상속받던 하위는 다시 읽을 때 true 라 건너뛴다). 예전에는 사이트 루트만 고쳐 재검증 실패 → 원복이었다.
             $Global:IisConfigQueryFailed = $false
-            $v = Get-IisConfigValue -Filter $filter -Name "removeServerHeader" -SiteName $site
-            if ($Global:IisConfigQueryFailed) { $failed += "${site}: 조회 실패 $($Global:IisConfigQueryError)"; continue }
-            # WEB-16 진단과 같은 기준: 사이트 유효 값이 있고 true 가 아니면 사이트가 재정의한 것
-            if ($null -eq $v -or $v -eq $true) { continue }
-            Set-FixWebConfigProperty -Filter $filter -Name "removeServerHeader" -Value $true -PSPath "IIS:\Sites\$site"
-            if ($Global:FixStatus -eq "APPLIED") { $applied += $site } else { $failed += "${site}: $($Global:FixDetail)" }
+            $paths = @(Get-IisSiteConfigPaths -SiteName $site)
+            if ($Global:IisConfigQueryFailed) { $failed += "${site}: 하위 경로 조회 실패 $($Global:IisConfigQueryError)" }
+            foreach ($cp in $paths) {
+                $Global:IisConfigQueryFailed = $false
+                $v = Get-IisConfigValue -Filter $filter -Name "removeServerHeader" -PSPath $cp.PSPath
+                if ($Global:IisConfigQueryFailed) { $failed += "$($cp.Label): 조회 실패 $($Global:IisConfigQueryError)"; continue }
+                # WEB-16 진단과 같은 기준: 유효 값이 있고 true 가 아니면 그 경로가 재정의한 것
+                if ($null -eq $v -or $v -eq $true) { continue }
+                Set-FixWebConfigProperty -Filter $filter -Name "removeServerHeader" -Value $true -PSPath $cp.PSPath
+                if ($Global:FixStatus -eq "APPLIED") { $applied += $cp.Label } else { $failed += "$($cp.Label): $($Global:FixDetail)" }
+            }
         }
     }
     $Global:IisConfigQueryFailed = $false

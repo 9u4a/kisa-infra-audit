@@ -444,7 +444,7 @@ v1.3.3 까지는 항목 대부분이 한 상태로만 테스트돼(Windows 2/64,
 
 | ID | 중요도 | 내용 | 상태 |
 |---|---|---|---|
-| V-R1 | 중 | IIS 조치 WEB-16(`Invoke-FixIisRemoveServerHeader`, W-33 공용)·WEB-19 는 서버·사이트 단위만 고친다 - 하위 application 재정의가 있으면 재검증 실패·원복(진단은 VULN 으로 정확) | 열림 |
+| V-R1 | 중 | IIS 조치 WEB-16(`Invoke-FixIisRemoveServerHeader`, W-33 공용)·WEB-19 는 서버·사이트 단위만 고친다 - 하위 application 재정의가 있으면 재검증 실패·원복(진단은 VULN 으로 정확) | 해결(1.6.1): 두 조치 모두 진단과 같은 Get-IisSiteConfigPaths 경로(사이트 루트 먼저 → 하위 application·virtual directory)를 고친다. WEB-19 는 handlers 위임이 막혀 경로 쓰기가 실패하면 applicationHost.config location 에서 지운다. IIS 케이스 app-server-header-exposed·app-ssi-handler 의 조치 검증 제외를 풀었다(CI windows) |
 | V-R2 | 하 | Apache Options: `<Location>` 은 직접 켠 것만, IfModule 등 조건부 블록은 활성으로 간주, Options 없는 비 DocumentRoot `<Directory>` 미평가 | 한계 |
 | V-R3 | 하 | MySQL 상대 경로 `!include`·파일 256개 초과, PostgreSQL 2단계 이상 include 미추적. D-07 조치는 여전히 첫 설정 파일만 수정 | 열림 |
 | V-R4 | 하 | 05 SNMP 조치(N-18/19)가 ACL 번호 20 고정 - 기존 `access-list 20 permit any` 가 있으면 조치 후에도 VULN | 해결(1.6.1): N-18/N-19 조치가 ACL 20 이 이미 쓰이면 표준 확장 범위 1300-1999 의 빈 번호를 새로 선언한다(`parsers.cisco_ios.free_std_acl_num`, VTY 조치 N-06 의 1-99 와 겹치지 않음). 케이스 N-19 vuln_acl20_taken |

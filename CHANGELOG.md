@@ -17,6 +17,10 @@
   Defender 가 꺼진 서버가 늘 VULN 이었다. 이제 보안 센터가 없는 서버에서 Defender 가 꺼져 있거나 없으면 MANUAL(타사 백신 수동 확인),
   클라이언트에서 보안 센터 조회가 실패하면 ERROR, VULN 은 보안 센터가 응답했는데 등록된 백신이 없고 Defender 도 꺼져 있을 때만 낸다
   (guide.json W-45 deviation 기록). 판정 분기는 `Get-AntivirusInstallVerdict` 로 분리해 `lib/tests/locale_parse_tests.ps1` 에서 단위 테스트.
+- **IIS 조치 WEB-16(W-33 공용)·WEB-19 가 하위 application 재정의를 고치지 않음**(V-R1): 진단은 하위 application·virtual directory
+  까지 보는데 조치는 서버·사이트 루트만 고쳐 재검증 VULN → 원복이었다. 진단과 같은 경로 목록(Get-IisSiteConfigPaths)을 루트부터
+  고치고, WEB-19 는 handlers 섹션 위임이 막혀 있으면 applicationHost.config location 에서 지운다(조회 실패도 이제 ERROR).
+  IIS 케이스 app-server-header-exposed·app-ssi-handler 의 조치 검증을 켰다.
 
 ## [1.6.0] - 2026-11-16
 ### Added
