@@ -5,6 +5,8 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+
+## [1.6.0] - 2026-11-16
 ### Added
 - **조치 정책 모드(G-01)**: `fix.sh --policy <파일> --operator <이름>` / `fix.ps1 -Policy <파일> -Operator <이름>` / `05_network/fix.py --policy`.
   승인자가 작성한 줄 단위 정책 파일(머리말 `category=`·`expires=`·`approver=`, 승인 코드, `[host:이름]`·`[host:*]` 구역의 `-코드` 제외)로
@@ -50,6 +52,9 @@ G-07 실환경 VM 검증(한글 Windows Server 2022 독립·도메인 컨트롤�
 - 회귀 테스트: `lib/tests/fix_restore_tests.ps1`(보안 정책 원복 INF·긴 백업 이름, 시스템 무변경) - CI static-analysis(pwsh 7)·windows(5.1).
 - 08_dbms oracle 테스트: 기본 상태 진단을 DB 준비(OS 인증) 직후 바로 돌려, 리스너·FREEPDB1 등록이 덜 끝나면 SYSTEM@FREEPDB1 사전
   접속 점검이 실패해 전 항목 ERROR(17건 불일치)로 FAIL 하던 일시 실패(CI run 42181792315) - run.sh 가 exit 4 면 30초 간격 최대 6회 재시도.
+
+### Notes
+- **G-08 판정 해석 검토**: guide.json `deviation` 77건(판정 해석 27 · 조치 등급 재분류 50)을 쟁점별로 정리해 유지보수자가 전부 다시 읽었고 바꿀 것은 없었다. 외부 컨설턴트 검토는 하지 않았으므로 "판정 로직과 테스트 기대값이 같은 해석에서 나온다"는 한계는 그대로다(KNOWN_ISSUES G-08).
 
 ## [1.5.0] - 2026-11-06
 ### Added
