@@ -269,6 +269,13 @@ $IisCases = @{
         Probe = 'if (Test-CaseApp) { Write-Output ("app=True root_danger=" + (Get-SsiHandlerCount) + " sub_danger=" + (Get-SsiHandlerCount $caseAppPath)) } else { Write-Output ("app=absent root_danger=" + (Get-SsiHandlerCount)) }'
         Setup = 'Save-CaseConfig; Remove-ServerSsiHandlers; New-CaseApp; Add-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/handlers" -Name "." -Value @{ name = "KISA-SSINC-shtml"; path = "*.shtml"; verb = "GET,HEAD,POST"; modules = "ServerSideIncludeModule"; resourceType = "File" }'
         Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
+        Want = '^app=True root_danger=0 sub_danger=1$'
+    }
+    # WEB-19 전용(V-R1, 1.6.1): 위와 같은 상태에서 조치까지 검증한다 - WEB-15 는 guide fix=manual 이라 같은 케이스 이름에 Fix 를 걸 수 없음
+    "app-ssi-handler-fix" = @{
+        Probe = 'if (Test-CaseApp) { Write-Output ("app=True root_danger=" + (Get-SsiHandlerCount) + " sub_danger=" + (Get-SsiHandlerCount $caseAppPath)) } else { Write-Output ("app=absent root_danger=" + (Get-SsiHandlerCount)) }'
+        Setup = 'Save-CaseConfig; Remove-ServerSsiHandlers; New-CaseApp; Add-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/handlers" -Name "." -Value @{ name = "KISA-SSINC-shtml"; path = "*.shtml"; verb = "GET,HEAD,POST"; modules = "ServerSideIncludeModule"; resourceType = "File" }'
+        Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
         # V-R1(1.6.1): 조치(fixes/iis/WEB-19.ps1)가 하위 application 에 다시 추가된 SSI 매핑도 지운다(원복 불가 항목). WEB-15 는 guide fix=manual
         Want = '^app=True root_danger=0 sub_danger=1$'; Fix = $true; NoRollback = $true
     }

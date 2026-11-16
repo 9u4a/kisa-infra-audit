@@ -84,7 +84,7 @@
   {"code": "WEB-18", "engine": "nginx", "name": "dav-methods", "expect": "VULN"},
   {"code": "WEB-19", "engine": "apache", "name": "options-includes", "expect": "VULN"},
   {"code": "WEB-19", "engine": "apache-debian", "name": "options-includes", "expect": "VULN"},
-  {"code": "WEB-19", "engine": "iis", "name": "app-ssi-handler", "expect": "VULN"},
+  {"code": "WEB-19", "engine": "iis", "name": "app-ssi-handler-fix", "expect": "VULN"},
   {"code": "WEB-19", "engine": "iis", "name": "no-ssi-handlers", "expect": "GOOD"},
   {"code": "WEB-19", "engine": "nginx", "name": "ssi-on", "expect": "VULN"},
   {"code": "WEB-19", "engine": "tomcat", "name": "ssi-servlet", "expect": "VULN"},
