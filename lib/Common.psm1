@@ -302,6 +302,34 @@ function Get-SecurityCenterProducts {
     return [PSCustomObject]@{ Ok = $true; Error = ""; Products = $prods }
 }
 
+function Get-AntivirusInstallVerdict {
+    <# W-45(백신 설치) 판정. 외부 조회 없이 수집 결과만 받는다(lib/tests/locale_parse_tests.ps1 단위 테스트).
+       -ScOk/-ScNames/-ScError : root\SecurityCenter2 AntiVirusProduct 조회 성공 여부·등록 제품 이름(Defender 포함)·오류
+       -MpEnabled : Get-MpComputerStatus 의 AMServiceEnabled(조회 실패면 $null), -MpError : 조회 오류(시간 초과는 호출부가 ERROR)
+       -IsServer  : 서버 OS(ProductType ≠ 1) - 서버에는 SecurityCenter2 가 없다
+       V-R8: 예전에는 보안 센터 조회 실패 + Defender 비활성/조회 실패를 모두 VULN(미설치)으로 냈다. 서버 OS 는 보안 센터가 없어
+       타사 백신(Defender 가 꺼짐)을 확인할 방법이 없으므로 MANUAL, 보안 센터가 있어야 할 클라이언트에서 조회가 실패하면 ERROR(S6).
+       VULN 은 보안 센터가 응답했는데 등록된 백신이 없고 Defender 도 켜져 있지 않을 때만 낸다. #>
+    param([bool]$ScOk, [string[]]$ScNames = @(), [string]$ScError = "", $MpEnabled = $null, [string]$MpError = "", [bool]$IsServer)
+    $names = @($ScNames | Where-Object { $_ })
+    $mpNote = if ($null -ne $MpEnabled) { "Windows Defender AMServiceEnabled=$MpEnabled" } else { "Windows Defender 상태 조회 실패: $MpError" }
+    $scNote = if ($ScOk) { "SecurityCenter2: 등록된 백신 $($names.Count)개" } else { "SecurityCenter2 조회 실패: $ScError" }
+    if ($names.Count -gt 0) {
+        $joined = $names -join ", "
+        return [PSCustomObject]@{ Status = "GOOD"; Detail = "백신 프로그램이 설치되어 있음: $joined"; Evidence = $joined }
+    }
+    if ($MpEnabled -eq $true) {
+        return [PSCustomObject]@{ Status = "GOOD"; Detail = "Windows Defender 백신이 설치·활성화되어 있음"; Evidence = "$mpNote`n$scNote" }
+    }
+    if ($ScOk) {
+        return [PSCustomObject]@{ Status = "VULN"; Detail = "설치된 백신 프로그램을 감지하지 못함(보안 센터에 등록된 백신 없음, Windows Defender 비활성/미설치)"; Evidence = "$mpNote`n$scNote" }
+    }
+    if ($IsServer) {
+        return [PSCustomObject]@{ Status = "MANUAL"; Detail = "서버 OS 에는 보안 센터(SecurityCenter2)가 없어 타사 백신을 자동으로 확인할 수 없고 Windows Defender 는 꺼져 있거나 없음 — 타사 백신 설치 여부 수동 확인 필요"; Evidence = "$mpNote`n$scNote" }
+    }
+    return [PSCustomObject]@{ Status = "ERROR"; Detail = "보안 센터(SecurityCenter2) 조회에 실패했고 Windows Defender 도 꺼져 있거나 조회에 실패해 백신 설치 여부를 확인할 수 없음"; Evidence = "$mpNote`n$scNote" }
+}
+
 function Get-DefenderSignatureAgeText {
     <# W-39/PC-13 취약 사유 문구. 서명이 없으면(제거·한 번도 받지 않음) AntivirusSignatureAge 가 UInt32 최댓값(4294967295)으로
        나온다(CI 케이스 실측) - 그때는 일수 대신 "정의 없음"으로 적는다 #>
@@ -2260,4 +2288,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion

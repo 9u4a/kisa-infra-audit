@@ -50,6 +50,7 @@
   {"code": "U-49", "engine": "debian", "name": "bind-installed", "expect": "MANUAL", "base": "hardened"},
   {"code": "U-54", "engine": "debian", "name": "vsftpd-active", "expect": "VULN", "base": "hardened", "fix": "GOOD"},
   {"code": "U-54", "engine": "debian", "name": "vsftpd-disabled", "expect": "GOOD", "base": "hardened"},
+  {"code": "U-12", "engine": "debian", "name": "profile-d-tmout0", "expect": "VULN", "base": "hardened", "fix": "GOOD", "note": "V-R9: profile.d 의 export TMOUT=0 이 /etc/profile·앞선 profile.d 값을 덮어씀 - 예전 조치는 /etc/profile 만 고쳐 재검증 VULN → 원복"},
   {"code": "U-55", "engine": "debian", "name": "ftp-shell", "expect": "VULN", "base": "hardened", "fix": "GOOD"},
   {"code": "U-55", "engine": "debian", "name": "ftp-nologin", "expect": "GOOD", "base": "hardened"},
   {"code": "U-56", "engine": "debian", "name": "proftpd-no-limit", "expect": "VULN", "base": "hardened", "fix": "NOFIX", "note": "허용 IP 를 알 수 없어 조치는 항상 ERROR(변경 없음) - fixes/U-56.sh"},

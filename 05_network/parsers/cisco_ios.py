@@ -219,6 +219,17 @@ def acl_entries(ctx, name: str) -> list[str] | None:
     return [e for e in out if e and re.match(r"^(?:permit|deny)\b", e)]
 
 
+def free_std_acl_num(ctx, preferred: int = 20) -> str:
+    """SNMP 조치(N-18·N-19)가 새로 선언할 표준 ACL 번호. preferred 가 설정에 없으면 그대로, 이미 쓰이면(번호 ACL·번호 이름
+    블록) 표준 확장 범위 1300-1999 에서 비어 있는 가장 작은 번호(V-R4: 예전에는 20 고정이라 기존 `access-list 20 permit any`
+    뒤에 permit 만 덧붙여 any 허용이 남았다). VTY 조치(N-06 _free_acl_num)는 1-99 에서 고르므로 같은 실행에서 겹치지 않는다.
+    같은 설정에는 항상 같은 번호라 N-18·N-19 가 각자 불러도 한 ACL 을 함께 쓴다."""
+    for n in [preferred] + list(range(1300, 2000)) + list(range(1, 100)):
+        if acl_entries(ctx, str(n)) is None:
+            return str(n)
+    return "<사용하지 않는 ACL 번호>"
+
+
 def _src_is_any(tokens: list[str]) -> bool:
     if not tokens:
         return False

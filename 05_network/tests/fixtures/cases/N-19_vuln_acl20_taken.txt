@@ -1,0 +1,16 @@
+Building configuration...
+
+Current configuration : 900 bytes
+!
+version 15.2
+!
+hostname CaseRouter
+!
+access-list 20 permit any
+access-list 21 permit 10.9.9.9
+snmp-server community Kx9#CaseComm05 RO
+!
+line vty 0 4
+ transport input ssh
+!
+end

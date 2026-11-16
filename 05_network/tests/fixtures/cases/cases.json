@@ -302,5 +302,13 @@
     "expect": "ERROR",
     "file": "N-17_error_truncated.txt",
     "why": "end 줄이 없는 잘린 설정 - 설정 부재를 근거로 GOOD 을 낼 수 없음(A14, S6)"
+  },
+  {
+    "code": "N-19",
+    "engine": "cisco_ios",
+    "name": "vuln_acl20_taken",
+    "expect": "VULN",
+    "file": "N-19_vuln_acl20_taken.txt",
+    "why": "ACL 미지정, 기존 access-list 20 이 permit any(다른 용도) - 예전 조치는 ACL 20 에 permit 만 덧붙여 any 허용이 남아 재진단 VULN(V-R4)"
   }
 ]

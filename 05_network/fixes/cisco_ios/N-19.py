@@ -18,10 +18,8 @@
 # IPv4 ACL 이 없으면(ipv6 ACL 만 있어도) 진단과 같이 대상으로 본다.
 from parsers import cisco_ios as cio
 
-_ACL_NUM = "20"
-
-
 def generate(ctx):
+    _ACL_NUM = cio.free_std_acl_num(ctx)  # V-R4: 이미 쓰이는 번호면 비어 있는 번호
     cmds = []
     added_acl_decl = False
     subsumed_by_n18 = False

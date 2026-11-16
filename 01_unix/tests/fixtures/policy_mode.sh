@@ -4,9 +4,10 @@
 #   ① 정책 거부(카테고리 불일치·유효기간 경과·호스트 미등록·--operator 없음, --force 로도 우회 불가)는 exit 2·변경 없음
 #   ② dry-run 도 정책 판정(적용 예정/정책 미승인/irreversible 플래그 필요)을 보여 주고 아무것도 바꾸지 않음
 #   ③ --apply: 승인된 confirm 항목(U-67)이 y/N 없이 적용, 미승인(U-11)·호스트 제외(U-16)·플래그 없는 원복(U-34)/영향(U-05)
-#      표기 항목은 POLICY_SKIPPED, U-36:irreversible 은 적용. 실패 경로: U-12(confirm)는 vuln 픽스처의 profile.d TMOUT=0 이
-#      /etc/profile 값을 덮어써 재검증 VULN → 원복(FAILED_ROLLED_BACK) - 무인 실행에서도 다음 항목을 계속하고 요약·감사 기록에
-#      failed_codes 로 남는지 본다(U-12 조치가 profile.d 까지 고치게 되면 이 기대값을 함께 바꿀 것)
+#      표기 항목은 POLICY_SKIPPED, U-36:irreversible 은 적용. 실패 경로: 이 컨테이너 안에서만 U-12 조치를 /etc/profile 만
+#      고치는 가짜로 바꿔(1.6.0 의 V-R9 동작 재현) vuln 픽스처의 profile.d TMOUT=0 때문에 재검증 VULN → 원복(FAILED_ROLLED_BACK)
+#      되게 한다 - 무인 실행에서도 다음 항목을 계속하고 요약·감사 기록에 failed_codes 로 남는지 본다(실제 U-12 조치는 1.6.1 부터
+#      profile.d 도 고친다 - cases U-12 profile-d-tmout0)
 #   ④ audit.txt·changes.log 맨 앞 감사 기록(operator·login_user·approver·policy_file·policy_sha256·started_at·finished_at·건수)
 set -u
 sh 01_unix/tests/fixtures/setup.sh vuln >/dev/null 2>&1
@@ -63,12 +64,25 @@ echo "DRY_MODE=$(grep '^mode=' "$(dirname "$DLOG")/audit.txt")"
 [ "$BEFORE" = "$(snap)" ] && echo "DRY_STATE=unchanged" || echo "DRY_STATE=changed"
 
 # ---- ③ --apply (비대화형, --yes 없음) -----------------------------------------------------------------------
+# 실패 경로용 가짜 U-12 조치(위 머리말 ③ 참고) - 재검증이 VULN 이라 fix.sh 가 원복한다
+cp 01_unix/fixes/U-12.sh /tmp/U-12.sh.orig
+cat > 01_unix/fixes/U-12.sh <<'EOF_FAKE'
+# 변경: /etc/profile TMOUT=600 (테스트용 가짜 - profile.d 는 고치지 않음)
+run_fix() {
+    fix_backup /etc/profile
+    printf 'TMOUT=600
+export TMOUT
+' >> /etc/profile
+    FIX_STATUS="APPLIED"; FIX_DETAIL="/etc/profile 에만 TMOUT=600"; FIX_EVIDENCE=""
+}
+EOF_FAKE
 sh 01_unix/fix.sh -r "$R" -o /tmp/fixpol --policy "$P" --operator 김점검 --apply < /dev/null > /tmp/pol.log 2>&1
 echo "POL_RC=$?"
 LOG=$(ls /tmp/fixpol/*_01_fix_*/changes.log)
 AUD="$(dirname "$LOG")/audit.txt"
 st() { awk -F'\t' -v c="$1" '$2 == c { print $4 }' "$LOG"; }
 rs() { awk -F'\t' -v c="$1" '$2 == c { print $5 }' "$LOG"; }
+cp /tmp/U-12.sh.orig 01_unix/fixes/U-12.sh
 for c in U-18 U-12 U-67 U-36 U-16 U-05 U-34 U-11; do echo "POL_$c=$(st "$c")"; done
 case "$(rs U-11)" in "정책 미승인") echo "WHY_U-11=unapproved" ;; *) echo "WHY_U-11=$(rs U-11)" ;; esac
 case "$(rs U-16)" in "정책 미승인(호스트 제외: [host:*])") echo "WHY_U-16=excluded" ;; *) echo "WHY_U-16=$(rs U-16)" ;; esac
