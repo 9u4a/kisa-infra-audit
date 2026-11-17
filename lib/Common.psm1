@@ -1782,6 +1782,35 @@ function Restore-FixIisBindingBackup {
     } catch { Add-FixRollbackFailure "https 바인딩 원복 실패 $($o.Site):$($o.Port): $($_.Exception.Message)" }
 }
 
+function Remove-FixRegistryKeyWithBackup {
+    <# 레지스트리 키(하위 키·값 포함)를 reg.exe export 로 백업한 뒤 지운다. 백업(.reg)이 없거나 비면 지우지 않고 throw [백업 실패].
+       원복은 reg import(Restore-FixRegistryKeyBackup). -Path 는 HKLM:\... 형식 #>
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return $false }
+    $native = $Path -replace '^HKLM:\\', 'HKLM\' -replace '^HKCU:\\', 'HKCU\'
+    $dir = Get-FixItemBackupDir -Sub "regkey"
+    $safe = Get-FixBackupFileName -Raw $native
+    $reg = Join-Path $dir "$safe.reg"
+    if (-not (Test-Path -LiteralPath $reg)) {
+        & reg.exe export $native $reg /y 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $reg) -or (Get-Item -LiteralPath $reg).Length -eq 0) {
+            Remove-Item -LiteralPath $reg -Force -ErrorAction SilentlyContinue
+            throw "[백업 실패] 레지스트리 키 내보내기 실패($native) - 지우지 않음"
+        }
+        Save-FixBackupJson -File (Join-Path $dir "$safe.json") -Object ([PSCustomObject]@{ Path = $Path; Native = $native; RegFile = "$safe.reg" }) | Out-Null
+    }
+    Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+    return $true
+}
+
+function Restore-FixRegistryKeyBackup {
+    param([Parameter(Mandatory)][string]$File)
+    $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
+    $reg = Join-Path (Split-Path -Parent $File) $o.RegFile
+    & reg.exe import $reg 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $o.Path)) { Add-FixRollbackFailure "레지스트리 키 원복 실패 $($o.Native) (reg import rc=$LASTEXITCODE)" }
+}
+
 function Restore-FixScheduledTaskBackup {
     param([Parameter(Mandatory)][string]$File)
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
@@ -2448,6 +2477,8 @@ function Restore-FixItem {
         ForEach-Object { Restore-FixWebCollectionBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "binding") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixIisBindingBackup -File $_.FullName }
+    Get-ChildItem -Path (Join-Path $dir "regkey") -Filter *.json -ErrorAction SilentlyContinue |
+        ForEach-Object { Restore-FixRegistryKeyBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "webconfig") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixWebConfigPropertyBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "firewall") -Filter *.json -ErrorAction SilentlyContinue |
@@ -2510,4 +2541,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixParamSpec, Get-FixParam, Get-FixParamSummary, Test-FixParamReady, Add-FixLocalGroupMemberBySid, Restore-FixLocalGroupBackup, Disable-FixScheduledTask, Restore-FixScheduledTaskBackup, Set-FixDnsZoneAllowUpdate, Restore-FixDnsZoneBackup, Add-FixWebCollectionItem, Restore-FixWebCollectionBackup, Add-FixIisHttpsBinding, Restore-FixIisBindingBackup, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixParamSpec, Get-FixParam, Get-FixParamSummary, Test-FixParamReady, Add-FixLocalGroupMemberBySid, Restore-FixLocalGroupBackup, Disable-FixScheduledTask, Restore-FixScheduledTaskBackup, Set-FixDnsZoneAllowUpdate, Restore-FixDnsZoneBackup, Add-FixWebCollectionItem, Restore-FixWebCollectionBackup, Add-FixIisHttpsBinding, Restore-FixIisBindingBackup, Remove-FixRegistryKeyWithBackup, Restore-FixRegistryKeyBackup, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion

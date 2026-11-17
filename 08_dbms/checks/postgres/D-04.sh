@@ -15,4 +15,9 @@ run_check() {
     CHECK_STATUS="MANUAL"
     CHECK_DETAIL="superuser 권한 보유 role 목록 - 관리 업무에 실제로 필요한 계정인지 수동 검토 필요"
     CHECK_EVIDENCE="$out"
+    # 1.7.0 값 지정 조치: D-04.accounts 후보(SUPERUSER 역할) - lib/policy_draft.py 가 읽는다(조치가 거부하는 계정도 섞일 수 있음)
+    cand=$(printf '%s\n' "$out" | awk 'NF { print $1 }' | grep -v ',' | tr '\n' ',' | sed 's/,$//')
+    [ -n "$cand" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+
+[candidates] $cand"
 }

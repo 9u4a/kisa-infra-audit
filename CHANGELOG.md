@@ -23,6 +23,10 @@
   - WEB-17 가상 디렉터리(Apache Alias·Nginx alias location 주석 처리), WEB-20 SSL/TLS 활성화(Apache mod_ssl·443 VirtualHost / Nginx listen 443 ssl
     / IIS https 바인딩·인증서 연결 - 원복 시 제거, 백업 유형 binding). 웹 케이스 러너에 `# PARAM:`·`# VERIFY:`, 테스트 이미지 apache-debian 에 openssl.
     guide_consistency R7 은 엔진별 머리말 키가 fix_params 의 부분집합이고 합집합이 같으면 통과(WEB-20 은 엔진마다 받는 값이 다름).
+  - DBMS: D-02 계정 잠금(MySQL ACCOUNT LOCK·PostgreSQL NOLOGIN·Oracle ACCOUNT LOCK·MSSQL DISABLE), D-04 관리자 권한 회수(MySQL SUPER·
+    CREATE USER·GRANT OPTION 중 보유한 것·PostgreSQL NOSUPERUSER·Oracle DBA 롤(ADMIN OPTION 보존 원복)·MSSQL sysadmin), D-13 MSSQL 시스템
+    DSN 제거(레지스트리 키 백업 유형 regkey). 원복 SQL 은 변경 전에 큐에 넣는다. 기본 관리자·엔진 내장·도구 접속 계정은 값에 있어도 거부.
+    DB 케이스 러너(db_cases.sh·db_case_runner.py)에 PARAM·REJECT, MySQL·PostgreSQL·Oracle·MSSQL 케이스 10건.
 ### Changed
 - **W-12 익명 SID/이름 변환 조치를 manual → auto**: "LSA 정책 객체라 secedit 로 바꿀 수 없다"던 1.0 판단이 틀렸다 - secedit [System Access]
   LSAAnonymousNameLookup=0 으로 적용된다(케이스가 같은 경로로 취약 상태를 만듦). 원복은 다른 secedit 조치처럼 실행 단위 전체.

@@ -60,7 +60,8 @@
       "guide_page": 600,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "accounts",
       "envs": [
         "mysql",
         "postgres",
@@ -122,7 +123,8 @@
       "guide_page": 608,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "accounts",
       "envs": [
         "mysql",
         "postgres",
@@ -390,7 +392,8 @@
       "guide_page": 637,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "dsns",
       "envs": [
         "mssql"
       ],

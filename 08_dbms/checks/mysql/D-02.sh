@@ -15,4 +15,9 @@ run_check() {
     CHECK_STATUS="MANUAL"
     CHECK_DETAIL="전체 계정 목록을 확인하여 불필요한(퇴직자/테스트/데모) 계정이 있는지 수동 검토 필요"
     CHECK_EVIDENCE="$out"
+    # 1.7.0 값 지정 조치: D-02.accounts 후보(user@host, 잠기지 않은 계정·MySQL 내부 계정 제외) - lib/policy_draft.py 가 읽는다(조치가 거부하는 계정도 섞일 수 있음)
+    cand=$(printf '%s\n' "$out" | awk '$3 == "N" && index($1, "mysql.") != 1 { print $1 "@" $2 }' | grep -v ',' | tr '\n' ',' | sed 's/,$//')
+    [ -n "$cand" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+
+[candidates] $cand"
 }
