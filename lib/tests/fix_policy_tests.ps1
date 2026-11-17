@@ -50,6 +50,33 @@ try {
     $r2 = Read-P $ok "db01"
     Assert-True "[host:*] 적용" ($r2.Ok -and $r2.HostSection -eq "*" -and (@($r2.Excluded) -join ",") -eq "W-07") "$($r2.HostSection) / $(@($r2.Excluded) -join ',')"
 
+    # ---- 1.7.0 값 지정 조치(코드.키 = 값) - 02 에 param 항목이 생기기 전에도 규칙을 시험하도록 키 정의를 직접 준다 ----
+    $spec = @{ "W-03" = @("accounts"); "W-37" = @("tasks", "mode") }
+    function Read-PP([string]$Path, [string]$HostName = "web01") {
+        return (Read-FixPolicy -Path $Path -CategoryNum "02" -KnownCodes $known02 -HostName $HostName -Today $today -ParamKeys $spec)
+    }
+    $pp = New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-03", "W-37", "W-07", "[host:web01]", "W-03.accounts = guest ,  old_admin,svc", "W-37.tasks = T1", "[host:*]", "W-03.accounts = temp", "-W-07")
+    $rp = Read-PP $pp "web01"
+    Assert-True "값: 정상" $rp.Ok ($rp.Errors -join ' | ')
+    Assert-True "값: 맞는 구역·공백 제거" ((@(Get-FixParam -Policy $rp -Code "W-03" -Key "accounts") -join ",") -ceq "guest,old_admin,svc") (@(Get-FixParam -Policy $rp -Code "W-03" -Key "accounts") -join ",")
+    Assert-True "값: 둘째 코드" ((@(Get-FixParam -Policy $rp -Code "W-37" -Key "tasks") -join ",") -ceq "T1")
+    Assert-True "값: 없는 키는 빈 배열" (@(Get-FixParam -Policy $rp -Code "W-37" -Key "mode").Count -eq 0)
+    $rp = Read-PP $pp "db01"
+    Assert-True "값: [host:*] 구역" ($rp.Ok -and (@(Get-FixParam -Policy $rp -Code "W-03" -Key "accounts") -join ",") -ceq "temp" -and -not $rp.Params.ContainsKey("W-37"))
+    Assert-True "값: 정책 없음이면 빈 배열" (@(Get-FixParam -Policy $null -Code "W-03" -Key "accounts").Count -eq 0)
+    Assert-Rejected "값 줄이 구역 밖" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-03", "W-03.accounts = a", "[host:*]"))) "줄 5: 값 줄\(코드\.키 = 값\)은 호스트 구역"
+    Assert-Rejected "param 아닌 코드에 값" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-07", "[host:*]", "W-07.x = a"))) "줄 6: 값 지정 조치\(fix=param\) 항목이 아니라 값을 받지 않음: W-07"
+    Assert-Rejected "받지 않는 키" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-03", "[host:*]", "W-03.users = a"))) "줄 6: W-03 가 받지 않는 키: users \(허용: accounts\)"
+    Assert-Rejected "승인하지 않은 코드의 값" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "[host:*]", "W-03.accounts = a"))) "줄 5: 승인하지 않은 코드의 값"
+    Assert-Rejected "같은 값 중복" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-03", "[host:*]", "W-03.accounts = a", "W-03.accounts = b"))) "줄 7: 같은 구역에서 같은 값을 두 번 지정함: W-03\.accounts"
+    Assert-Rejected "빈 값" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-03", "[host:*]", "W-03.accounts =   "))) "줄 6: 값이 비어 있음"
+    Assert-Rejected "빈 목록 항목" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-03", "[host:*]", "W-03.accounts = a,,b"))) "줄 6: 값 목록에 빈 항목"
+    Assert-Rejected "제외한 코드에 값" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-03", "[host:*]", "W-03.accounts = a", "-W-03"))) "줄 6: 같은 구역에서 제외한 코드에 값을 지정함: W-03\.accounts"
+    Assert-Rejected "값에 탭" (Read-PP (New-PolicyFile @("category=02", "expires=2026-12-31", "approver=x", "W-03", "[host:*]", "W-03.accounts = a`tb"))) "줄 6: 값에 탭 문자"
+    $gi = @([PSCustomObject]@{ code = "U-07"; fix = "param"; fix_params = "lock" }, [PSCustomObject]@{ code = "U-01"; fix = "confirm" }, [PSCustomObject]@{ code = "W-1"; fix = "param"; fix_params = "a, b" })
+    $sp = Get-FixParamSpec -GuideItems $gi
+    Assert-True "Get-FixParamSpec" ($sp.Count -eq 2 -and (@($sp["U-07"]) -join ",") -ceq "lock" -and (@($sp["W-1"]) -join ",") -ceq "a,b") (($sp.Keys | Sort-Object) -join ",")
+
     # ---- 판정 ----
     $fixPlain = Join-Path $tmp "plain.ps1"; [System.IO.File]::WriteAllText($fixPlain, "# W-07 test`n# 변경: 값 0`n", $utf8NoBom)
     $fixRb = Join-Path $tmp "rb.ps1"; [System.IO.File]::WriteAllText($fixRb, "# X`n# 변경: 값`n# 원복: 불가 — 테스트`n", $utf8NoBom)

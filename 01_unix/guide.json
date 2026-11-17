@@ -203,9 +203,10 @@
       "guide_page": 31,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "lock",
       "envs": [],
-      "deviation": null
+      "deviation": "조치(1.7.0 값 지정 조치): 가이드는 불필요 계정 삭제(userdel)이나, 자동 조치는 되돌릴 수 있도록 운영자가 정책 파일에 지정한 계정만 잠근다(usermod -L·계정 만료·쉘 nologin, 홈·파일 보존). 삭제는 잠금 후 운영자가 수동으로 한다."
     },
     {
       "code": "U-08",
@@ -229,7 +230,8 @@
       "guide_page": 32,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "remove",
       "envs": [],
       "deviation": null
     },
@@ -661,7 +663,8 @@
       "guide_page": 50,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "files",
       "envs": [],
       "deviation": null
     },
@@ -716,7 +719,8 @@
       "guide_page": 52,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "files",
       "envs": [],
       "deviation": null
     },
@@ -945,7 +949,8 @@
       "guide_page": 67,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "files",
       "envs": [],
       "deviation": null
     },

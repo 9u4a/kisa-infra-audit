@@ -6,10 +6,11 @@
 - **원복 불가 사유**: 조치 파일 머리말 `# 원복:` (운영 안전 기준 F4 - 백업으로 완전히 되돌릴 수 없음)
 - **업무 영향**: 조치 파일 머리말 `# 영향:` (F5 - 적용하는 순간 서비스 중지·세션 끊김·계정 잠금·접근 차단·재시작 등 업무가 끊길 수 있음)
 - **:irreversible**: 둘 중 하나라도 있으면 정책 모드(`fix --policy`)에서 정책 파일에 `코드:irreversible` 로 적어야 적용된다(없으면 `POLICY_SKIPPED`). 대화형 실행에는 영향 없음.
+- **param(키)**: 값 지정 조치(1.7.0) - 정책 파일 호스트 구역의 `코드.키 = 값` 이 있을 때만 정책 모드로 적용한다(대화형·값 없음은 수동 안내).
 
-전체 조치 220개 중 정책에 `:irreversible` 이 필요한 조치 82개.
+전체 조치 225개 중 정책에 `:irreversible` 이 필요한 조치 87개.
 
-## 01 Unix 서버 (58개 조치, :irreversible 필요 16개)
+## 01 Unix 서버 (63개 조치, :irreversible 필요 21개)
 
 | 코드 | 대상 | 제목 | 등급 | 원복 불가 사유 | 업무 영향 | :irreversible |
 |---|---|---|---|---|---|---|
@@ -19,6 +20,8 @@
 | U-04 | Unix(sh) | 비밀번호 파일 보호 | confirm | - | - | - |
 | U-05 | Unix(sh) | root 이외의 UID가 ‘0’ 금지 | confirm | - | root 외 UID 0 계정의 UID 즉시 변경 — 그 계정으로 하던 관리 작업·서비스가 root 권한을 잃음(홈 밖 파일은 이전 UID 소유로 남음) | 필요 |
 | U-06 | Unix(sh) | 사용자 계정 su 기능 제한 | confirm | - | - | - |
+| U-07 | Unix(sh) | 불필요한 계정 제거 | param(lock) | - | 지정 계정 로그인 즉시 차단 — 그 계정의 SSH 키 접속·su·cron 작업이 실패할 수 있음 | 필요 |
+| U-08 | Unix(sh) | 관리자 그룹에 최소한의 계정 포함 | param(remove) | - | 지정 계정의 관리자 권한(sudo·su 허용) 즉시 제거 — 그 계정으로 하던 관리 작업이 실패 | 필요 |
 | U-09 | Unix(sh) | 계정이 존재하지 않는 GID 금지 | auto | - | - | - |
 | U-10 | Unix(sh) | 동일한 UID 금지 | confirm | - | 중복 UID 계정의 UID 즉시 변경 — 그 계정이 쓰던 홈 밖 파일·실행 중 작업의 접근 권한이 끊길 수 있음 | 필요 |
 | U-11 | Unix(sh) | 사용자 shell 점검 | auto | - | 시스템 계정 쉘을 nologin 으로 변경 — 이 계정으로 로그인하거나 su(-s 없이)로 쓰던 작업이 실패 | 필요 |
@@ -33,13 +36,16 @@
 | U-20 | Unix(sh) | /etc/(x)inetd.conf 파일 소유자 및 권한 설정 | auto | - | - | - |
 | U-21 | Unix(sh) | /etc/(r)syslog.conf 파일 소유자 및 권한 설정 | auto | - | - | - |
 | U-22 | Unix(sh) | /etc/services 파일 소유자 및 권한 설정 | auto | - | - | - |
+| U-23 | Unix(sh) | SUID, SGID, Sticky bit 설정 파일 점검 | param(files) | - | 일반 사용자가 지정 프로그램으로 하던 권한 상승 동작(비밀번호 변경·장치 접근 등) 즉시 실패 | 필요 |
 | U-24 | Unix(sh) | 사용자, 시스템 환경변수 파일 소유자 및 권한 설정 | auto | - | - | - |
+| U-25 | Unix(sh) | world writable 파일 점검 | param(files) | - | 소유자·그룹이 아닌 계정이 지정 파일에 쓰던 동작(로그 기록·공유 파일 갱신 등) 즉시 실패 | 필요 |
 | U-26 | Unix(sh) | /dev에 존재하지 않는 device 파일 점검 | auto | - | - | - |
 | U-27 | Unix(sh) | $HOME/.rhosts, hosts.equiv 사용 금지 | auto | - | - | - |
 | U-29 | Unix(sh) | hosts.lpd 파일 소유자 및 권한 설정 | auto | - | - | - |
 | U-30 | Unix(sh) | UMASK 설정 관리 | auto | - | - | - |
 | U-31 | Unix(sh) | 홈디렉토리 소유자 및 권한 설정 | auto | - | - | - |
 | U-32 | Unix(sh) | 홈 디렉토리로 지정한 디렉토리의 존재 관리 | auto | - | - | - |
+| U-33 | Unix(sh) | 숨겨진 파일 및 디렉토리 검색 및 제거 | param(files) | - | 지정 숨김 파일을 쓰던 프로그램(사용자 설정·자동 실행 스크립트 등)이 그 파일을 찾지 못함 | 필요 |
 | U-34 | Unix(sh) | Finger 서비스 비활성화 | auto | 일부 — systemd 서비스 상태는 되돌리지만, 직접 종료한 프로세스(inetd 계열 등)는 다시 띄우지 않음 | 실행 중인 finger 서비스 중지(fingerd 종료·xinetd 재적용) — finger 조회 끊김 | 필요 |
 | U-35 | Unix(sh) | 공유 서비스에 대한 익명 접근 제한 설정 | auto | - | - | - |
 | U-36 | Unix(sh) | r 계열 서비스 비활성화 | auto | 일부 — systemd 서비스 상태는 되돌리지만, 직접 종료한 프로세스(inetd 계열 등)는 다시 띄우지 않음 | 실행 중인 rlogin/rsh/rexec 서비스 중지·데몬 종료 — r 계열 원격 접속 세션·스크립트 끊김 | 필요 |

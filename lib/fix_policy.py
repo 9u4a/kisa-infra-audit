@@ -37,6 +37,8 @@ _EXCL_RE = re.compile(r"^-([A-Z]+-\d+)$")
 _HOST_RE = re.compile(r"^\[host:(.*)\]$")
 _KV_RE = re.compile(r"^([^=\s]+)\s*=(.*)$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# 1.7.0 값 지정 조치 줄(코드.키 = 값) - 05_network 는 조치가 명령어 생성이라 param 항목이 없어 항상 거부한다(sh·PowerShell 과 같은 문법)
+_PARAM_RE = re.compile(r"^([A-Z]+-\d+)\.[^=]*=")
 
 
 class PolicyError(Exception):
@@ -129,6 +131,11 @@ def parse_policy(path: str, category: str, valid_codes: set[str] | list[str],
                 hosts.setdefault(key, set())
                 host_names.setdefault(key, name)
             section = key
+            continue
+        mp = _PARAM_RE.match(line)
+        if mp:
+            where = "" if section is not None else " (값 줄은 [host:] 구역 안에만 쓸 수 있음)"
+            errors.append(f"{no}행: 값 지정 조치(fix=param) 항목이 아니라 값을 받지 않음: {mp.group(1)}{where}")
             continue
         if section is not None:
             m = _EXCL_RE.match(line)

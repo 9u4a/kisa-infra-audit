@@ -569,6 +569,7 @@ fix_impact_note() {
 POLICY_SET=0; POLICY_FILE=""; POLICY_OPERATOR=""; POLICY_OPERATOR_SET=0
 POLICY_CODES=" "; POLICY_IRREV=" "; POLICY_EXCL=" "; POLICY_SECTION=""; POLICY_APPROVER=""; POLICY_EXPIRES=""
 POLICY_SHA256=""; POLICY_ABS=""; POLICY_HOST=""; POLICY_REASON=""; AUDIT_FILE=""
+POLICY_PARAMS=""; POLICY_PARAM_CODES=" "
 
 # fix_policy_args_check <ROLLBACK_DIR> — 옵션 조합 확인(fix.sh 가 옵션 해석 직후 부른다). 잘못되면 변경 없이 exit 2.
 fix_policy_args_check() {
@@ -612,11 +613,27 @@ fix_sha256() {
     printf '%s\n' "$_sh_v"
 }
 
+# _policy_param_spec <guide.json> — 값 지정 조치(fix=param, 1.7.0) 항목과 받는 키: "코드=키1,키2" 를 공백으로 이어 한 줄로.
+# guide.json 은 extract_guide.py 가 키마다 한 줄로 쓴다("code"·"fix"·"fix_params" 줄).
+_policy_param_spec() {
+    awk '
+        function flush() { if (code != "" && fix == "param") printf "%s=%s ", code, keys; code = ""; fix = ""; keys = "" }
+        function val(s) { sub(/^[^:]*:[ \t]*"/, "", s); sub(/".*$/, "", s); return s }
+        /"code":/ { flush(); code = val($0) }
+        /"fix":/ { fix = val($0) }
+        /"fix_params":/ { keys = val($0) }
+        END { flush() }
+    ' "$1" 2>/dev/null
+}
+
 # _policy_parse <정책 파일> <카테고리 번호> <guide.json> <호스트> <오늘 YYYY-MM-DD> — 정책 파일을 검증·해석한다(표준출력).
 #   오류: "ERR<TAB>줄 번호(또는 -)<TAB>사유" 줄(하나라도 있으면 거부) / 정상: APPROVER·EXPIRES·SECTION·CODE<TAB>코드<TAB>irreversible(0|1)<TAB>제외(0|1)
+#   ·PARAM<TAB>코드<TAB>키<TAB>값(쉼표 구분, 항목별 앞뒤 공백 제거) - 고른 호스트 구역의 값만.
 # 줄 번호는 파일의 실제 줄(주석·빈 줄 포함, 1부터). 바이트 단위(LC_ALL=C)라 호스트 이름 대소문자 무시는 ASCII 만 해당한다.
+# 1.7.0: 호스트 구역 안의 "코드.키 = 값" 줄 - 값 지정 조치(fix=param) 항목에 운영자 판단(잠글 계정·고칠 파일 등)을 준다. 대상이
+# 호스트마다 다르므로 구역 밖에는 쓸 수 없고, 위쪽에서 승인한 코드·guide.json fix_params 에 있는 키만 받는다.
 _policy_parse() {
-    awk -v cat="$2" -v codes="$(guide_list_codes "$3" | tr '\n' ' ')" -v host="$4" -v today="$5" -v bom="$(printf '\357\273\277')" '
+    awk -v cat="$2" -v codes="$(guide_list_codes "$3" | tr '\n' ' ')" -v pspec="$(_policy_param_spec "$3")" -v host="$4" -v today="$5" -v bom="$(printf '\357\273\277')" '
         function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
         function err(ln, msg) { print "ERR\t" ln "\t" msg; nerr++ }
         function isdate(s,   y, m, d) {
@@ -624,7 +641,10 @@ _policy_parse() {
             m = substr(s, 6, 2) + 0; d = substr(s, 9, 2) + 0
             return (m >= 1 && m <= 12 && d >= 1 && d <= 31)
         }
-        BEGIN { n = split(codes, cl, " "); for (i = 1; i <= n; i++) valid[cl[i]] = 1; insect = 0; na = 0; nerr = 0 }
+        BEGIN {
+            n = split(codes, cl, " "); for (i = 1; i <= n; i++) valid[cl[i]] = 1; insect = 0; na = 0; nerr = 0
+            n = split(pspec, cl, " "); for (i = 1; i <= n; i++) { p = index(cl[i], "="); pkeys[substr(cl[i], 1, p - 1)] = "," substr(cl[i], p + 1) "," }
+        }
         {
             line = $0
             if (NR == 1 && substr(line, 1, 3) == bom) line = substr(line, 4)
@@ -639,13 +659,34 @@ _policy_parse() {
                 else orig[name] = oname
                 sect[name] = 1; cur = name; insect = 1; next
             }
+            if (insect && line ~ /^[A-Z]+-[0-9]+\.[a-z_]+[ \t]*=/) {
+                p = index(line, "="); lhs = trim(substr(line, 1, p - 1)); v = trim(substr(line, p + 1))
+                d = index(lhs, "."); c = substr(lhs, 1, d - 1); k = substr(lhs, d + 1)
+                if (!(c in valid)) { err(NR, "이 카테고리 guide.json 에 없는 코드: " c); next }
+                if (!(c in pkeys)) { err(NR, "값 지정 조치(fix=param) 항목이 아니라 값을 받지 않음: " c); next }
+                if (index(pkeys[c], "," k ",") == 0) { err(NR, c " 가 받지 않는 키: " k " (허용: " substr(pkeys[c], 2, length(pkeys[c]) - 2) ")"); next }
+                if (!(c in appr)) { err(NR, "승인하지 않은 코드의 값(구역 위쪽에 " c " 줄 필요): " lhs); next }
+                if ((cur, c, k) in pv) { err(NR, "같은 구역에서 같은 값을 두 번 지정함: " lhs); next }
+                if (v == "") { err(NR, "값이 비어 있음: " lhs); next }
+                if (index(v, "\t") > 0) { err(NR, "값에 탭 문자를 쓸 수 없음: " lhs); next }
+                m = split(v, vl, ","); out = ""
+                for (j = 1; j <= m; j++) {
+                    vi = trim(vl[j])
+                    if (vi == "") { err(NR, "값 목록에 빈 항목이 있음(쉼표 연속·끝 쉼표): " lhs); out = ""; break }
+                    out = out (j > 1 ? "," : "") vi
+                }
+                if (out == "") next
+                pv[cur, c, k] = out; pn[cur]++; pc[cur, pn[cur]] = c; pk[cur, pn[cur]] = k; pl[cur, pn[cur]] = NR
+                next
+            }
             if (insect) {
-                if (line !~ /^-[A-Z]+-[0-9]+$/) { err(NR, "호스트 구역에는 \"-코드\" 줄만 쓸 수 있음: " line); next }
+                if (line !~ /^-[A-Z]+-[0-9]+$/) { err(NR, "호스트 구역에는 \"-코드\" 또는 \"코드.키 = 값\" 줄만 쓸 수 있음: " line); next }
                 c = substr(line, 2)
                 if (!(c in valid)) err(NR, "이 카테고리 guide.json 에 없는 코드: " c)
                 else if ((cur, c) in excl) err(NR, "같은 구역에서 같은 코드를 두 번 제외함: " c)
                 excl[cur, c] = 1; next
             }
+            if (line ~ /^[A-Z]+-[0-9]+\.[^=]*=/) { err(NR, "값 줄(코드.키 = 값)은 호스트 구역([host:이름]) 안에만 쓸 수 있음: " line); next }
             p = index(line, "=")
             if (p > 0) {
                 k = trim(substr(line, 1, p - 1)); v = trim(substr(line, p + 1))
@@ -668,6 +709,8 @@ _policy_parse() {
             else if (today > hdr["expires"]) err(hl["expires"], "정책 유효기간이 지났음(expires=" hdr["expires"] ", 오늘 " today ")")
             if (!("approver" in hdr)) err("-", "머리말에 approver= 가 없음")
             else if (hdr["approver"] == "") err(hl["approver"], "approver 가 비어 있음")
+            for (nm in sect) for (i = 1; i <= pn[nm]; i++)
+                if ((nm, pc[nm, i]) in excl) err(pl[nm, i], "같은 구역에서 제외한 코드에 값을 지정함: " pc[nm, i] "." pk[nm, i])
             if (nerr) exit
             lh = tolower(host)
             if (lh in sect) s = lh
@@ -675,6 +718,7 @@ _policy_parse() {
             else { err("-", "정책에 없는 호스트: " host " ([host:" host "] 또는 [host:*] 구역 필요)"); exit }
             print "APPROVER\t" hdr["approver"]; print "EXPIRES\t" hdr["expires"]; print "SECTION\t" orig[s]
             for (i = 1; i <= na; i++) { c = order[i]; print "CODE\t" c "\t" appr[c] "\t" (((s, c) in excl) ? 1 : 0) }
+            for (i = 1; i <= pn[s]; i++) print "PARAM\t" pc[s, i] "\t" pk[s, i] "\t" pv[s, pc[s, i], pk[s, i]]
         }
     ' "$1"
 }
@@ -702,7 +746,7 @@ fix_policy_load() {
         log_error "정책 파일을 고친 뒤 다시 실행하세요 - 아무것도 변경하지 않았습니다."
         exit 2
     fi
-    POLICY_CODES=" "; POLICY_IRREV=" "; POLICY_EXCL=" "
+    POLICY_CODES=" "; POLICY_IRREV=" "; POLICY_EXCL=" "; POLICY_PARAMS=""; POLICY_PARAM_CODES=" "
     while IFS="$_pl_tab" read -r _pl_k _pl_a _pl_b _pl_c; do
         case "$_pl_k" in
             APPROVER) POLICY_APPROVER=$_pl_a ;;
@@ -712,6 +756,10 @@ fix_policy_load() {
                 POLICY_CODES="$POLICY_CODES$_pl_a "
                 [ "$_pl_b" = "1" ] && POLICY_IRREV="$POLICY_IRREV$_pl_a "
                 [ "$_pl_c" = "1" ] && POLICY_EXCL="$POLICY_EXCL$_pl_a " ;;
+            PARAM)
+                POLICY_PARAMS="$POLICY_PARAMS$_pl_a$_pl_tab$_pl_b$_pl_tab$_pl_c
+"
+                case "$POLICY_PARAM_CODES" in *" $_pl_a "*) ;; *) POLICY_PARAM_CODES="$POLICY_PARAM_CODES$_pl_a " ;; esac ;;
         esac
     done <<EOF
 $_pl_out
@@ -726,6 +774,27 @@ fix_policy_approved() {
     case "$POLICY_CODES" in *" $1 "*) ;; *) POLICY_REASON="정책 미승인"; return 1 ;; esac
     case "$POLICY_EXCL" in *" $1 "*) POLICY_REASON="정책 미승인(호스트 제외: [host:$POLICY_SECTION])"; return 1 ;; esac
     return 0
+}
+
+# fix_param <키> [코드] — 값 지정 조치(1.7.0): 정책 파일에서 이 호스트 구역이 준 값을 한 줄에 하나씩(없으면 빈 출력). 코드는 기본
+# FIX_CODE(fix_items 가 조치 실행 전에 정한다). 값은 운영자 입력이라 조치가 항목마다 검증한 뒤에만 쓴다(존재·형식·보호 대상).
+fix_param() {
+    printf '%s' "$POLICY_PARAMS" | awk -F '\t' -v c="${2:-${FIX_CODE:-}}" -v k="$1" \
+        '$1 == c && $2 == k { n = split($3, a, ","); for (i = 1; i <= n; i++) print a[i] }'
+}
+
+# fix_is_operator_account <계정> — 지금 조치를 실행한 사람(SUDO_USER·logname·id -un)의 계정이면 0. 값 지정 조치가 실행자 계정을
+# 잠그거나 관리자 그룹에서 빼 스스로 접속·권한을 잃는 일을 막는다(F3).
+fix_is_operator_account() {
+    for _ioa in "${SUDO_USER:-}" "$(logname 2>/dev/null)" "$(id -un 2>/dev/null)"; do
+        [ -n "$_ioa" ] && [ "$_ioa" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# fix_param_summary <코드> — 감사·미리보기용 "키=값;키=값" 한 줄(값 원문 - 비밀값은 값으로 받지 않는다)
+fix_param_summary() {
+    printf '%s' "$POLICY_PARAMS" | awk -F '\t' -v c="$1" '$1 == c { s = s (s == "" ? "" : "; ") $2 "=" $3 } END { printf "%s", s }'
 }
 
 # fix_policy_irrev_ok <코드> <조치 파일> — G-02: 머리말에 원복/영향 표기가 있는 조치는 정책에 코드:irreversible 이 있어야 0.
@@ -771,6 +840,8 @@ fix_audit_begin() {
         printf 'category=%s\n' "$CATEGORY_NUM"
         printf 'mode=%s\n' "$([ "${APPLY:-0}" -eq 1 ] && echo apply || echo dry-run)"
         printf 'tool_version=%s\n' "$TOOL_VERSION"
+        # 1.7.0: 이 호스트 구역이 준 값 지정 조치 값(운영자 판단의 근거)
+        for _ab_c in $POLICY_PARAM_CODES; do printf 'param.%s=%s\n' "$_ab_c" "$(fix_param_summary "$_ab_c")"; done
     } > "$AUDIT_FILE"
     sed 's/^/# /' "$AUDIT_FILE" >> "$FIX_LOG"
 }
@@ -1055,8 +1126,13 @@ $(basename "$_code_dir")"
 # 진입점이 정해 두어야 하는 전역: GUIDE_JSON, RESULT_JSON, ITEM_FILTER, APPLY (fix_items 는 FIX_LOG 도 쓴다).
 
 # fix_select_vuln_codes -- result.json 의 VULN 코드(-i 가 있으면 그중 지정한 것만)를 VULN_CODES·TOTAL 로. 없으면 exit 0.
+# 1.7.0: 정책 모드에서 이 호스트 구역에 값을 준 항목(값 지정 조치)은 진단이 MANUAL 이어도 넣는다 - 값이 곧 운영자의 취약 판정이다.
 fix_select_vuln_codes() {
     VULN_CODES=$(result_list_vuln_codes "$RESULT_JSON")
+    if [ "${POLICY_SET:-0}" -eq 1 ] && [ "$POLICY_PARAM_CODES" != " " ]; then
+        VULN_CODES=$(sed -n 's/^.*"code":"\([A-Z]*-[0-9]*\)","status":"\([A-Z]*\)".*$/\1 \2/p' "$RESULT_JSON" \
+            | awk -v pc="$POLICY_PARAM_CODES" '$2 == "VULN" || ($2 == "MANUAL" && index(pc, " " $1 " ") > 0) { print $1 }')
+    fi
     if [ -n "$ITEM_FILTER" ]; then
         _fsv_wanted=" $(printf '%s' "$ITEM_FILTER" | tr ',' ' ') "
         _fsv_out=""
@@ -1101,6 +1177,19 @@ fix_items() {
             continue
         fi
 
+        # 1.7.0 값 지정 조치: 정책 모드에서 이 호스트 구역에 값이 있을 때만 적용한다. 대화형 실행·값 없음은 manual 과 같이 안내만.
+        if [ "$_fi_grade" = "param" ]; then
+            case "$POLICY_PARAM_CODES" in
+                *" $_fi_code "*) ;;
+                *)
+                    echo "[$_fi_code] $_fi_title"
+                    echo "  등급: param (값 지정 조치) — 정책 파일 호스트 구역에 \"$_fi_code.<키> = 값\"(키: $(guide_field "$GUIDE_JSON" "$_fi_code" "fix_params"))을 주면 --policy 로 자동 적용. 지금은 수동 — 가이드 조치 방법: $(guide_field "$GUIDE_JSON" "$_fi_code" "remediation")"
+                    printf '%s\t%s\tMANUAL\t%s\n' "$_fi_code" "param" "값 지정 조치 - 정책 값 없음(가이드 조치 방법 안내만)" | fix_log_stamp >> "$FIX_LOG"
+                    N_MANUAL=$((N_MANUAL + 1))
+                    continue ;;
+            esac
+        fi
+
         _fi_fix="$_fi_fdir/$_fi_code.sh"
         _fi_check="$_fi_cdir/$_fi_code.sh"
 
@@ -1124,6 +1213,7 @@ fix_items() {
             if [ "$POLICY_SET" -eq 1 ]; then
                 case "$POLICY_IRREV" in *" $_fi_code "*) echo "  정책: 적용 예정(승인됨, irreversible)" ;; *) echo "  정책: 적용 예정(승인됨)" ;; esac
             fi
+            [ "$_fi_grade" = "param" ] && echo "  값: $(fix_param_summary "$_fi_code")"
             _fi_chg=$(fix_change_note "$_fi_fix"); [ -n "$_fi_chg" ] && echo "  변경: $_fi_chg"
             _fi_rbn=$(fix_rollback_note "$_fi_fix"); [ -n "$_fi_rbn" ] && echo "  원복: $_fi_rbn"
             _fi_imp=$(fix_impact_note "$_fi_fix"); [ -n "$_fi_imp" ] && echo "  영향: $_fi_imp"
@@ -1132,7 +1222,11 @@ fix_items() {
         fi
 
         # 정책 모드: confirm 등급의 항목별 y/N 은 정책 승인으로 대신한다(비밀번호 직접 입력처럼 터미널이 필요한 조치는 조치 안에서 그대로 건너뜀)
-        if [ "$_fi_grade" = "confirm" ] && [ "$POLICY_SET" -eq 1 ]; then
+        if [ "$_fi_grade" = "param" ]; then
+            # 여기까지 오면 정책 모드 + 이 호스트 구역에 값이 있다(위에서 걸렀음). 값 원문은 audit.txt(param.<코드>=)에 남아 있다.
+            echo "[$_fi_code] $_fi_title"
+            echo "  등급: param — 정책 값으로 적용(승인자 $POLICY_APPROVER, 값: $(fix_param_summary "$_fi_code"))"
+        elif [ "$_fi_grade" = "confirm" ] && [ "$POLICY_SET" -eq 1 ]; then
             echo "[$_fi_code] $_fi_title"
             echo "  등급: confirm — 정책 승인으로 항목별 확인 생략(승인자 $POLICY_APPROVER)"
         elif [ "$_fi_grade" = "confirm" ]; then

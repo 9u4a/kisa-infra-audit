@@ -36,4 +36,9 @@ $f"
     fi
     CHECK_EVIDENCE="${findings:-없음}${skipped:+
 원격/자동마운트 홈이라 검색하지 않음:$skipped}"
+    # 1.7.0 값 지정 조치: U-33.files 후보(쉼표가 든 경로 제외) - lib/policy_draft.py 가 읽는다
+    cand=$(printf '%s\n' "$findings" | grep -v '^$' | grep -v ',' | tr '\n' ',' | sed 's/,$//')
+    [ -n "$cand" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+
+[candidates] $cand"
 }

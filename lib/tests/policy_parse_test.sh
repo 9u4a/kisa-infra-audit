@@ -116,6 +116,84 @@ if [ "$_r" = "2|" ] && grep -qF "$T/multi:1)" "$T/err" && grep -qF "$T/multi:4)"
 _r=$(load "$T/없는파일" h)
 if [ "$_r" = "2|" ] && grep -qF "정책 파일을 읽을 수 없습니다" "$T/err"; then ok "정책 파일 없음"; else ng "정책 파일 없음 - [$_r]"; fi
 
+# ---- 1.7.0 값 지정 조치(코드.키 = 값) ------------------------------------------------------------------
+# loadp <정책 파일> <호스트> — 고른 구역의 값(POLICY_PARAMS, 탭→|, 줄→;)과 POLICY_PARAM_CODES, fix_param 출력(U-07 lock, 줄→,)
+loadp() {
+    (
+        _lh=$2; host_name() { echo "$_lh"; }
+        POLICY_SET=1; POLICY_FILE=$1; POLICY_OPERATOR=tester
+        fix_policy_load
+        printf '0|%s|%s|%s|%s\n' "$POLICY_SECTION" "$(printf '%s' "$POLICY_PARAMS" | tr '\t\n' '|;')" "$POLICY_PARAM_CODES" \
+            "$(FIX_CODE=U-07 fix_param lock | tr '\n' ',')"
+    ) 2> "$T/err" || printf '%s|\n' "$?"
+}
+cat > "$T/param" <<'EOF'
+category=01
+expires=2099-12-31
+approver=x
+U-07
+U-23:irreversible
+U-01
+[host:web01]
+U-07.lock = games ,  lp,ftp
+U-23.files = /usr/bin/at
+[host:*]
+U-07.lock = news
+-U-01
+EOF
+_r=$(loadp "$T/param" web01)
+[ "$_r" = "0|web01|U-07|lock|games,lp,ftp;U-23|files|/usr/bin/at;| U-07 U-23 |games,lp,ftp," ] && ok "값: 맞는 구역 값만·항목별 공백 제거" || ng "값 web01 [$_r] $(tr '\n' ' ' < "$T/err")"
+_r=$(loadp "$T/param" db02)
+[ "$_r" = "0|*|U-07|lock|news;| U-07 |news," ] && ok "값: [host:*] 구역 값" || ng "값 [host:*] [$_r] $(tr '\n' ' ' < "$T/err")"
+_r=$(loadp "$T/base" db02)
+[ "$_r" = "0|*|| |" ] && ok "값 없는 정책: 빈 값" || ng "값 없음 [$_r]"
+mk pnotsect 'category=01' 'expires=2099-12-31' 'approver=x' 'U-07' 'U-07.lock = a' '[host:*]'
+expect_rej "값 줄이 구역 밖" "$T/pnotsect" h "$T/pnotsect:5): 값 줄(코드.키 = 값)은 호스트 구역"
+mk pnotparam 'category=01' 'expires=2099-12-31' 'approver=x' 'U-01' '[host:*]' 'U-01.x = a'
+expect_rej "param 아닌 코드에 값" "$T/pnotparam" h "$T/pnotparam:6): 값 지정 조치(fix=param) 항목이 아니라 값을 받지 않음: U-01"
+mk pkey 'category=01' 'expires=2099-12-31' 'approver=x' 'U-07' '[host:*]' 'U-07.accounts = a'
+expect_rej "받지 않는 키" "$T/pkey" h "$T/pkey:6): U-07 가 받지 않는 키: accounts (허용: lock)"
+mk pnoappr 'category=01' 'expires=2099-12-31' 'approver=x' '[host:*]' 'U-07.lock = a'
+expect_rej "승인하지 않은 코드의 값" "$T/pnoappr" h "$T/pnoappr:5): 승인하지 않은 코드의 값(구역 위쪽에 U-07 줄 필요)"
+mk pdup 'category=01' 'expires=2099-12-31' 'approver=x' 'U-07' '[host:*]' 'U-07.lock = a' 'U-07.lock = b'
+expect_rej "같은 구역 같은 값 중복" "$T/pdup" h "$T/pdup:7): 같은 구역에서 같은 값을 두 번 지정함: U-07.lock"
+mk pempty 'category=01' 'expires=2099-12-31' 'approver=x' 'U-07' '[host:*]' 'U-07.lock =   '
+expect_rej "빈 값" "$T/pempty" h "$T/pempty:6): 값이 비어 있음: U-07.lock"
+mk pblank 'category=01' 'expires=2099-12-31' 'approver=x' 'U-07' '[host:*]' 'U-07.lock = a,,b'
+expect_rej "빈 목록 항목" "$T/pblank" h "$T/pblank:6): 값 목록에 빈 항목이 있음"
+mk pexcl 'category=01' 'expires=2099-12-31' 'approver=x' 'U-07' '[host:*]' 'U-07.lock = a' '-U-07'
+expect_rej "제외한 코드에 값" "$T/pexcl" h "$T/pexcl:6): 같은 구역에서 제외한 코드에 값을 지정함: U-07.lock"
+mk pnocode 'category=01' 'expires=2099-12-31' 'approver=x' '[host:*]' 'U-99.lock = a'
+expect_rej "값 줄의 코드가 guide.json 에 없음" "$T/pnocode" h "$T/pnocode:5): 이 카테고리 guide.json 에 없는 코드: U-99"
+printf 'category=01\nexpires=2099-12-31\napprover=x\nU-07\n[host:*]\nU-07.lock = a\tb\n' > "$T/ptab"
+expect_rej "값에 탭" "$T/ptab" h "$T/ptab:6): 값에 탭 문자를 쓸 수 없음"
+
+# ---- 1.7.0 정책 초안(lib/policy_draft.py) - 생성물이 그대로는 아무것도 승인하지 않고, 주석을 풀면 같은 파서로 값이 읽힌다 ----
+PY=$(command -v python3 || command -v python || true)
+if [ -n "$PY" ]; then
+    cat > "$T/result_web01.json" <<'EOF'
+{"tool_version": "t", "category": "UNIX", "host": "web01", "env": "debian", "items": [
+{"code":"U-01","status":"VULN","detail":"x","evidence":"y"},
+{"code":"U-07","status":"MANUAL","detail":"x","evidence":"[로그인 가능 계정]\nkisa_old:1001:/bin/bash\n\n[candidates] kisa_old,app"},
+{"code":"U-23","status":"MANUAL","detail":"x","evidence":"-rwsr-xr-x /usr/local/bin/x\n\n[candidates] /usr/local/bin/x"},
+{"code":"U-25","status":"GOOD","detail":"x","evidence":""},
+{"code":"U-64","status":"MANUAL","detail":"x","evidence":"[candidates] ignored"}]}
+EOF
+    "$PY" lib/policy_draft.py "$T/result_web01.json" --approver 검토자 -o "$T/draft" >/dev/null 2>"$T/err"
+    _r=$(loadp "$T/draft" web01)
+    [ "$_r" = "0|web01|| |" ] && ok "초안: 그대로는 승인·값 0건(전부 주석)" || ng "초안 그대로 [$_r] $(tr '\n' ' ' < "$T/err")"
+    grep -qx '# U-07.lock = kisa_old, app' "$T/draft" && grep -q '^# U-07:irreversible' "$T/draft" && grep -q '^# U-01 ' "$T/draft" \
+        && ! grep -q 'U-64' "$T/draft" && ! grep -q 'U-25' "$T/draft" \
+        && ok "초안: 후보 값 줄·irreversible·VULN 승인 후보, param 아닌 MANUAL·GOOD 제외" || ng "초안 내용 - $(tr '\n' '~' < "$T/draft")"
+    sed 's/^# \(U-07:irreversible\).*$/\1/; s/^# \(U-07\.lock = \).*$/\1kisa_old/' "$T/draft" > "$T/draft2"
+    _r=$(loadp "$T/draft2" web01)
+    [ "$_r" = "0|web01|U-07|lock|kisa_old;| U-07 |kisa_old," ] && ok "초안: 주석을 풀면 값이 그대로 읽힘" || ng "초안 주석 해제 [$_r] $(tr '\n' ' ' < "$T/err")"
+    "$PY" lib/policy_draft.py "$T/result_web01.json" -o "$T/draft3" >/dev/null 2>&1
+    expect_rej "초안: --approver 없으면 승인자 검토 전에는 쓸 수 없음" "$T/draft3" web01 "approver 가 비어 있음"
+else
+    echo "SKIP: python 이 없어 정책 초안 검사 생략"
+fi
+
 # ---- 옵션 조합(fix_policy_args_check) ---------------------------------------------------------------
 args() {   # <POLICY_SET> <POLICY_FILE> <OPERATOR_SET> <OPERATOR> <ROLLBACK_DIR> → rc
     ( POLICY_SET=$1; POLICY_FILE=$2; POLICY_OPERATOR_SET=$3; POLICY_OPERATOR=$4; fix_policy_args_check "$5" ) 2>/dev/null; echo $?

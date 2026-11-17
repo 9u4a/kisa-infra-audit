@@ -46,5 +46,10 @@ run_check() {
         CHECK_STATUS="MANUAL"
         CHECK_DETAIL="SUID/SGID 설정 파일 목록(최대 100건). passwd/su 등 표준 필수 바이너리를 제외하고 의심스러운 항목이 있는지 수동 검토 필요 ($note)"
         CHECK_EVIDENCE="$(printf '%s\n' "$files" | xargs ls -al 2>/dev/null)"
+        # 1.7.0 값 지정 조치: U-23.files 후보(조치가 거부하는 sudo·su·passwd·unix_chkpwd 와 쉼표가 든 경로 제외) - lib/policy_draft.py 가 읽는다
+        cand=$(printf '%s\n' "$files" | grep -vE '/(sudo|su|passwd|unix_chkpwd)$|,' | tr '\n' ',' | sed 's/,$//')
+        [ -n "$cand" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+
+[candidates] $cand"
     fi
 }

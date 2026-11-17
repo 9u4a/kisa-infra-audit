@@ -5,6 +5,15 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+### Added
+- **값 지정 조치(fix=param)**: 판단을 사람이 해야 해 manual 이던 항목을 정책 파일의 값으로 자동 조치한다. 정책 파일 호스트 구역에
+  `코드.키 = 값` 줄(sh·PowerShell·Python 파서 같은 규칙, 구역 밖·미승인 코드·미선언 키·중복·빈 값·제외한 코드의 값은 줄 번호와 함께 거부)을
+  쓰면, 값이 있는 항목은 진단이 MANUAL 이어도 대상이 되고 승인자 확인 없이 적용·재진단·실패 시 원복한다. 조치는 값을 모두 먼저 검증하고
+  하나라도 틀리면 아무것도 바꾸지 않는다. 준 값은 audit.txt `param.<코드>=` 에 남는다. guide.json `fix_params`(받는 키), 조치 머리말
+  `# 값:`, guide_consistency R7, FIX_IMPACT `param(키)` 표기.
+  - 01 Unix: U-07 계정 잠금(삭제 대신 잠금 - deviation), U-08 관리자 그룹 구성원 제거, U-23 SUID/SGID 제거(sudo·su·passwd·unix_chkpwd 거부),
+    U-25 o-w, U-33 숨김 파일 백업 후 삭제. 진단 증적에 후보 줄 `[candidates]` 추가(판정 불변). Debian·Rocky 9 케이스 7건(값 거부 2건 포함).
+  - `lib/policy_draft.py`: result.json 후보로 정책 초안 생성(승인·값 줄 모두 주석, --approver 없으면 파서가 거부).
 
 ## [1.6.1] - 2026-11-17
 ### Fixed

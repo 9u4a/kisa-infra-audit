@@ -151,6 +151,7 @@ def load_existing_tracking(out_dir: Path) -> dict:
                 tracking[it["code"]] = {
                     "automation": it.get("automation", "manual"),
                     "fix": it.get("fix", "manual"),
+                    "fix_params": it.get("fix_params"),
                     "envs": it.get("envs", []),
                     "deviation": it.get("deviation"),
                 }
@@ -210,6 +211,8 @@ def parse_items_for_category(doc, cat: dict, tracking: dict):
             # 작업용 메타 (check/fix 구현 단계에서 채움 — 재추출 시 보존됨, load_existing_tracking 참고)
             "automation": meta["automation"],
             "fix": meta["fix"],
+            # 1.7.0 값 지정 조치(fix=param)가 정책 파일에서 받는 키(쉼표 구분) - param 항목에만 있다
+            **({"fix_params": meta["fix_params"]} if meta.get("fix_params") else {}),
             "envs": meta["envs"],
             "deviation": meta["deviation"],
         })

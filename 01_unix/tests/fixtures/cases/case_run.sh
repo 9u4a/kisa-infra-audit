@@ -70,16 +70,28 @@ else
 fi
 
 [ "$FIXEXP" = "-" ] && { leak_check; exit 0; }
+# 1.7.0 값 지정 조치(fix=param): cases.sh 에 p_<코드>__<이름> 이 있으면 그 출력("코드.키 = 값" 줄)으로 정책 파일을 만들어
+# 정책 모드(--policy)로 조치한다(값 지정 조치는 정책 모드에서만 적용). v_<코드>__<이름> 이 있으면 조치 직후(원복 전) 기대 상태를
+# 확인해 VERIFY=ok|fail 을 낸다 - 지정 대상만 바뀌었는지 등.
+pol=""
+pfn="p_${fn#c_}"; vfn="v_${fn#c_}"
+if command -v "$pfn" >/dev/null 2>&1; then
+    { printf 'category=01\nexpires=2099-12-31\napprover=case-runner\n%s:irreversible\n[host:*]\n' "$CODE"; "$pfn"; } > /tmp/case_policy
+    pol="--policy /tmp/case_policy --operator case-runner"
+fi
 # 조치 → 재검증(fix.sh 내부) → 원복 → 상태 비교. confirm 등급과 조치 안의 확인(fix_confirm_tty)에 y 를 넣기 위해
 # script 로 가상 터미널을 만든다(03_web fix_safety.sh 와 같은 방식).
 (while echo y; do sleep 0.3; done) 2>/dev/null | \
-    script -qec "sh 01_unix/fix.sh -r '$R' -i '$CODE' -o /tmp/fixout --apply --yes" /dev/null > /tmp/fix.log 2>&1
+    script -qec "sh 01_unix/fix.sh -r '$R' -i '$CODE' -o /tmp/fixout --apply --yes $pol" /dev/null > /tmp/fix.log 2>&1
 echo "FIX_RC=$?"
 LOG=$(ls /tmp/fixout/*_01_fix_*/changes.log 2>/dev/null | head -n1)
 fr=$(awk -F'\t' -v c="$CODE" '$2 == c { print $4 }' "$LOG" 2>/dev/null | tail -n1)
 rc=$(awk -F'\t' -v c="$CODE" '$2 == c { print $5 }' "$LOG" 2>/dev/null | tail -n1 | sed -n 's/.*recheck=\([A-Z]*\).*/\1/p')
 echo "FIX=${fr:-none}/${rc:-none}"
 awk -F'\t' -v c="$CODE" '$2 == c { print "FIXDETAIL=" substr($5, 1, 300) }' "$LOG" 2>/dev/null | tail -n1
+if command -v "$vfn" >/dev/null 2>&1; then
+    if "$vfn" >/tmp/case_verify.log 2>&1; then echo "VERIFY=ok"; else echo "VERIFY=fail($(head -c 200 /tmp/case_verify.log | tr '\n' ' '))"; fi
+fi
 sh 01_unix/fix.sh -o /tmp/fixout --rollback "$(dirname "$LOG")" > /tmp/rb.log 2>&1 < /dev/null
 echo "RB_RC=$?"
 settle
