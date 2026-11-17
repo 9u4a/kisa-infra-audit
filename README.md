@@ -160,7 +160,7 @@ sh 08_dbms/tests/run_tests.sh       # Docker 필요 (MySQL/PostgreSQL; Oracle �
 | 1.5.0 ✅ | Rocky 9·RHEL 패키지·Server 2022·MSSQL Express·엔진 버전 matrix·한글 출력 파싱·변이 검증, 진입점 lib 화, 진단 신뢰성 전체 검수(35건 수정) |
 | 1.6.0 ✅ | 정책 파일 기반 무인 조치·irreversible 플래그·감사 기록, 조치 전후 비교, 수동점검 사람 판정(G-01~06 구현, G-07 VM 수동 검증, G-08 판정 해석 재검토 - 외부 검토는 없음) |
 | 1.6.1 ✅ | 유지보수: 조치가 다 고치지 못하던 경로(U-12 profile.d, SNMP ACL 번호, IIS 하위 application, MySQL include 의 user=), 서버 백신 확인 불가 판정(W-45), DB 설정 include 추적(V-R1·3·4·8·9) |
-| 1.7.0 ✅ | 값 지정 조치(fix=param): 판단이 필요해 수동이던 22개 항목을 정책 파일 값(계정·파일·IP·인증서 등)으로 자동 조치, 정책 초안 생성, 위험 조치는 운영자 승인 필수(R8·APPROVAL_REQUIRED) |
+| 1.7.0 ✅ | 값 지정 조치(fix=param): 판단이 필요해 수동이던 17개 항목을 정책 파일 값(계정·파일·IP·인증서 등)으로 자동 조치(+W-12 자동화), 정책 초안 생성, 위험 조치는 운영자 승인 필수(R8·APPROVAL_REQUIRED) |
 
 ## 라이선스 · 출처
 - 코드: MIT License ([`LICENSE`](./LICENSE)), 출처 고지 [`NOTICE`](./NOTICE)
