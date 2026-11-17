@@ -5,6 +5,8 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+
+## [1.6.1] - 2026-11-17
 ### Fixed
 - **U-12 조치가 /etc/profile.d 의 TMOUT 을 고치지 않음**(V-R9): check 는 /etc/profile → /etc/profile.d/*.sh 순으로 마지막 값을
   쓰는데 조치는 /etc/profile 만 바꿔, profile.d 에 `TMOUT=0`·600 초과 값이 있으면 재검증 VULN → 원복으로 끝났다. 이제 그 줄의
