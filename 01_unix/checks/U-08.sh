@@ -23,4 +23,9 @@ ${root_group:-없음}
 
 [wheel/sudo/admin 그룹]
 ${admin_groups:-없음}"
+    # 1.7.0 값 지정 조치: U-08.remove 후보(관리자 그룹 보조 구성원, root 제외) - lib/policy_draft.py 가 읽는다
+    cand=$(awk -F: '$3 == 0 || $1 == "wheel" || $1 == "sudo" || $1 == "admin" { n = split($4, m, ","); for (i = 1; i <= n; i++) if (m[i] != "" && m[i] != "root") print m[i] }' "$group_file" | sort -u | tr '\n' ',' | sed 's/,$//')
+    [ -n "$cand" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+
+[candidates] $cand"
 }

@@ -45,5 +45,10 @@ run_check() {
         CHECK_STATUS="MANUAL"
         CHECK_DETAIL="world writable 파일이 존재함(최대 100건). 각 파일의 설정 사유를 인지하고 있는지 수동 검토 필요 ($note)"
         CHECK_EVIDENCE="$(printf '%s\n' "$files" | xargs ls -al 2>/dev/null)"
+        # 1.7.0 값 지정 조치: U-25.files 후보(쉼표가 든 경로 제외) - lib/policy_draft.py 가 읽는다
+        cand=$(printf '%s\n' "$files" | grep -v ',' | tr '\n' ',' | sed 's/,$//')
+        [ -n "$cand" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+
+[candidates] $cand"
     fi
 }

@@ -339,3 +339,57 @@ c_U_11__daemon_shell_passwd_hash() {
     usermod -s /bin/bash daemon
     sed -i 's/^daemon:[^:]*:/daemon:KisaPwHash77:/' /etc/passwd
 }
+
+# ---- 1.7.0 값 지정 조치(fix=param) ----------------------------------------------------------------------------
+# c_ = 상태 준비, p_ = 정책 파일 값 줄(case_run.sh 가 정책 모드로 조치), v_ = 조치 직후(원복 전) 기대 상태 확인.
+# 진단은 판단을 사람에게 넘기는 MANUAL 이고, 조치는 정책 값에 적힌 대상만 바꾼 뒤 재진단이 MANUAL 로 남으면 성공이다.
+_case_admin_group() { if getent group sudo >/dev/null 2>&1; then echo sudo; else echo wheel; fi; }
+c_U_07__unneeded_account() { useradd -m -s /bin/bash kisa_old && useradd -m -s /bin/bash kisa_keep; }
+p_U_07__unneeded_account() { echo "U-07.lock = kisa_old"; }
+v_U_07__unneeded_account() {
+    [ "$(awk -F: '$1 == "kisa_old" { print $7 }' /etc/passwd)" != /bin/bash ] || { echo "kisa_old 쉘 그대로"; return 1; }
+    awk -F: '$1 == "kisa_old" { exit !(substr($2, 1, 1) == "!" && $8 == 1) }' /etc/shadow || { echo "kisa_old 잠금·만료 안 됨"; return 1; }
+    [ "$(awk -F: '$1 == "kisa_keep" { print $7 }' /etc/passwd)" = /bin/bash ] || { echo "지정하지 않은 kisa_keep 까지 바뀜"; return 1; }
+}
+# 값 검증 거부: root 는 잠그지 않는다 → 아무것도 바꾸지 않고 실패(원복 후 상태 동일)
+c_U_07__lock_root_rejected() { useradd -m -s /bin/bash kisa_old; }
+p_U_07__lock_root_rejected() { echo "U-07.lock = kisa_old, root"; }
+v_U_07__lock_root_rejected() { [ "$(awk -F: '$1 == "kisa_old" { print $7 }' /etc/passwd)" = /bin/bash ] || { echo "검증 실패인데 kisa_old 가 바뀜"; return 1; }; }
+c_U_08__extra_admin_member() {
+    g=$(_case_admin_group)
+    useradd -m kisa_adm && useradd -m kisa_ops && gpasswd -a kisa_adm "$g" >/dev/null && gpasswd -a kisa_ops "$g" >/dev/null
+}
+p_U_08__extra_admin_member() { echo "U-08.remove = kisa_adm"; }
+v_U_08__extra_admin_member() {
+    g=$(_case_admin_group); m=$(awk -F: -v g="$g" '$1 == g { print "," $4 "," }' /etc/group)
+    case "$m" in *,kisa_adm,*) echo "kisa_adm 가 $g 에 남음"; return 1 ;; esac
+    case "$m" in *,kisa_ops,*) : ;; *) echo "지정하지 않은 kisa_ops 까지 빠짐"; return 1 ;; esac
+}
+c_U_23__unneeded_suid() {
+    cp /bin/true /usr/local/bin/kisa_suid && chmod 4755 /usr/local/bin/kisa_suid
+    cp /bin/true /usr/local/bin/kisa_sgid && chmod 2755 /usr/local/bin/kisa_sgid
+}
+p_U_23__unneeded_suid() { echo "U-23.files = /usr/local/bin/kisa_suid"; }
+v_U_23__unneeded_suid() {
+    [ "$(stat -c %a /usr/local/bin/kisa_suid)" = 755 ] || { echo "kisa_suid=$(stat -c %a /usr/local/bin/kisa_suid)"; return 1; }
+    [ "$(stat -c %a /usr/local/bin/kisa_sgid)" = 2755 ] || { echo "지정하지 않은 kisa_sgid 까지 바뀜"; return 1; }
+}
+# 값 검증 거부: 관리자 접속에 필요한 su 는 자동으로 바꾸지 않는다
+c_U_23__protected_su_rejected() { cp /bin/true /usr/local/bin/kisa_suid && chmod 4755 /usr/local/bin/kisa_suid; }
+p_U_23__protected_su_rejected() { echo "U-23.files = /usr/local/bin/kisa_suid, $(command -v su)"; }
+v_U_23__protected_su_rejected() { [ "$(stat -c %a /usr/local/bin/kisa_suid)" = 4755 ] || { echo "검증 실패인데 kisa_suid 가 바뀜"; return 1; }; }
+c_U_25__world_writable_file() { echo x > /srv/kisa_ww && chmod 666 /srv/kisa_ww && echo y > /srv/kisa_ww_keep && chmod 666 /srv/kisa_ww_keep; }
+p_U_25__world_writable_file() { echo "U-25.files = /srv/kisa_ww"; }
+v_U_25__world_writable_file() {
+    [ "$(stat -c %a /srv/kisa_ww)" = 664 ] || { echo "kisa_ww=$(stat -c %a /srv/kisa_ww)"; return 1; }
+    [ "$(stat -c %a /srv/kisa_ww_keep)" = 666 ] || { echo "지정하지 않은 kisa_ww_keep 까지 바뀜"; return 1; }
+}
+c_U_33__suspicious_hidden() {
+    useradd -m -s /bin/bash kisa_hid && mkdir /home/kisa_hid/.kisa_tool && echo x > /home/kisa_hid/.kisa_tool/run \
+        && echo y > /home/kisa_hid/.kisa_note && chown -R kisa_hid: /home/kisa_hid
+}
+p_U_33__suspicious_hidden() { echo "U-33.files = /home/kisa_hid/.kisa_tool"; }
+v_U_33__suspicious_hidden() {
+    [ ! -e /home/kisa_hid/.kisa_tool ] || { echo ".kisa_tool 남음"; return 1; }
+    [ -f /home/kisa_hid/.kisa_note ] || { echo "지정하지 않은 .kisa_note 까지 지워짐"; return 1; }
+}

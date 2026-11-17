@@ -101,6 +101,7 @@ while read -r code name base fx secret expect; do
                 NOFIX) case "$fr" in FAILED_ROLLED_BACK/*|SKIPPED/*|MANUAL/*) : ;; *) why="$why 조치(기대=변경 없이 실패 실제=$fr)" ;; esac ;;
                 PARTIAL) case "$fr" in PARTIAL_MANUAL/*) : ;; *) why="$why 조치(기대=PARTIAL_MANUAL 실제=$fr $(kv FIXDETAIL))" ;; esac ;;
             esac
+            v=$(kv VERIFY); [ -z "$v" ] || [ "$v" = ok ] || why="$why 조치 후 상태 확인 실패($v)"
             [ "$(kv ROLLBACK)" = same ] || why="$why 원복후상태다름($(sed -n 's/^DIFF=//p' "$f" | head -n 6 | tr '\n' ';'))"
         fi
     fi

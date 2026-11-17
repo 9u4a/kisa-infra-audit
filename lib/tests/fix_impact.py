@@ -63,6 +63,7 @@ def build() -> str:
         "- **업무 영향**: 조치 파일 머리말 `# 영향:` (F5 - 적용하는 순간 서비스 중지·세션 끊김·계정 잠금·접근 차단·재시작 등 업무가 끊길 수 있음)",
         "- **:irreversible**: 둘 중 하나라도 있으면 정책 모드(`fix --policy`)에서 정책 파일에 `코드:irreversible` 로 적어야 적용된다"
         "(없으면 `POLICY_SKIPPED`). 대화형 실행에는 영향 없음.",
+        "- **param(키)**: 값 지정 조치(1.7.0) - 정책 파일 호스트 구역의 `코드.키 = 값` 이 있을 때만 정책 모드로 적용한다(대화형·값 없음은 수동 안내).",
         "",
     ]
     total = need = 0
@@ -80,7 +81,10 @@ def build() -> str:
                 irr = bool(n.get("rb") or n.get("im"))
                 total += 1
                 need += irr
-                rows.append(f"| {f.stem} | {label} | {cell(it.get('title', ''))} | {it.get('fix', '-')} | {cell(n.get('rb', ''))} | "
+                grade = it.get("fix", "-")
+                if grade == "param":   # 1.7.0 값 지정 조치: 정책 파일에서 받는 키를 함께 보여 준다
+                    grade = f"param({it.get('fix_params', '')})"
+                rows.append(f"| {f.stem} | {label} | {cell(it.get('title', ''))} | {grade} | {cell(n.get('rb', ''))} | "
                             f"{cell(n.get('im', ''))} | {'필요' if irr else '-'} |")
         if not rows:
             continue

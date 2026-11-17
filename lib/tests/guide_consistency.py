@@ -19,6 +19,9 @@ WEB-05 confirm 인데 Apache/Nginx/Tomcat 조치 없음, WEB-17 auto 인데 조�
   R4 조치 스크립트에 대응하는 check 가 없으면 FAIL.
   R5 조치 스크립트 머리말(앞 12줄)에 "# 변경: <무엇을 어떤 값으로>" 가 없으면 FAIL - dry-run·적용 전 확인 목록이 이 줄을
      보여 준다(실무 적용 검증 P-24, lib/common.sh fix_change_note / lib/Common.psm1 Get-FixRollbackNote -Label 변경).
+  R7 (1.7.0) fix 가 param(값 지정 조치)이면 guide.json fix_params(쉼표 구분 키, 영문 소문자·_)가 있어야 하고, 그 계열 조치 스크립트
+     머리말(앞 12줄)의 "# 값: <키>=<설명>" 키 집합이 fix_params 와 같아야 한다(정책 파서가 fix_params 로 키를 검증하고, 미리보기·
+     문서가 머리말 설명을 보여 준다). fix_params 는 param 항목에만 둔다. param 도 R1 처럼 조치 스크립트가 있어야 한다.
   R6 "# 원복: ..."(F4)·"# 영향: ..."(F5, 1.6.0 G-02) 은 앞 12줄 안에 내용과 함께 있어야 한다 - 진입점이 앞 12줄만 읽어 정책 모드의
      :irreversible 요구와 docs/FIX_IMPACT.md(lib/tests/fix_impact.py)를 정하므로, 밖에 있으면 조용히 무시된다.
 
@@ -69,7 +72,18 @@ def main() -> int:
                     continue
                 grade, has_fix = it.get("fix"), code in fixes
                 e = ex.get(code)
-                if grade in ("auto", "confirm") and not has_fix:
+                if grade == "param":
+                    keys = [k.strip() for k in str(it.get("fix_params") or "").split(",") if k.strip()]
+                    if not keys or any(not re.fullmatch(r"[a-z_]+", k) for k in keys):
+                        errors.append(f"{label} {code}: fix=param 인데 fix_params 가 없거나 형식 오류(R7): {it.get('fix_params')!r}")
+                    elif has_fix:
+                        head = (ROOT / cat / "fixes" / fam / f"{code}.{ext}").read_text(encoding="utf-8-sig").splitlines()[:12]
+                        hk = sorted(m.group(1) for ln in head for m in [re.match(r"# 값: ([a-z_]+)=\S", ln)] if m)
+                        if hk != sorted(keys):
+                            errors.append(f"{label} {code}: 조치 머리말 '# 값: 키=설명' 키 {hk} 가 guide.json fix_params {sorted(keys)} 와 다름(R7)")
+                elif it.get("fix_params"):
+                    errors.append(f"{label} {code}: fix={grade} 인데 fix_params 가 있음 - param 항목에만 둔다(R7)")
+                if grade in ("auto", "confirm", "param") and not has_fix:
                     if not e:
                         errors.append(f"{label} {code}: fix={grade} 인데 조치 스크립트 없음(R1) - 구현하거나 등급 정정, "
                                       "또는 lib/tests/fix_exempt.json 에 사유")

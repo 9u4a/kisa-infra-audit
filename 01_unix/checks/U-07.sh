@@ -26,4 +26,9 @@ ${loginable:-없음}
 
 [최근 로그인 이력(last, 최대 20건)]
 ${last_info:-확인 불가}"
+    # 1.7.0 값 지정 조치: 정책 초안(lib/policy_draft.py)이 U-07.lock 후보로 쓰는 기계 판독 줄 - UID 0·sync/shutdown/halt 제외
+    cand=$(awk -F: '$7 !~ /(nologin|false)$/ && $3 != 0 && $1 !~ /^(sync|shutdown|halt)$/ { printf "%s%s", (n++ ? "," : ""), $1 }' "$passwd_file")
+    [ -n "$cand" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+
+[candidates] $cand"
 }

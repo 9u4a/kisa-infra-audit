@@ -126,6 +126,9 @@ def main() -> int:
         rejected("같은 호스트 구역 두 번", HEAD + "N-01\n[host:r1]\n[host:R1]\n", "두 번 나옴")
         rejected("[host:*] 두 번", HEAD + "N-01\n[host:*]\n[host:*]\n", "두 번 나옴")
         rejected("제외 중복", HEAD + "N-01\n[host:r1]\n-N-01\n-N-01\n", "제외 코드 중복")
+        # 1.7.0 값 지정 조치 줄 - 05 에는 param 항목이 없어 구역 안팎 모두 거부
+        rejected("값 줄(구역 안)", HEAD + "N-01\n[host:*]\nN-01.acl = 10\n", "값 지정 조치(fix=param) 항목이 아니라 값을 받지 않음: N-01")
+        rejected("값 줄(구역 밖)", HEAD + "N-01\nN-01.acl = 10\n[host:*]\n", "[host:] 구역 안에만")
         rejected("UTF-8 아님", "", "UTF-8", raw=("category=05\napprover=" + "가나").encode("cp949"))
         # 오류는 줄 번호와 함께, 여러 개를 한 번에 보고
         p = write(tmp, "multi.txt", HEAD + "N-99\nowner=x\n[host:*]\n")

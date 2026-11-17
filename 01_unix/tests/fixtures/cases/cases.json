@@ -83,5 +83,12 @@
   {"code": "U-62", "engine": "debian", "name": "sshd-dropin-banner-none", "expect": "VULN", "base": "hardened", "fix": "PARTIAL", "note": "A6: 드롭인이 먼저 Banner none(예전 GOOD). 드롭인은 자동 조치하지 않음"},
   {"code": "U-62", "engine": "debian", "name": "postfix-default-banner", "expect": "VULN", "base": "hardened", "fix": "PARTIAL", "note": "A6: Postfix 기본 smtpd_banner(예전 판정 안 함 GOOD). SMTP 배너는 수동 조치"},
   {"code": "U-62", "engine": "debian", "name": "postfix-custom-banner", "expect": "GOOD", "base": "hardened"},
-  {"code": "U-62", "engine": "debian", "name": "bind-no-version", "expect": "VULN", "base": "hardened", "fix": "PARTIAL", "note": "A6: BIND 설치 + options version 미설정(예전 DNS 미검사 GOOD)"}
+  {"code": "U-62", "engine": "debian", "name": "bind-no-version", "expect": "VULN", "base": "hardened", "fix": "PARTIAL", "note": "A6: BIND 설치 + options version 미설정(예전 DNS 미검사 GOOD)"},
+  {"code": "U-07", "engine": "debian", "name": "unneeded-account", "expect": "MANUAL", "base": "hardened", "fix": "MANUAL", "note": "1.7.0 값 지정 조치: 정책 U-07.lock 에 적은 계정만 잠금(지정하지 않은 계정 그대로), 재진단 MANUAL"},
+  {"code": "U-07", "engine": "debian", "name": "lock-root-rejected", "expect": "MANUAL", "base": "hardened", "fix": "NOFIX", "note": "1.7.0: 값에 root 가 있으면 값 검증 실패로 아무것도 잠그지 않음"},
+  {"code": "U-08", "engine": "debian", "name": "extra-admin-member", "expect": "MANUAL", "base": "hardened", "fix": "MANUAL", "note": "1.7.0: 정책 U-08.remove 에 적은 계정만 sudo/wheel 에서 제거"},
+  {"code": "U-23", "engine": "debian", "name": "unneeded-suid", "expect": "MANUAL", "base": "hardened", "fix": "MANUAL", "note": "1.7.0: 정책 U-23.files 에 적은 파일만 SUID 제거(다른 SGID 파일 그대로)"},
+  {"code": "U-23", "engine": "debian", "name": "protected-su-rejected", "expect": "MANUAL", "base": "hardened", "fix": "NOFIX", "note": "1.7.0: su 는 관리자 접속 수단이라 값에 있어도 거부 - 아무것도 바꾸지 않음"},
+  {"code": "U-25", "engine": "debian", "name": "world-writable-file", "expect": "MANUAL", "base": "hardened", "fix": "MANUAL", "note": "1.7.0: 정책 U-25.files 에 적은 파일만 o-w"},
+  {"code": "U-33", "engine": "debian", "name": "suspicious-hidden", "expect": "MANUAL", "base": "hardened", "fix": "MANUAL", "note": "1.7.0: 정책 U-33.files 에 적은 숨김 디렉터리만 백업 후 삭제, 원복 시 복원"}
 ]
