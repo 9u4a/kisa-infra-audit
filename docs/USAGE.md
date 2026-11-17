@@ -196,6 +196,11 @@ U-23.files = /usr/local/bin/oldtool
 | U-23 | `files` | SUID/SGID 제거(sudo·su·passwd·unix_chkpwd 는 거부) |
 | U-25 | `files` | 다른 사용자 쓰기 권한 제거(o-w) |
 | U-33 | `files` | 홈 디렉터리 아래 숨김 파일·디렉터리 백업 후 삭제(.ssh·.bashrc 등 통상 항목은 거부) |
+| W-03 | `accounts` | 로컬 계정 비활성화(실행 계정·마지막 활성 로컬 관리자는 거부) |
+| W-14 | `members` | 미리 만든 비관리자 계정을 Remote Desktop Users 에 등록(계정은 만들지 않음) |
+| W-32 | `zones` | 지정 DNS 영역의 동적 업데이트를 없음(0)으로(원래 값 백업·원복) |
+| W-37 | `tasks` | 예약 작업 비활성화(`\경로\이름`, \Microsoft\Windows\ 아래 OS 작업은 거부) |
+| W-62 | `entries` | 시작 프로그램의 레지스트리 Run 값 제거(시작 폴더 바로가기는 거부) |
 
 - 승인 줄과 값 줄이 둘 다 있어야 적용된다. 값이 있으면 진단이 MANUAL 이어도 대상에 넣는다(값이 곧 운영자의 판정). 대화형 실행이나
   값이 없으면 지금처럼 가이드 조치 방법만 안내한다.
@@ -203,6 +208,8 @@ U-23.files = /usr/local/bin/oldtool
 - 거부: 구역 밖의 값 줄, 승인하지 않은 코드의 값, param 이 아닌 코드의 값, 받지 않는 키, 같은 값 중복, 빈 값·빈 목록 항목, 제외(`-코드`)한
   코드의 값. 받는 키는 guide.json `fix_params`, 설명은 조치 파일 머리말 `# 값:` 과 docs/FIX_IMPACT.md.
 - 준 값은 `audit.txt` 에 `param.<코드>=키=값` 으로 남는다.
+- 진단이 VULN 을 내는 항목(W-32 등)에서 일부 대상만 고르면 재진단이 VULN 으로 남는다 - 지정 대상은 조치된 것이라 원복하지 않고
+  `PARTIAL_MANUAL`(일부 적용, 남은 부분 수동)로 기록한다.
 - 초안: `python lib/policy_draft.py <result.json>... --approver 이름 -o policy.txt` - 진단 증적의 후보 목록(`[candidates]`)을 호스트 구역마다
   값 줄로 적되 승인 줄·값 줄을 **모두 주석 상태**로 만든다. 바꿀 대상만 남기고 주석을 지워야 적용된다.
 

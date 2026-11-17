@@ -184,6 +184,25 @@ try {
                 Assert-True "changes.log 머리에 감사 기록" (@($head | Where-Object { $_ -eq "# operator=ci-tester" }).Count -eq 1) ($head -join "`n")
             }
         }
+        # 1.7.0 값 지정 조치 dry-run: MANUAL 항목은 값이 있을 때만 대상(W-03), 값 없는 param 은 수동 안내(W-14), 값 없는 MANUAL 은 대상 아님(W-62)
+        $items2 = @(@{ code = "W-03"; status = "MANUAL" }, @{ code = "W-14"; status = "VULN" }, @{ code = "W-62"; status = "MANUAL" }) | ForEach-Object { $_.detail = "t"; $_.evidence = ""; $_ }
+        $obj2 = @{ tool_version = "t"; guide_version = "t"; category = "Windows 서버"; host = $hostName; env = "t"; generated_at = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss"); items = $items2 }
+        $res2 = Join-Path $tmp "result_param.json"
+        [System.IO.File]::WriteAllText($res2, ($obj2 | ConvertTo-Json -Depth 5), $utf8NoBom)
+        $pol2 = New-PolicyFile @("category=02", "expires=2099-12-31", "approver=CI 승인자", "W-03:irreversible", "W-14", "W-62:irreversible", "[host:$hostName]", "W-03.accounts = kisa_none_a, kisa_none_b")
+        $out2 = Join-Path $tmp "out_param"
+        $log2 = & $ps -NoProfile -NonInteractive -File $fixPs1 -ResultJson $res2 -OutBase $out2 -Policy $pol2 -Operator "ci-tester" 2>&1 | Out-String
+        Assert-True "param dry-run exit 0" ($LASTEXITCODE -eq 0) $log2
+        Assert-True "param: 값이 있는 MANUAL 항목(W-03) 미리보기·값 표시" ($log2 -match '\[W-03\]' -and $log2 -match '값: accounts=kisa_none_a,kisa_none_b') $log2
+        Assert-True "param: 값 없는 MANUAL 항목(W-62)은 대상 아님" ($log2 -notmatch '\[W-62\]') $log2
+        $runDir2 = Get-ChildItem -Path $out2 -Directory -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        if ($runDir2) {
+            $rows2 = @(Get-Content -Encoding UTF8 (Join-Path $runDir2 "changes.log") | Where-Object { $_ -and -not $_.StartsWith("#") } | ForEach-Object { $c = $_ -split "`t"; [PSCustomObject]@{ Code = $c[1]; Grade = $c[2]; Result = $c[3] } })
+            $w14 = @($rows2 | Where-Object { $_.Code -eq "W-14" })
+            Assert-True "param: 값 없는 W-14 는 수동 안내(MANUAL)" ($w14.Count -eq 1 -and $w14[0].Result -eq "MANUAL" -and $w14[0].Grade -eq "param") (($rows2 | ForEach-Object { "$($_.Code)=$($_.Result)" }) -join ",")
+            $audit2 = @(Get-Content -Encoding UTF8 (Join-Path $runDir2 "audit.txt"))
+            Assert-True "param: audit.txt 에 값 기록" (@($audit2 | Where-Object { $_ -ceq "param.W-03=accounts=kisa_none_a,kisa_none_b" }).Count -eq 1) ($audit2 -join "`n")
+        } else { Assert-True "param dry-run 출력 폴더" $false $log2 }
         # 거부: 아무것도 만들지 않고 exit 2
         $cases = @(
             @{ Name = "-Operator 단독"; Args = @("-Operator", "x") },

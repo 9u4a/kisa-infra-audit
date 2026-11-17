@@ -8,7 +8,7 @@
 - **:irreversible**: 둘 중 하나라도 있으면 정책 모드(`fix --policy`)에서 정책 파일에 `코드:irreversible` 로 적어야 적용된다(없으면 `POLICY_SKIPPED`). 대화형 실행에는 영향 없음.
 - **param(키)**: 값 지정 조치(1.7.0) - 정책 파일 호스트 구역의 `코드.키 = 값` 이 있을 때만 정책 모드로 적용한다(대화형·값 없음은 수동 안내).
 
-전체 조치 225개 중 정책에 `:irreversible` 이 필요한 조치 87개.
+전체 조치 230개 중 정책에 `:irreversible` 이 필요한 조치 92개.
 
 ## 01 Unix 서버 (63개 조치, :irreversible 필요 21개)
 
@@ -78,11 +78,12 @@
 | U-66 | Unix(sh) | 정책에 따른 시스템 로깅 설정 | confirm | - | - | - |
 | U-67 | Unix(sh) | 로그 디렉터리 소유자 및 권한 설정 | confirm | - | - | - |
 
-## 02 Windows 서버 (48개 조치, :irreversible 필요 22개)
+## 02 Windows 서버 (53개 조치, :irreversible 필요 27개)
 
 | 코드 | 대상 | 제목 | 등급 | 원복 불가 사유 | 업무 영향 | :irreversible |
 |---|---|---|---|---|---|---|
 | W-02 | Windows | Guest 계정 비활성화 | auto | - | - | - |
+| W-03 | Windows | 불필요한 계정 제거 | param(accounts) | - | 지정 계정 로그온 즉시 차단 — 그 계정으로 실행하던 서비스·예약 작업·원격 접속이 실패할 수 있음 | 필요 |
 | W-04 | Windows | 계정 잠금 임계값 설정 | confirm | 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함 | - | 필요 |
 | W-05 | Windows | 해독 가능한 암호화를 사용하여 암호 저장 해제 | auto | 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함 | - | 필요 |
 | W-07 | Windows | Everyone 사용 권한을 익명 사용자에 적용 | confirm | - | - | - |
@@ -90,7 +91,9 @@
 | W-09 | Windows | 비밀번호 관리 정책 설정 | confirm | 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함 | - | 필요 |
 | W-10 | Windows | 마지막 사용자 이름 표시 안 함 | auto | - | - | - |
 | W-11 | Windows | 로컬 로그온 허용 | confirm | 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함 | - | 필요 |
+| W-12 | Windows | 익명 SID/이름 변환 허용 해제 | auto | 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함 | - | 필요 |
 | W-13 | Windows | 콘솔 로그온 시 로컬 계정에서 빈 암호 사용 제한 | auto | - | - | - |
+| W-14 | Windows | 원격터미널 접속 가능한 사용자 그룹 제한 | param(members) | - | - | - |
 | W-15 | Windows | 사용자 개인키 사용 시 암호 입력 | auto | - | - | - |
 | W-16 | Windows | 공유 권한 및 사용자 그룹 설정 | confirm | - | 공유에서 Everyone 권한 제거 — Everyone 권한으로 그 공유를 쓰던 사용자·프로그램의 접근이 즉시 거부됨 | 필요 |
 | W-17 | Windows | 하드디스크 기본 공유 제거 | confirm | 일부 — 레지스트리는 되돌리지만 중지한 기본 공유는 Server 서비스 재시작/재부팅 후에야 다시 생김(실행 중 삭제가 거부되면 조치가 Server 서비스를 재시작 - SMB 연결 끊김) | 기본 공유(C$/ADMIN$ 등) 즉시 삭제, 삭제 거부 시 Server 서비스 재시작(도메인 컨트롤러는 재시작하지 않고 ERROR) — 기본 공유를 쓰는 원격 관리·배포 도구와 현재 SMB 연결 끊김 | 필요 |
@@ -104,10 +107,11 @@
 | W-29 | Windows | 불필요한 SNMP 서비스 구동 점검 | confirm | - | 실행 중인 SNMP 서비스 중지·사용 안 함 — SNMP 모니터링 중단 | 필요 |
 | W-30 | Windows | SNMP Community String 복잡성 설정 | confirm | - | 실행 중인 SNMP 서비스 중지·사용 안 함 — SNMP 모니터링 중단 | 필요 |
 | W-31 | Windows | SNMP Access Control 설정 | confirm | - | 실행 중인 SNMP 서비스 중지·사용 안 함 — SNMP 모니터링 중단 | 필요 |
-| W-32 | Windows | DNS 서비스 구동 점검 | manual | - | - | - |
+| W-32 | Windows | DNS 서비스 구동 점검 | param(zones) | - | 지정 영역에 클라이언트·DHCP·도메인 컨트롤러가 하던 동적 레코드 등록이 즉시 멈춤(AD 통합 영역이면 SRV 레코드 갱신 중단) | 필요 |
 | W-33 | Windows | HTTP/FTP/SMTP 배너 차단 | auto | - | - | - |
 | W-34 | Windows | Telnet 서비스 비활성화 | auto | 불가 — Telnet 인증 방식(tlntadmn)은 자동 원복 경로 없음 | - | 필요 |
 | W-36 | Windows | 원격터미널 접속 타임아웃 설정 | auto | - | - | - |
+| W-37 | Windows | 예약된 작업에 의심스러운 명령이 등록되어 있는지 점검 | param(tasks) | - | 지정 예약 작업 실행 중단 — 그 작업이 하던 백업·배치·업데이트가 멈춤 | 필요 |
 | W-39 | Windows | 백신 프로그램 업데이트 | auto | 불가 — 백신 서명 업데이트는 되돌리지 않는다(이전 서명으로 되돌릴 이유·경로가 없음, 운영 안전 기준 F4 로 사전 고지) | - | 필요 |
 | W-40 | Windows | 정책에 따른 시스템 로깅 설정 | auto | 불가 — 감사 정책(auditpol)은 자동 원복 경로 없음(변경 전 값은 changes.log) | - | 필요 |
 | W-41 | Windows | NTP 및 시각 동기화 설정 | confirm | - | - | - |
@@ -128,6 +132,7 @@
 | W-58 | Windows | 사용자별 홈 디렉터리 권한 설정 | auto | - | - | - |
 | W-59 | Windows | LAN Manager 인증 수준 | confirm | - | - | - |
 | W-60 | Windows | 보안 채널 데이터 디지털 암호화 또는 서명 | confirm | - | - | - |
+| W-62 | Windows | 시작 프로그램 목록 분석 | param(entries) | - | 지정 프로그램이 다음 로그온·부팅부터 자동 실행되지 않음(에이전트·트레이 프로그램이면 그 기능이 멈춤) | 필요 |
 | W-63 | Windows | 도메인 컨트롤러-사용자의 시간 동기화 | auto | 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함 | - | 필요 |
 | W-64 | Windows | 윈도우 방화벽 설정 | confirm | - | 방화벽 전 프로필 사용 — 허용 규칙이 없는 업무 포트(RDP/WinRM 외)로 들어오는 현재·이후 접속 차단 | 필요 |
 

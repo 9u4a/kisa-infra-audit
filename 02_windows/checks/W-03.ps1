@@ -12,6 +12,9 @@ $accounts = Get-CimInstance Win32_UserAccount -Filter "LocalAccount=True" -Error
     Select-Object Name, SID, PasswordExpires, PasswordRequired
 
 $evidence = ($accounts | ForEach-Object { "$($_.Name) (SID=$($_.SID))" }) -join "`n"
+# 1.7.0 값 지정 조치: 정책 초안(lib/policy_draft.py)이 W-03.accounts 후보로 쓰는 기계 판독 줄(쉼표가 든 이름 제외)
+$cand = @($accounts | ForEach-Object { "$($_.Name)" } | Where-Object { $_ -notmatch ',' })
+if ($cand.Count -gt 0) { $evidence += "`n`n[candidates] $($cand -join ',')" }
 
 return New-CheckResult -Code "W-03" -Status "MANUAL" `
     -Detail "계정의 '불필요' 여부는 조직 운영 정보(퇴직/휴직 등)가 필요해 자동 판정할 수 없음. 아래 활성 계정 목록을 근거로 수동 검토 필요" `
