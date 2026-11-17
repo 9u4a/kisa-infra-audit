@@ -105,13 +105,20 @@ def main() -> int:
             if got != expect:
                 problems.append(f"판정 기대={expect} 실제={got or '(없음)'}")
             executed += 1
-            if meta.get("FIX") == "1" and expect == "VULN" and not problems:
+            # 1.7.0 값 지정 조치(PARAM): 진단이 MANUAL 이어도 정책 값으로 조치 검증. REJECT=1 은 값 검증 실패(변경 없음) 기대
+            if meta.get("FIX") == "1" and (expect == "VULN" or meta.get("PARAM")) and not problems:
                 n_fix += 1
                 _, pre = snapshot(container, engine)
                 rc, out = sh(container, engine, name, "fix", code)
                 r = kv(out)
                 want = meta.get("FIXEXPECT", "GOOD")
-                if r.get("FIX") != "APPLIED" or r.get("AFTER") != want or r.get("RECHECK") != want:
+                if meta.get("REJECT") == "1":
+                    _, mid = snapshot(container, engine)
+                    if r.get("FIX") != "FAILED_ROLLED_BACK" or r.get("AFTER") != expect:
+                        problems.append(f"값 검증 실패 기대(FAILED_ROLLED_BACK, 재진단 {expect}), 실제 FIX={r.get('FIX')} AFTER={r.get('AFTER')}")
+                    if mid != pre:
+                        problems.append("값 검증 실패인데 상태가 바뀜:\n      " + diff(pre, mid))
+                elif r.get("FIX") != "APPLIED" or r.get("AFTER") != want or r.get("RECHECK") != want:
                     fo = subprocess.run(["docker", "exec", container, "tail", "-n", "15", "/tmp/kisa_case/fix.out"],
                                         capture_output=True).stdout.decode("utf-8", "replace")
                     problems.append(f"조치 기대 APPLIED/재진단 {want}, 실제 FIX={r.get('FIX')} RECHECK={r.get('RECHECK')} "
@@ -139,7 +146,7 @@ def main() -> int:
             fails.append(f"{label}: " + " / ".join(problems))
             print(f"  FAIL {label} ({dt:.0f}s)")
         else:
-            print(f"  ok   {label} = {expect}{' +조치·원복' if meta.get('FIX') == '1' and expect == 'VULN' else ''} ({dt:.0f}s)")
+            print(f"  ok   {label} = {expect}{(' +값 거부' if meta.get('REJECT') == '1' else ' +조치·원복') if meta.get('FIX') == '1' and (expect == 'VULN' or meta.get('PARAM')) else ''} ({dt:.0f}s)")
     if only:
         fails.append(f"KISA_CASES_ONLY 로 일부만 실행함({len(cases)}개) - 전체 실행 아님")
     if executed != len(cases):

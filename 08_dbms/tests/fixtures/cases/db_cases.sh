@@ -113,6 +113,12 @@ do_fix() {
     _f=$(mktemp -d "$WORK/fix_XXXXXX"); chmod 777 "$_f"
     _ans=$(meta | sed -n 's/^ANSWERS=//p')
     _cmd=$(conn_cmd "08_dbms/fix.sh -e $ENGINE -r $_r/*/result.json -i $CODE --apply --yes -o $_f")
+    _par=$(meta | sed -n 's/^PARAM=//p')
+    if [ -n "$_par" ]; then
+        { printf 'category=08\nexpires=2099-12-31\napprover=case-runner\n%s:irreversible\n[host:*]\n' "$CODE"; printf '%s\n' "$_par" | tr ';' '\n'; } > "$WORK/policy.txt"
+        chmod 644 "$WORK/policy.txt"
+        _cmd="$_cmd --policy $WORK/policy.txt --operator case-runner"
+    fi
     printf '%s' "$_cmd" > "$WORK/fix_cmd.sh"
     chmod 644 "$WORK/fix_cmd.sh"
     exec_conn "printf '$_ans' | script -qec 'sh $WORK/fix_cmd.sh' /dev/null" > "$WORK/fix.out" 2>&1
@@ -137,7 +143,7 @@ snapshot() {
         mysql)
             my <<'EOF'
 SELECT user, host, plugin, account_locked, authentication_string = '' FROM mysql.user ORDER BY user, host;
-SELECT user, host, Grant_priv, Select_priv, Process_priv FROM mysql.user ORDER BY user, host;
+SELECT user, host, Grant_priv, Select_priv, Process_priv, Super_priv, Create_user_priv FROM mysql.user ORDER BY user, host;
 SELECT * FROM mysql.db ORDER BY user, host, db; SELECT * FROM mysql.tables_priv ORDER BY user, host, db, table_name;
 SELECT * FROM mysql.global_grants ORDER BY user, host, priv; SELECT component_urn FROM mysql.component ORDER BY 1;
 SHOW GLOBAL VARIABLES WHERE Variable_name LIKE 'validate_password%' OR Variable_name = 'default_password_lifetime';
@@ -165,6 +171,7 @@ SELECT tp.grantee, tp.owner, tp.table_name, tp.privilege, tp.grantable FROM dba_
 SELECT r.role, tp.owner, tp.table_name, tp.privilege FROM dba_roles r LEFT JOIN dba_tab_privs tp ON tp.grantee = r.role WHERE r.oracle_maintained = 'N' ORDER BY 1, 2, 3, 4;
 SELECT owner, table_name, grantee, privilege FROM dba_tab_privs WHERE table_name = 'AUD$' ORDER BY 1, 2, 3, 4;
 SELECT granted_role FROM dba_role_privs WHERE grantee = 'PUBLIC' ORDER BY 1;
+SELECT grantee, admin_option FROM dba_role_privs WHERE granted_role = 'DBA' ORDER BY 1;
 SELECT name, value FROM v$parameter WHERE name = 'resource_limit';
 SELECT policy_name FROM audit_unified_enabled_policies ORDER BY 1;
 EOF
@@ -179,8 +186,17 @@ EOF
 # ---- 케이스 정의 ---------------------------------------------------------------------------------
 # meta: MODE / FIX(1=조치 시험) / ANSWERS(fix.sh 가상 터미널 입력, printf 형식) / FIXEXPECT(재검증 기대 판정) / RB
 meta() {
-    _m=""; _fix=0; _ans='y\n'; _fx=GOOD; _rb=same
+    _m=""; _fix=0; _ans='y\n'; _fx=GOOD; _rb=same; _par=""; _rej=0
     case "$ENGINE:$CASE" in
+        # 1.7.0 값 지정 조치: PARAM = 정책 파일 값 줄(; 로 구분) - 정책 모드로 조치. REJECT=1 이면 값 검증 실패(아무것도 바꾸지 않음) 기대
+        mysql:unneeded-account) _m=root; _fix=1; _fx=MANUAL; _par="D-02.accounts = kisa_old@%" ;;
+        mysql:lock-root-rejected) _m=root; _fix=1; _fx=MANUAL; _rej=1; _par="D-02.accounts = kisa_old@%, root@localhost" ;;
+        mysql:extra-admin-privilege) _m=root; _fix=1; _fx=MANUAL; _par="D-04.accounts = kisa_adm@10.0.0.7" ;;
+        postgres:unneeded-role) _m=local; _fix=1; _fx=MANUAL; _par="D-02.accounts = kisa_old" ;;
+        postgres:lock-postgres-rejected) _m=local; _fix=1; _fx=MANUAL; _rej=1; _par="D-02.accounts = kisa_old, postgres" ;;
+        postgres:extra-superuser) _m=local; _fix=1; _fx=MANUAL; _par="D-04.accounts = kisa_su" ;;
+        oracle:unneeded-account) _m=pdb; _fix=1; _fx=MANUAL; _par="D-02.accounts = kisa_old" ;;
+        oracle:extra-dba) _m=pdb; _fix=1; _fx=MANUAL; _par="D-04.accounts = kisa_dba" ;;
         mysql:root-empty-password) _m="admin"; _fix=1; _ans="y\ny\n$NEWPW\n$NEWPW\n"; _rb=irreversible ;;
         mysql:no-password-policy) _m=root; _fix=1; _fx=MANUAL ;;
         mysql:validate-password-installed) _m=root ;;
@@ -248,7 +264,7 @@ meta() {
         oracle:unified-policy-enabled) _m=pdb ;;
         *) echo "UNKNOWN_CASE=$ENGINE:$CASE"; return 1 ;;
     esac
-    printf 'MODE=%s\nFIX=%s\nANSWERS=%s\nFIXEXPECT=%s\nRB=%s\n' "$_m" "$_fix" "$_ans" "$_fx" "$_rb"
+    printf 'MODE=%s\nFIX=%s\nANSWERS=%s\nFIXEXPECT=%s\nRB=%s\nPARAM=%s\nREJECT=%s\n' "$_m" "$_fix" "$_ans" "$_fx" "$_rb" "$_par" "$_rej"
 }
 
 MYCNF=/etc/my.cnf
@@ -292,6 +308,10 @@ EOF
             printf '[client]\nuser = debian-sys-maint\npassword = KisaDeb#1234\n' > /etc/mysql/debian.cnf; chown root:root /etc/mysql/debian.cnf; chmod 644 /etc/mysql/debian.cnf ;;
         # D-21 취약: 일반 계정에 전역 WITH GRANT OPTION(Role 이 아닌 사용자에게 직접)
         mysql:grant-option-user) echo "CREATE USER 'kisa_go'@'10.0.0.6' IDENTIFIED BY 'KisaGo#1234'; GRANT PROCESS ON *.* TO 'kisa_go'@'10.0.0.6' WITH GRANT OPTION;" | my ;;
+        # D-02 수동점검 + 1.7.0 값 지정 조치: 불필요 계정 kisa_old 와 필요한 계정 kisa_keep - 정책 값의 kisa_old 만 잠긴다
+        mysql:unneeded-account|mysql:lock-root-rejected) echo "CREATE USER 'kisa_old'@'%' IDENTIFIED BY 'KisaOld#1234'; CREATE USER 'kisa_keep'@'%' IDENTIFIED BY 'KisaKeep#1234';" | my ;;
+        # D-04 수동점검 + 1.7.0: 관리자 권한(CREATE USER + GRANT OPTION)이 불필요한 계정
+        mysql:extra-admin-privilege) echo "CREATE USER 'kisa_adm'@'10.0.0.7' IDENTIFIED BY 'KisaAdm#1234'; GRANT CREATE USER ON *.* TO 'kisa_adm'@'10.0.0.7' WITH GRANT OPTION;" | my ;;
 
         # PostgreSQL ----------------------------------------------------------------------------
         postgres:postgres-no-password) echo "ALTER USER postgres PASSWORD NULL;" | pg ;;
@@ -299,6 +319,8 @@ EOF
         postgres:passwordcheck-loaded) echo "ALTER SYSTEM SET shared_preload_libraries = 'passwordcheck';" | pg; restart_pg ;;
         postgres:md5-encryption) printf "ALTER SYSTEM SET password_encryption = 'md5';\nSELECT pg_reload_conf();\n" | pg >/dev/null; sleep 1 ;;
         postgres:md5-stored-role) echo "SET password_encryption = 'md5'; CREATE ROLE kisa_md5 LOGIN PASSWORD 'KisaOld#1234';" | pg ;;
+        postgres:unneeded-role|postgres:lock-postgres-rejected) echo "CREATE ROLE kisa_old LOGIN; CREATE ROLE kisa_keep LOGIN;" | pg ;;
+        postgres:extra-superuser) echo "CREATE ROLE kisa_su SUPERUSER LOGIN;" | pg ;;
         postgres:hba-restricted)
             cp -p "$PGD/pg_hba.conf" "$WORK/pg_hba.conf.orig"
             sed -i -E 's/^(host[[:space:]]+all[[:space:]]+all[[:space:]]+)all([[:space:]])/\1172.16.0.0\/12\2/' "$PGD/pg_hba.conf"
@@ -351,6 +373,9 @@ EOF
         oracle:sqlnet-world-writable) ora_file_backup sqlnet.ora; chmod 666 "$(ora_target sqlnet.ora)" ;;
         oracle:admin-restrictions-on) ora_file_backup listener.ora; printf '\nADMIN_RESTRICTIONS_LISTENER = ON\n' >> "$(ora_target listener.ora)" ;;
         oracle:aud-grant-user) echo "CREATE USER kisa_u IDENTIFIED BY \"KisaU#1234\"; GRANT SELECT ON sys.aud\$ TO kisa_u;" | ora_pdb ;;
+        # D-02/D-04 수동점검 + 1.7.0 값 지정 조치: 정책 값의 계정만 잠금 / DBA 롤 회수(원복 시 UNLOCK / GRANT DBA)
+        oracle:unneeded-account) printf 'CREATE USER kisa_old IDENTIFIED BY "KisaOld#1234";\nCREATE USER kisa_keep IDENTIFIED BY "KisaKeep#1234";\n' | ora_pdb ;;
+        oracle:extra-dba) printf 'CREATE USER kisa_dba IDENTIFIED BY "KisaDba#1234";\nGRANT DBA TO kisa_dba;\n' | ora_pdb ;;
         oracle:role-to-public) echo "CREATE ROLE kisa_r; GRANT kisa_r TO PUBLIC;" | ora_pdb ;;
         oracle:os-roles-true) echo "ALTER SYSTEM SET os_roles = TRUE SCOPE=SPFILE;" | ora_cdb; restart_ora ;;
         oracle:non-admin-owner) echo "CREATE USER kisa_own IDENTIFIED BY \"KisaO#1234\" QUOTA 1M ON users; CREATE TABLE kisa_own.t (id NUMBER);" | ora_pdb ;;
@@ -390,11 +415,15 @@ case_verify() {
             && [ "$(stat -c '%a' /etc/mysql/conf.d/kisa_case.cnf)" = "664" ] ;;
         mysql:debian-cnf-644) [ "$(stat -c '%a' "$MYCNF")" = "640" ] && [ "$(stat -c '%a' /etc/mysql/debian.cnf)" = "644" ] ;;
         mysql:grant-option-user) [ "$(echo "SELECT Grant_priv FROM mysql.user WHERE user='kisa_go';" | my)" = "Y" ] ;;
+        mysql:unneeded-account|mysql:lock-root-rejected) [ "$(echo "SELECT GROUP_CONCAT(account_locked) FROM mysql.user WHERE user IN ('kisa_old','kisa_keep');" | my)" = "N,N" ] ;;
+        mysql:extra-admin-privilege) [ "$(echo "SELECT CONCAT(Create_user_priv, Grant_priv) FROM mysql.user WHERE user='kisa_adm';" | my)" = "YY" ] ;;
 
         postgres:postgres-no-password) [ "$(echo "SELECT rolpassword IS NULL FROM pg_authid WHERE rolname='postgres';" | pg)" = "t" ] ;;
         postgres:no-passwordcheck) ! echo "SHOW shared_preload_libraries;" | pg | grep -q passwordcheck ;;
         postgres:passwordcheck-loaded) echo "SHOW shared_preload_libraries;" | pg | grep -q passwordcheck ;;
         postgres:md5-encryption) [ "$(echo "SHOW password_encryption;" | pg)" = "md5" ] ;;
+        postgres:unneeded-role|postgres:lock-postgres-rejected) [ "$(echo "SELECT string_agg(rolcanlogin::text, ',' ORDER BY rolname) FROM pg_roles WHERE rolname IN ('kisa_old','kisa_keep');" | pg)" = "true,true" ] ;;
+        postgres:extra-superuser) [ "$(echo "SELECT rolsuper FROM pg_roles WHERE rolname='kisa_su';" | pg)" = "t" ] ;;
         postgres:md5-stored-role) [ "$(echo "SELECT left(rolpassword, 3) FROM pg_authid WHERE rolname='kisa_md5';" | pg)" = "md5" ] \
             && [ "$(echo "SHOW password_encryption;" | pg)" = "scram-sha-256" ] ;;
         postgres:hba-any-address) [ "$(echo "SELECT count(*) FROM pg_hba_file_rules WHERE type = 'host' AND address = 'all';" | pg)" != "0" ] ;;
@@ -444,6 +473,8 @@ case_verify() {
         oracle:no-admin-restrictions) ! grep -qi 'ADMIN_RESTRICTIONS' "$(ora_target listener.ora)" ;;
         oracle:admin-restrictions-on) grep -q '^ADMIN_RESTRICTIONS_LISTENER = ON$' "$(ora_target listener.ora)" ;;
         oracle:aud-grant-user) ora_has "SELECT privilege FROM dba_tab_privs WHERE grantee = 'KISA_U' AND table_name = 'AUD\$';" SELECT ;;
+        oracle:unneeded-account) ora_has "SELECT LISTAGG(account_status, ',') WITHIN GROUP (ORDER BY username) FROM dba_users WHERE username IN ('KISA_OLD','KISA_KEEP');" "OPEN,OPEN" ;;
+        oracle:extra-dba) ora_has "SELECT COUNT(*) FROM dba_role_privs WHERE grantee = 'KISA_DBA' AND granted_role = 'DBA';" 1 ;;
         oracle:aud-sys-only) ora_has "SELECT COUNT(*) FROM dba_tab_privs WHERE table_name = 'AUD\$' AND grantee NOT IN ('SYS', 'SYSTEM');" 0 ;;
         oracle:role-to-public) ora_has "SELECT granted_role FROM dba_role_privs WHERE grantee = 'PUBLIC';" KISA_R ;;
         oracle:no-public-role) ora_has "SELECT COUNT(*) FROM dba_role_privs WHERE grantee = 'PUBLIC';" 0 ;;
@@ -483,6 +514,8 @@ case_restore() {
             [ -f "$WORK/my.cnf.orig" ] && cp -p "$WORK/my.cnf.orig" "$MYCNF"; chmod 644 "$MYCNF"; chown root:root "$MYCNF"
             rm -f /etc/mysql/conf.d/kisa_case.cnf /etc/mysql/debian.cnf ;;
         mysql:grant-option-user) echo "DROP USER IF EXISTS 'kisa_go'@'10.0.0.6';" | my ;;
+        mysql:unneeded-account|mysql:lock-root-rejected) echo "DROP USER IF EXISTS 'kisa_old'@'%'; DROP USER IF EXISTS 'kisa_keep'@'%';" | my ;;
+        mysql:extra-admin-privilege) echo "DROP USER IF EXISTS 'kisa_adm'@'10.0.0.7';" | my ;;
         mysql:*) : ;;
 
         postgres:postgres-no-password) echo "ALTER USER postgres PASSWORD '$ROOTPW';" | pg ;;
@@ -491,6 +524,8 @@ case_restore() {
             [ "$CASE" = "passwordcheck-loaded" ] || echo "SHOW shared_preload_libraries;" | pg | grep -q passwordcheck && restart_pg ; : ;;
         postgres:md5-encryption) printf "ALTER SYSTEM RESET password_encryption;\nSELECT pg_reload_conf();\n" | pg >/dev/null; sleep 1 ;;
         postgres:md5-stored-role) echo "DROP ROLE IF EXISTS kisa_md5;" | pg ;;
+        postgres:unneeded-role|postgres:lock-postgres-rejected) echo "DROP ROLE IF EXISTS kisa_old; DROP ROLE IF EXISTS kisa_keep;" | pg ;;
+        postgres:extra-superuser) echo "DROP ROLE IF EXISTS kisa_su;" | pg ;;
         postgres:hba-restricted|postgres:hba-reject-all|postgres:no-trust) cp -p "$WORK/pg_hba.conf.orig" "$PGD/pg_hba.conf"; echo "SELECT pg_reload_conf();" | pg >/dev/null; sleep 1 ;;
         postgres:hba-elsewhere-nouser)
             cp -p "$WORK/postgresql.conf.orig" "$PGD/postgresql.conf"; cp -p "$WORK/pg_hba.conf.orig" "$PGD/pg_hba.conf"
@@ -510,6 +545,8 @@ case_restore() {
         oracle:no-logon-version|oracle:logon-version-12|oracle:no-validnode-checking|oracle:validnode-checking|oracle:sqlnet-world-writable) ora_file_restore sqlnet.ora ;;
         oracle:no-admin-restrictions|oracle:admin-restrictions-on) ora_file_restore listener.ora ;;
         oracle:user-dba-view-grant|oracle:aud-grant-user) echo "DROP USER kisa_u CASCADE;" | ora_pdb ;;
+        oracle:unneeded-account) printf 'DROP USER kisa_old CASCADE;\nDROP USER kisa_keep CASCADE;\n' | ora_pdb ;;
+        oracle:extra-dba) echo "DROP USER kisa_dba CASCADE;" | ora_pdb ;;
         oracle:role-dba-view-grant) echo "DROP USER kisa_u CASCADE; DROP ROLE kisa_sr;" | ora_pdb ;;
         oracle:role-to-public) echo "DROP ROLE kisa_r;" | ora_pdb ;;
         oracle:os-roles-true|oracle:os-params-false)

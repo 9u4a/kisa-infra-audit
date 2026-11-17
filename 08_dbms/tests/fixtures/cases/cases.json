@@ -5,6 +5,8 @@
   {"code": "D-11", "engine": "mssql", "name": "guest-catalog-view", "expect": "VULN"},
   {"code": "D-11", "engine": "mssql", "name": "public-with-grant-option", "expect": "VULN"},
   {"code": "D-13", "engine": "mssql", "name": "odbc-system-dsn", "expect": "MANUAL"},
+  {"code": "D-02", "engine": "mssql", "name": "unneeded-login", "expect": "MANUAL"},
+  {"code": "D-04", "engine": "mssql", "name": "extra-sysadmin", "expect": "MANUAL"},
   {"code": "D-16", "engine": "mssql", "name": "sa-enabled-no-policy", "expect": "VULN"},
   {"code": "D-23", "engine": "mssql", "name": "xp-cmdshell-enabled-only", "expect": "MANUAL"},
   {"code": "D-23", "engine": "mssql", "name": "xp-cmdshell-public", "expect": "VULN"},
@@ -76,5 +78,13 @@
   {"code": "D-26", "engine": "postgres", "name": "collector-on", "expect": "MANUAL"},
   {"code": "D-01", "engine": "postgres", "name": "no-trust", "expect": "GOOD"},
   {"code": "D-10", "engine": "mysql", "name": "mask-any-host", "expect": "VULN"},
-  {"code": "D-10", "engine": "postgres", "name": "hba-reject-all", "expect": "GOOD"}
+  {"code": "D-10", "engine": "postgres", "name": "hba-reject-all", "expect": "GOOD"},
+  {"code": "D-02", "engine": "mysql", "name": "unneeded-account", "expect": "MANUAL"},
+  {"code": "D-02", "engine": "mysql", "name": "lock-root-rejected", "expect": "MANUAL"},
+  {"code": "D-04", "engine": "mysql", "name": "extra-admin-privilege", "expect": "MANUAL"},
+  {"code": "D-02", "engine": "postgres", "name": "unneeded-role", "expect": "MANUAL"},
+  {"code": "D-02", "engine": "postgres", "name": "lock-postgres-rejected", "expect": "MANUAL"},
+  {"code": "D-04", "engine": "postgres", "name": "extra-superuser", "expect": "MANUAL"},
+  {"code": "D-02", "engine": "oracle", "name": "unneeded-account", "expect": "MANUAL"},
+  {"code": "D-04", "engine": "oracle", "name": "extra-dba", "expect": "MANUAL"}
 ]

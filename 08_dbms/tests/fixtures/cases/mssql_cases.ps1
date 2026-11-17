@@ -59,11 +59,33 @@ $MssqlCases = @{
         Want = '^public_state_MSreplication_options=W$'; Fix = $true
     }
     # D-13 수동: 시스템 ODBC 데이터 소스가 등록돼 있음(필요성은 업무 판단 - manual-by-design)
+    # D-02 수동점검 + 1.7.0 값 지정 조치: 불필요 로그인 kisa_case_old 와 필요한 kisa_case_keep - 정책 값의 kisa_case_old 만 비활성화
+    # (원복 시 ENABLE). sa 가 섞이면 아무것도 바꾸지 않는다
+    "unneeded-login" = @{
+        Probe = '$r = Sql "SELECT ISNULL(MAX(CAST(is_disabled AS int)), -1) FROM sys.server_principals WHERE name = ''kisa_case_old''; SELECT ISNULL(MAX(CAST(is_disabled AS int)), -1) FROM sys.server_principals WHERE name = ''kisa_case_keep'';"; Write-Output ("old=" + $r[0] + " keep=" + $r[1])'
+        Setup = 'foreach ($n in "kisa_case_old", "kisa_case_keep") { Sql ("CREATE LOGIN $n WITH PASSWORD = N''" + [guid]::NewGuid().ToString() + "Aa1!'';") | Out-Null }'
+        Cleanup = 'Sql "IF SUSER_ID(''kisa_case_old'') IS NOT NULL DROP LOGIN kisa_case_old; IF SUSER_ID(''kisa_case_keep'') IS NOT NULL DROP LOGIN kisa_case_keep;" | Out-Null'
+        Want = '^old=0 keep=0$'; Fix = $true; FixExpect = @("MANUAL")
+        Params = @{ accounts = @("kisa_case_old") }; Verify = '^old=1 keep=0$'
+        RejectParams = @{ accounts = @("kisa_case_old", "sa") }
+    }
+    # D-04 수동점검 + 1.7.0: sysadmin 이 불필요한 로그인 - 정책 값으로 sysadmin 에서 제거(원복 시 다시 추가)
+    "extra-sysadmin" = @{
+        Probe = '$r = Sql "SELECT ISNULL(IS_SRVROLEMEMBER(''sysadmin'', ''kisa_case_adm''), -1);"; Write-Output ("adm_sysadmin=" + $r[0])'
+        Setup = 'Sql ("CREATE LOGIN kisa_case_adm WITH PASSWORD = N''" + [guid]::NewGuid().ToString() + "Aa1!''; ALTER SERVER ROLE sysadmin ADD MEMBER kisa_case_adm;") | Out-Null'
+        Cleanup = 'Sql "IF SUSER_ID(''kisa_case_adm'') IS NOT NULL DROP LOGIN kisa_case_adm;" | Out-Null'
+        Want = '^adm_sysadmin=1$'; Fix = $true; FixExpect = @("MANUAL")
+        Params = @{ accounts = @("kisa_case_adm") }; Verify = '^adm_sysadmin=0$'
+        RejectParams = @{ accounts = @("kisa_case_adm", "NT AUTHORITY\SYSTEM") }
+    }
     "odbc-system-dsn" = @{
         Probe = '$k = "HKLM:\SOFTWARE\ODBC\ODBC.INI\ODBC Data Sources"; $v = if (Test-Path $k) { (Get-ItemProperty $k -ErrorAction SilentlyContinue).KisaCaseDsn } else { $null }; Write-Output ("dsn=" + [bool]$v + " keyExists=" + (Test-Path $k))'
         Setup = '$k = "HKLM:\SOFTWARE\ODBC\ODBC.INI\ODBC Data Sources"; Set-Content -Path (Join-Path $caseTmp "odbc_key.txt") -Value (Test-Path $k); if (-not (Test-Path $k)) { New-Item -Path $k -Force | Out-Null }; New-ItemProperty -Path $k -Name KisaCaseDsn -Value "SQL Server" -PropertyType String -Force | Out-Null'
         Cleanup = '$k = "HKLM:\SOFTWARE\ODBC\ODBC.INI\ODBC Data Sources"; $had = (Get-Content -Path (Join-Path $caseTmp "odbc_key.txt") -ErrorAction SilentlyContinue) -eq "True"; Remove-ItemProperty -Path $k -Name KisaCaseDsn -ErrorAction SilentlyContinue; if (-not $had -and (Test-Path $k)) { Remove-Item -Path $k -Force }'
         Want = '^dsn=True'
+        # 1.7.0 값 지정 조치: 정책 값 D-13.dsns 의 DSN 등록만 지운다(백업 후, 원복 시 되살림). 다른 DSN 이 없으면 재진단 GOOD
+        Fix = $true; FixExpect = @("GOOD", "MANUAL"); Params = @{ dsns = @("KisaCaseDsn") }; Verify = '^dsn=False'
+        RejectParams = @{ dsns = @("KisaCaseDsn", "KisaNoSuchDsn") }
     }
     # D-16 취약: 혼합 인증 모드 + sa 활성 + 암호 정책 미적용(LocalDB 는 혼합 모드)
     "sa-enabled-no-policy" = @{

@@ -204,6 +204,9 @@ U-23.files = /usr/local/bin/oldtool
 | WEB-15 | `handlers` | IIS 스크립트 매핑 제거(사이트·하위 경로, 원복 불가 - 스크립트 매핑 아닌 처리기 거부) |
 | WEB-17 | `aliases` | Apache Alias 줄·Nginx alias location 블록 주석 처리(URL 경로, Tomcat Context 는 거부) |
 | WEB-20 | `cert`·`key` / `thumbprint` | Apache·Nginx: PEM 인증서·키(짝·만료 검증)로 443 SSL 설정 추가 / IIS: 인증서 지문으로 https 바인딩 |
+| D-02 | `accounts` | DB 계정 잠금 - MySQL `user@host` ACCOUNT LOCK / PostgreSQL NOLOGIN / Oracle ACCOUNT LOCK / MSSQL DISABLE(기본 관리자·내장·도구 접속 계정 거부) |
+| D-04 | `accounts` | 관리자 권한 회수 - MySQL SUPER·CREATE USER·GRANT OPTION / PostgreSQL NOSUPERUSER / Oracle DBA 롤 / MSSQL sysadmin |
+| D-13 | `dsns` | MSSQL 호스트 시스템 ODBC DSN 제거(레지스트리 키 reg export 백업, 원복 시 import) |
 | W-62 | `entries` | 시작 프로그램의 레지스트리 Run 값 제거(시작 폴더 바로가기는 거부) |
 
 - 승인 줄과 값 줄이 둘 다 있어야 적용된다. 값이 있으면 진단이 MANUAL 이어도 대상에 넣는다(값이 곧 운영자의 판정). 대화형 실행이나

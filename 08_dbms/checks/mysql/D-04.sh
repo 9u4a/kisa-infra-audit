@@ -17,4 +17,9 @@ run_check() {
     CHECK_STATUS="MANUAL"
     CHECK_DETAIL="SUPER/GRANT/CREATE USER 권한 보유 계정 목록 - 관리 업무에 실제로 필요한 계정인지 수동 검토 필요"
     CHECK_EVIDENCE="$out"
+    # 1.7.0 값 지정 조치: D-04.accounts 후보(user@host) - lib/policy_draft.py 가 읽는다(조치가 거부하는 계정도 섞일 수 있음)
+    cand=$(printf '%s\n' "$out" | awk 'NF >= 2 && index($1, "mysql.") != 1 { print $1 "@" $2 }' | grep -v ',' | tr '\n' ',' | sed 's/,$//')
+    [ -n "$cand" ] && CHECK_EVIDENCE="$CHECK_EVIDENCE
+
+[candidates] $cand"
 }
