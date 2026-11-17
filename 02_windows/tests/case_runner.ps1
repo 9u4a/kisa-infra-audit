@@ -15,6 +15,9 @@
 #     Resources = @( @{ Save = { 저장 객체 }; Restore = { param($s) ... } } , @{ Svc = '<서비스>' } )   # 추가 원복 대상
 #     Fix   = @{ From = '<상태>'; Expect = 'GOOD'; AfterRollback = '<판정>'; SoftAreas = @(); SoftLines = @(); Irreversible = '<사유>' }
 #             # 조치 검증. AfterRollback/SoftAreas 는 원복 불가(Register-FixNoRollback)로 선언된 조치만, Irreversible 은 되돌릴 대상이 없는 조치(서명 업데이트)
+#             # 1.7.0 값 지정 조치(fix=param): Params = @{ <키> = @('값', ...) } 를 주면 정책 값으로 실행($Global:FixParamPolicy),
+#             # Expect 는 보통 'MANUAL'. Verify = { 조치 직후(원복 전) 지정 대상만 바뀌었는지 - $true 또는 실패 설명 }
+#     FixReject = @{ From = '<상태>'; Params = @{ ... } }      # 1.7.0: 값 검증 실패 → 조치 ERROR, 상태(Check) 그대로여야 함
 #     Chain = @{ From = '<상태>'; Codes = @('W-04','W-08') }   # 한 프로세스에서 조치 연속 적용(X-02 회귀)
 #     FixSkip = '<사유>'                                       # auto/confirm 조치가 있지만 이 케이스로 검증하지 않는 이유
 #   }
@@ -224,6 +227,38 @@ function Test-Expect($diag, [string]$code, [string]$expect, [string]$label) {
     return $true
 }
 
+# ConvertTo-CaseParamScript <코드> <Params 해시테이블> - 직접 실행 스크립트에 넣을 정책 값($Global:FixParamPolicy) 정의 줄
+function ConvertTo-CaseParamScript([string]$code, $params) {
+    if (-not $params) { return "" }
+    $q = { param($s) "'" + ("$s" -replace "'", "''") + "'" }
+    $l = @("`$pp = New-Object 'System.Collections.Generic.Dictionary[string,string[]]'")
+    foreach ($k in $params.Keys) { $l += "`$pp[$(& $q $k)] = [string[]]@($((@($params[$k]) | ForEach-Object { & $q $_ }) -join ', '))" }
+    $l += "`$pd = New-Object 'System.Collections.Generic.Dictionary[string,object]'; `$pd[$(& $q $code)] = `$pp"
+    $l += "`$Global:FixParamPolicy = [PSCustomObject]@{ Params = `$pd; Approver = 'case-runner' }"
+    return ($l -join "`n")
+}
+
+function Invoke-FixRejectFlow($def, [string]$code, [string]$stName, $st) {
+    <# 1.7.0: 값 검증 실패 케이스 - 조치가 ERROR 를 내고 아무것도 바꾸지 않아야 한다(상태 Check 그대로) #>
+    $fx = $def.FixReject
+    $fixFile = Join-Path $Repo "$Category\fixes\$code.ps1"
+    $label = "$code/$stName 값 거부"
+    $dOut = Join-Path $Work "fixrej_$code"
+    Remove-Item -Recurse -Force $dOut -ErrorAction SilentlyContinue
+    $q = { param($s) $s -replace "'", "''" }
+    $direct = "`$ErrorActionPreference = 'Continue'`nImport-Module '$(& $q (Join-Path $Repo 'lib\Common.psm1'))' -Force`n" +
+        "New-FixOutputDir -BaseDir '$(& $q $dOut)' -CategoryNum '$CategoryNum' | Out-Null`n`$Global:FixCode = '$code'`n" +
+        "$(ConvertTo-CaseParamScript $code $fx.Params)`n`$Global:FixStatus = 'ERROR'; `$Global:FixDetail = ''`n" +
+        "try { & '$(& $q $fixFile)' } catch { `$Global:FixStatus = 'EXCEPTION'; `$Global:FixDetail = `$_.Exception.Message }`n" +
+        "Write-Output ('DIRECTFIX|' + `$Global:FixStatus + '|' + (`$Global:FixDetail -replace '[\r\n]+', ' '))"
+    $d = Invoke-Child $direct
+    $m = [regex]::Match($d.Out, 'DIRECTFIX\|([^|]*)\|(.*)')
+    $dStatus = if ($m.Success) { $m.Groups[1].Value } else { "?" }
+    Write-Host "  값 거부: $dStatus $(if ($m.Success) { $m.Groups[2].Value })"
+    if ($dStatus -ne "ERROR") { Add-Fail "$label : 값 검증 실패인데 조치 결과가 ERROR 가 아님($dStatus)`n$($d.Out)" }
+    if ($st.Check) { $c = & $st.Check; if ($c -ne $true) { Add-Fail "$label : 값 검증 실패인데 상태가 바뀜 - $c" } }
+}
+
 function Invoke-FixFlow($def, [string]$code, [string]$stName, [string]$stExpect, $st) {
     $fx = $def.Fix
     $fixFile = Join-Path $Repo "$Category\fixes\$code.ps1"
@@ -237,6 +272,7 @@ $ErrorActionPreference = 'Continue'
 Import-Module '__LIB__' -Force
 New-FixOutputDir -BaseDir '__OUT__' -CategoryNum '__NUM__' | Out-Null
 $Global:FixCode = '__CODE__'
+__PARAMS__
 $Global:FixStatus = 'ERROR'; $Global:FixDetail = 'no result from fix script'; $Global:FixEvidence = ''
 try { & '__FIX__' } catch { $Global:FixStatus = 'ERROR'; $Global:FixDetail = 'exception: ' + $_.Exception.Message }
 $line = 'DIRECTFIX|' + $Global:FixStatus + '|' + ($Global:FixDetail -replace '[\r\n]+', ' ')
@@ -244,7 +280,7 @@ Set-Content -LiteralPath '__RES__' -Value $line -Encoding UTF8
 Write-Output $line
 '@
     $resFile = Join-Path $Work "fixres_$code.txt"; Remove-Item -LiteralPath $resFile -Force -ErrorAction SilentlyContinue
-    $direct = $direct.Replace("__RES__", (& $q $resFile)).Replace("__LIB__", (& $q (Join-Path $Repo "lib\Common.psm1"))).Replace("__OUT__", (& $q $dOut)).Replace("__NUM__", $CategoryNum).Replace("__CODE__", $code).Replace("__FIX__", (& $q $fixFile))
+    $direct = $direct.Replace("__RES__", (& $q $resFile)).Replace("__LIB__", (& $q (Join-Path $Repo "lib\Common.psm1"))).Replace("__OUT__", (& $q $dOut)).Replace("__NUM__", $CategoryNum).Replace("__CODE__", $code).Replace("__FIX__", (& $q $fixFile)).Replace("__PARAMS__", (ConvertTo-CaseParamScript $code $fx.Params))
     $d = Invoke-Child $direct
     $resText = if (Test-Path -LiteralPath $resFile) { Get-Content -Raw -Encoding UTF8 -LiteralPath $resFile } else { $d.Out }
     $m = [regex]::Match($resText, 'DIRECTFIX\|([^|]*)\|(.*)')
@@ -253,6 +289,7 @@ Write-Output $line
     if ($dStatus -ne "APPLIED") { Add-Fail "$label : 조치 결과가 APPLIED 가 아님($dStatus) - 자식 종료 Ok=$($d.Ok)`n$($d.Out)" }
     $want = if ($fx.Expect) { $fx.Expect } else { "GOOD" }
     [void](Test-Expect (Invoke-Diag $code "${code}_fixed") $code $want "$label 후 재진단")
+    if ($fx.Verify) { $v = & $fx.Verify; if ($v -ne $true) { Add-Fail "$label : 조치 후 상태 확인 실패 - $v" } }
     $dRun = Get-ChildItem -Path $dOut -Directory -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
     if (-not $dRun) { Add-Fail "$label : 조치 출력 폴더 없음"; return }
     $rbLog = Invoke-Rollback $dRun
@@ -334,7 +371,7 @@ foreach ($code in $codes) {
         if (-not ($s.Reg -or $s.Sec -or $s.Svc -or $s.Set) -and -not $s.AsIs) { Add-Fail "${code}/${k}: 상태를 만드는 설정이 없음 - 러너 기본값에 기대면 AsIs 사유 필요" }
     }
     $grade = "$($GuideByCode[$code].fix)"
-    $hasFix = (Test-Path (Join-Path $Repo "$Category\fixes\$code.ps1")) -and $grade -in @("auto", "confirm")
+    $hasFix = (Test-Path (Join-Path $Repo "$Category\fixes\$code.ps1")) -and $grade -in @("auto", "confirm", "param")
     if ($hasFix -and -not $def.Fix -and -not $def.FixSkip -and ($mine | Where-Object { $_.expect -eq "VULN" })) {
         Add-Fail "${code}: $grade 등급 조치가 있는데 케이스 정의에 Fix(또는 FixSkip 사유)가 없음"
     }
@@ -358,6 +395,9 @@ foreach ($code in $codes) {
                     else { Add-Fail "${code}: Fix 를 선언했지만 auto/confirm 조치 스크립트가 없음(등급 $grade)" }
                 }
                 if ($ok -and $def.Chain -and $def.Chain.From -eq $c.name) { Invoke-ChainFlow $def $code }
+                if ($ok -and $def.FixReject -and $def.FixReject.From -eq $c.name) {
+                    if ($hasFix) { Invoke-FixRejectFlow $def $code $c.name $st } else { Add-Fail "${code}: FixReject 를 선언했지만 조치 스크립트가 없음" }
+                }
             }
             Restore-Resources $saved
         }

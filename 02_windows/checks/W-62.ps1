@@ -16,6 +16,10 @@ if (-not $items -or $items.Count -eq 0) {
 
 $evidence = $items | ForEach-Object { "$($_.Name) | $(Protect-SecretText $_.Command) | $($_.Location)" }
 
+# 1.7.0 값 지정 조치: W-62.entries 후보(조치가 다루는 레지스트리 Run 항목 이름, 쉼표가 든 것 제외) - lib/policy_draft.py 가 읽는다
+$cand = @($items | Where-Object { "$($_.Location)" -match '^(HKLM|HKU)\\' } | ForEach-Object { "$($_.Name)" } | Where-Object { $_ -notmatch ',' } | Sort-Object -Unique)
+$candLine = if ($cand.Count -gt 0) { "`n`n[candidates] $($cand -join ',')" } else { "" }
+
 return New-CheckResult -Code "W-62" -Status "MANUAL" `
     -Detail "시작 프로그램이 $($items.Count)건 등록되어 있음 — 정기 검사 절차 존재 여부 및 불필요/의심스러운 항목은 수동 검토 필요" `
-    -Evidence ($evidence -join "`n")
+    -Evidence (($evidence -join "`n") + $candLine)

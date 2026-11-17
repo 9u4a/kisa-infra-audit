@@ -14,6 +14,13 @@
   - 01 Unix: U-07 계정 잠금(삭제 대신 잠금 - deviation), U-08 관리자 그룹 구성원 제거, U-23 SUID/SGID 제거(sudo·su·passwd·unix_chkpwd 거부),
     U-25 o-w, U-33 숨김 파일 백업 후 삭제. 진단 증적에 후보 줄 `[candidates]` 추가(판정 불변). Debian·Rocky 9 케이스 7건(값 거부 2건 포함).
   - `lib/policy_draft.py`: result.json 후보로 정책 초안 생성(승인·값 줄 모두 주석, --approver 없으면 파서가 거부).
+  - 02 Windows: W-03 로컬 계정 비활성화, W-14 Remote Desktop Users 등록(계정은 운영자가 미리 생성), W-32 DNS 영역 동적 업데이트 없음
+    (원래 값 백업·원복 - 예전 manual 참조 구현은 원복이 없었다), W-37 예약 작업 비활성화, W-62 시작 프로그램 Run 값 제거. PowerShell 진입점
+    4곳(02·03 IIS·07·08 MSSQL)이 값 줄을 받고(Initialize-FixPolicy -GuideItems), 일부 대상만 고른 VULN 항목은 원복 대신 PARTIAL_MANUAL.
+    새 백업·원복 유형(로컬 그룹 구성원·예약 작업·DNS 영역), 02 케이스 러너 Fix.Params·Verify·FixReject.
+### Changed
+- **W-12 익명 SID/이름 변환 조치를 manual → auto**: "LSA 정책 객체라 secedit 로 바꿀 수 없다"던 1.0 판단이 틀렸다 - secedit [System Access]
+  LSAAnonymousNameLookup=0 으로 적용된다(케이스가 같은 경로로 취약 상태를 만듦). 원복은 다른 secedit 조치처럼 실행 단위 전체.
 
 ## [1.6.1] - 2026-11-17
 ### Fixed

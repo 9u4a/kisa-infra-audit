@@ -27,5 +27,12 @@ $evidence = ($members | ForEach-Object { "$($_.Name) ($($_.ObjectClass)) $($_.SI
 if ($members.Count -gt 0) {
     return New-CheckResult -Code "W-14" -Status "GOOD" -Detail "Remote Desktop Users 그룹에 원격 접속용 별도 계정이 등록되어 있음 ($($members.Count)명) — 각 계정 필요성은 수동 재확인 권장" -Evidence $evidence
 } else {
-    return New-CheckResult -Code "W-14" -Status "VULN" -Detail "Remote Desktop Users 그룹에 등록된 별도 계정이 없음 (관리자 계정 외 원격 접속 계정 미구성)" -Evidence "구성원 없음"
+    # 1.7.0 값 지정 조치: W-14.members 후보(활성 로컬 계정 중 Administrators 가 아닌 것) - lib/policy_draft.py 가 읽는다. 조회 실패는 후보 없음.
+    $ev = "구성원 없음"
+    try {
+        $adminSids = @(Get-LocalGroupMembersBySid -Sid 'S-1-5-32-544' | ForEach-Object { "$($_.SID)" })
+        $cand = @(Get-LocalUser -ErrorAction Stop | Where-Object { $_.Enabled -and $adminSids -notcontains $_.SID.Value -and $_.Name -notmatch ',' } | ForEach-Object { $_.Name })
+        if ($cand.Count -gt 0) { $ev += "`n`n[candidates] $($cand -join ',')" }
+    } catch { $ev += " (원격 접속용 후보 계정 조회 실패: $($_.Exception.Message))" }
+    return New-CheckResult -Code "W-14" -Status "VULN" -Detail "Remote Desktop Users 그룹에 등록된 별도 계정이 없음 (관리자 계정 외 원격 접속 계정 미구성)" -Evidence $ev
 }

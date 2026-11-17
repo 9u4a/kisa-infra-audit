@@ -921,10 +921,13 @@ function New-FixOutputDir {
 }
 
 function Get-ResultVulnCodes {
-    <# result.json(진단 결과)에서 status=VULN 인 코드만 배열로 반환 #>
-    param([Parameter(Mandatory)][string]$ResultJson)
+    <# result.json(진단 결과)에서 status=VULN 인 코드만 배열로 반환.
+       1.7.0: -ParamPolicy(정책 모드)가 있으면 이 호스트 구역에 값을 준 항목(값 지정 조치)은 MANUAL 이어도 넣는다 - 값이 곧 운영자의 판정. #>
+    param([Parameter(Mandatory)][string]$ResultJson, $ParamPolicy = $null)
     $r = Get-Content -Raw -Encoding UTF8 -Path $ResultJson | ConvertFrom-Json
-    return @($r.items | Where-Object { $_.status -eq "VULN" } | ForEach-Object { $_.code })
+    return @($r.items | Where-Object {
+            $_.status -eq "VULN" -or ($_.status -eq "MANUAL" -and $ParamPolicy -and $ParamPolicy.Params -and $ParamPolicy.Params.ContainsKey("$($_.code)"))
+        } | ForEach-Object { $_.code })
 }
 
 function Test-FixResultTarget {
@@ -1029,6 +1032,8 @@ function Show-FixItemNotes {
     if ($Policy -and $Code) {
         $d = Get-FixPolicyDecision -Policy $Policy -Code $Code -FixFile $File
         if ($d.Approved) { Write-Host "  정책: $($d.Reason) - 적용 예정" }
+        $pv = Get-FixParamSummary -Policy $Policy -Code $Code
+        if ($pv) { Write-Host "  값: $pv" }
     }
 }
 
@@ -1232,12 +1237,33 @@ function Get-FixParamSpec {
 }
 
 function Get-FixParam {
-    <# 1.7.0: 정책 파일이 이 호스트 구역에 준 값(문자열 배열, 없으면 빈 배열). 값은 운영자 입력이라 조치가 검증한 뒤에만 쓴다. #>
-    param($Policy, [Parameter(Mandatory)][string]$Code, [Parameter(Mandatory)][string]$Key)
-    if (-not $Policy -or -not $Policy.Params -or -not $Policy.Params.ContainsKey($Code)) { return @() }
+    <# 1.7.0: 정책 파일이 이 호스트 구역에 준 값(문자열 배열, 없으면 빈 배열). 값은 운영자 입력이라 조치가 검증한 뒤에만 쓴다.
+       조치 스크립트는 -Key 만 준다 - 정책은 Initialize-FixPolicy 가 남긴 $Global:FixParamPolicy, 코드는 진입점이 정한 $Global:FixCode. #>
+    param($Policy = $Global:FixParamPolicy, [string]$Code = $Global:FixCode, [Parameter(Mandatory)][string]$Key)
+    if (-not $Code -or -not $Policy -or -not $Policy.Params -or -not $Policy.Params.ContainsKey($Code)) { return @() }
     $d = $Policy.Params[$Code]
     if (-not $d.ContainsKey($Key)) { return @() }
     return @($d[$Key])
+}
+
+function Get-FixParamSummary {
+    <# 1.7.0: 감사·미리보기용 "키=값,값; 키=값" (값 원문 - 비밀값은 값으로 받지 않는다). 값이 없으면 빈 문자열 #>
+    param($Policy, [Parameter(Mandatory)][string]$Code)
+    if (-not $Policy -or -not $Policy.Params -or -not $Policy.Params.ContainsKey($Code)) { return "" }
+    return (@($Policy.Params[$Code].Keys | ForEach-Object { "$_=$(@($Policy.Params[$Code][$_]) -join ',')" }) -join "; ")
+}
+
+function Test-FixParamReady {
+    <# 1.7.0 진입점 항목 루프(manual 분기 다음)용: 값 지정 조치(fix=param) 항목이 정책 값을 받았으면 $true. 정책 모드가 아니거나
+       이 호스트 구역에 값이 없으면 manual 과 같이 가이드 조치 방법만 안내하고 changes.log 에 MANUAL 을 남긴 뒤 $false. #>
+    param($Policy, [Parameter(Mandatory)][string]$Code, [string]$Title = "", [string]$Keys = "", [string]$Remediation = "")
+    if ($Policy -and $Policy.Params -and $Policy.Params.ContainsKey($Code)) { return $true }   # 값은 dry-run 미리보기(Show-FixItemNotes)·audit.txt 에 보인다
+    Write-Host "[$Code] $Title"
+    Write-Host "  등급: param (값 지정 조치) — 정책 파일 호스트 구역에 `"$Code.<키> = 값`"(키: $Keys)을 주면 -Policy 로 자동 적용. 지금은 수동 — 가이드 조치 방법: $Remediation"
+    if ($Global:FixLog) {
+        "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$Code`tparam`tMANUAL`t값 지정 조치 - 정책 값 없음(가이드 조치 방법 안내만)" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+    }
+    return $false
 }
 
 function Get-FixPolicyDecision {
@@ -1277,9 +1303,12 @@ function Test-FixPolicyItem {
 function Initialize-FixPolicy {
     <# 진입점용: -Policy 가 없으면 $null(대화형 모드), 있으면 Read-FixPolicy 결과. 형식 오류면 줄 번호와 함께 출력하고
        Ok=$false 객체를 돌려준다(진입점은 exit 2 - 아무것도 바꾸지 않음) #>
-    param([string]$Policy = "", [Parameter(Mandatory)][string]$CategoryNum, [Parameter(Mandatory)][string[]]$KnownCodes)
+    param([string]$Policy = "", [Parameter(Mandatory)][string]$CategoryNum, [Parameter(Mandatory)][string[]]$KnownCodes, [object[]]$GuideItems = @())
+    $Global:FixParamPolicy = $null
     if (-not $Policy) { return $null }
-    $p = Read-FixPolicy -Path $Policy -CategoryNum $CategoryNum -KnownCodes $KnownCodes
+    # 1.7.0: guide.json fix=param 항목의 받는 키(fix_params)로 값 줄을 검증한다
+    $p = Read-FixPolicy -Path $Policy -CategoryNum $CategoryNum -KnownCodes $KnownCodes -ParamKeys (Get-FixParamSpec -GuideItems $GuideItems)
+    if ($p.Ok) { $Global:FixParamPolicy = $p }
     if (-not $p.Ok) {
         Write-Host "정책 파일 거부($Policy) - 아무것도 바꾸지 않고 중단:" -ForegroundColor Red
         $p.Errors | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
@@ -1312,6 +1341,8 @@ function Start-FixAudit {
         "category=$CategoryNum",
         "mode=$(if ($Apply) { 'apply' } else { 'dry-run' })"
     )
+    # 1.7.0: 이 호스트 구역이 준 값 지정 조치 값(운영자 판단의 근거) - sh 와 같은 param.<코드>= 키
+    if ($Policy.Params) { foreach ($c in $Policy.Params.Keys) { Write-FixAuditLine -Lines @("param.$c=$(Get-FixParamSummary -Policy $Policy -Code $c)") } }
 }
 
 function Write-FixRunSummary {
@@ -1638,6 +1669,73 @@ function Set-FixLocalAccountDisabled {
         $Global:FixDetail = "계정 '$Name' 상태 변경 실패: $($_.Exception.Message)"
         $Global:FixEvidence = ""
     }
+}
+
+# ---- 1.7.0 값 지정 조치용: 로컬 그룹 구성원 추가 / 예약 작업 비활성화 (백업 → 항목·전체 원복) -----------------
+function Add-FixLocalGroupMemberBySid {
+    <# 그룹(SID)에 로컬 계정을 추가하고, 원복 때 지울 수 있게 "이 조치가 추가함"을 기록한다(이미 구성원이면 기록·변경 없이 $false).
+       기록 실패는 변경 전에 throw([백업 실패]). 추가하면 $true #>
+    param([Parameter(Mandatory)][string]$GroupSid, [Parameter(Mandatory)][string]$Member)
+    $u = Get-LocalUser -Name $Member -ErrorAction Stop
+    $sid = $u.SID.Value
+    if (@(Get-LocalGroupMembersBySid -Sid $GroupSid | Where-Object { "$($_.SID)" -eq $sid }).Count -gt 0) { return $false }
+    $dir = Get-FixItemBackupDir -Sub "group"
+    $file = Join-Path $dir "$(Get-FixBackupFileName -Raw "$GroupSid--$sid").json"
+    Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ GroupSid = $GroupSid; MemberSid = $sid; Name = $Member; Action = "added" }) | Out-Null
+    Add-LocalGroupMember -SID $GroupSid -Member $sid -ErrorAction Stop
+    return $true
+}
+
+function Restore-FixLocalGroupBackup {
+    param([Parameter(Mandatory)][string]$File)
+    $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
+    try {
+        if ($o.Action -eq "added" -and @(Get-LocalGroupMembersBySid -Sid $o.GroupSid | Where-Object { "$($_.SID)" -eq $o.MemberSid }).Count -gt 0) {
+            Remove-LocalGroupMember -SID $o.GroupSid -Member $o.MemberSid -ErrorAction Stop
+        }
+    } catch { Add-FixRollbackFailure "그룹 구성원 원복 실패 $($o.Name)($($o.GroupSid)): $($_.Exception.Message)" }
+}
+
+function Disable-FixScheduledTask {
+    <# 예약 작업을 비활성화한다. 원래 상태(사용 여부)를 먼저 기록하고(실패 시 throw [백업 실패]) 원복 때 다시 켠다. 이미 꺼져 있으면 $false #>
+    param([Parameter(Mandatory)][string]$TaskPath, [Parameter(Mandatory)][string]$TaskName)
+    $t = Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction Stop
+    if ($t.State -eq "Disabled") { return $false }
+    $dir = Get-FixItemBackupDir -Sub "task"
+    $file = Join-Path $dir "$(Get-FixBackupFileName -Raw "$TaskPath$TaskName").json"
+    Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ TaskPath = $TaskPath; TaskName = $TaskName; WasEnabled = $true }) | Out-Null
+    Disable-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction Stop | Out-Null
+    return $true
+}
+
+function Set-FixDnsZoneAllowUpdate {
+    <# DNS 영역(MicrosoftDNS_Zone)의 동적 업데이트(AllowUpdate)를 바꾼다. 원래 값을 먼저 기록하고(실패 시 throw [백업 실패]) 원복 때 되돌린다 #>
+    param([Parameter(Mandatory)][string]$Zone, [Parameter(Mandatory)][int]$Value)
+    $z = Get-WmiObject -Namespace "root\MicrosoftDNS" -Class "MicrosoftDNS_Zone" -Filter ("Name='" + ($Zone -replace "'", "''") + "'") -ErrorAction Stop
+    if (-not $z) { throw "DNS 영역 없음: $Zone" }
+    $dir = Get-FixItemBackupDir -Sub "dnszone"
+    $file = Join-Path $dir "$(Get-FixBackupFileName -Raw $Zone).json"
+    Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Zone = $Zone; AllowUpdate = [int]$z.AllowUpdate }) | Out-Null
+    $z.AllowUpdate = $Value
+    [void]$z.Put()
+}
+
+function Restore-FixDnsZoneBackup {
+    param([Parameter(Mandatory)][string]$File)
+    $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
+    try {
+        $z = Get-WmiObject -Namespace "root\MicrosoftDNS" -Class "MicrosoftDNS_Zone" -Filter ("Name='" + ("$($o.Zone)" -replace "'", "''") + "'") -ErrorAction Stop
+        if (-not $z) { throw "영역 없음" }
+        $z.AllowUpdate = [int]$o.AllowUpdate
+        [void]$z.Put()
+    } catch { Add-FixRollbackFailure "DNS 영역 동적 업데이트 원복 실패 $($o.Zone): $($_.Exception.Message)" }
+}
+
+function Restore-FixScheduledTaskBackup {
+    param([Parameter(Mandatory)][string]$File)
+    $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
+    try { if ($o.WasEnabled) { Enable-ScheduledTask -TaskPath $o.TaskPath -TaskName $o.TaskName -ErrorAction Stop | Out-Null } }
+    catch { Add-FixRollbackFailure "예약 작업 원복 실패 $($o.TaskPath)$($o.TaskName): $($_.Exception.Message)" }
 }
 
 # ---- 경로 전체 백업 후 삭제/원복 (03_web WEB-07/WEB-12: "삭제 자체가 조치") -----------
@@ -2288,6 +2386,12 @@ function Restore-FixItem {
         ForEach-Object { Restore-FixShareBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "account") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixLocalAccountBackup -File $_.FullName }
+    Get-ChildItem -Path (Join-Path $dir "group") -Filter *.json -ErrorAction SilentlyContinue |
+        ForEach-Object { Restore-FixLocalGroupBackup -File $_.FullName }
+    Get-ChildItem -Path (Join-Path $dir "task") -Filter *.json -ErrorAction SilentlyContinue |
+        ForEach-Object { Restore-FixScheduledTaskBackup -File $_.FullName }
+    Get-ChildItem -Path (Join-Path $dir "dnszone") -Filter *.json -ErrorAction SilentlyContinue |
+        ForEach-Object { Restore-FixDnsZoneBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "webconfig") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixWebConfigPropertyBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "firewall") -Filter *.json -ErrorAction SilentlyContinue |
@@ -2350,4 +2454,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixParamSpec, Get-FixParam, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixParamSpec, Get-FixParam, Get-FixParamSummary, Test-FixParamReady, Add-FixLocalGroupMemberBySid, Restore-FixLocalGroupBackup, Disable-FixScheduledTask, Restore-FixScheduledTaskBackup, Set-FixDnsZoneAllowUpdate, Restore-FixDnsZoneBackup, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion

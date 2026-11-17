@@ -23,5 +23,8 @@ $evidence = ($zones | ForEach-Object { "$($_.Name): AllowUpdate=$($_.AllowUpdate
 if ($violations.Count -eq 0) {
     return New-CheckResult -Code "W-32" -Status "GOOD" -Detail "모든 영역의 동적 업데이트가 없음(0)으로 설정됨" -Evidence $evidence
 } else {
+    # 1.7.0 값 지정 조치: W-32.zones 후보(동적 업데이트가 켜진 영역) - lib/policy_draft.py 가 읽는다
+    $cand = @($violations | ForEach-Object { "$($_.Name)" } | Where-Object { $_ -notmatch ',' })
+    if ($cand.Count -gt 0) { $evidence += "`n`n[candidates] $($cand -join ',')" }
     return New-CheckResult -Code "W-32" -Status "VULN" -Detail ("동적 업데이트가 설정된 영역 존재: " + (($violations | ForEach-Object { $_.Name }) -join ", ")) -Evidence $evidence
 }

@@ -105,7 +105,7 @@ try {
     foreach ($it in $Guide.items) { $GuideByCode[$it.code] = $it }
 
     # G-01(1.6.0): 정책 모드 - 형식 오류(줄 번호)·카테고리 불일치·만료·없는 코드·호스트 미등록이면 아무것도 바꾸지 않고 중단
-    $FixPolicy = Initialize-FixPolicy -Policy $Policy -CategoryNum $CategoryNum -KnownCodes @($Guide.items | ForEach-Object { $_.code })
+    $FixPolicy = Initialize-FixPolicy -Policy $Policy -CategoryNum $CategoryNum -KnownCodes @($Guide.items | ForEach-Object { $_.code }) -GuideItems @($Guide.items)
     if ($FixPolicy -and -not $FixPolicy.Ok) { exit 2 }
 
     # X-06: 이 컴퓨터·이 카테고리의 진단 결과인지 확인(실제 적용할 때만 - dry-run 은 무엇이든 미리보기 가능)
@@ -113,7 +113,7 @@ try {
         exit 2
     }
     # C2: result.json 의 코드도 guide.json 항목 코드와 일치할 때만 "fixes\<코드>.ps1" 로 잇는다(조작된 결과 파일로 임의 .ps1 실행 방지)
-    $VulnCodes = @(Select-KnownItemCodes -Codes @(Get-ResultVulnCodes -ResultJson $ResultJson) -KnownCodes @($Guide.items | ForEach-Object { $_.code }))
+    $VulnCodes = @(Select-KnownItemCodes -Codes @(Get-ResultVulnCodes -ResultJson $ResultJson -ParamPolicy $FixPolicy) -KnownCodes @($Guide.items | ForEach-Object { $_.code }))
     if ($Items) {
         $wanted = @($Items -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ })
         $VulnCodes = @($VulnCodes | Where-Object { $wanted -contains $_ })
@@ -161,6 +161,11 @@ try {
             Write-Host "[$code] $title"
             Write-Host "  등급: manual (자동 조치 없음) — 가이드 조치 방법: $($meta.remediation)"
             "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`tmanual`tMANUAL`t자동 조치 없음(가이드 조치 방법 안내만)" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+            $nManual++
+            continue
+        }
+        # 1.7.0 값 지정 조치: 정책 모드에서 이 호스트 구역에 값이 있을 때만 적용(대화형·값 없음은 manual 과 같이 안내만)
+        if ($grade -eq "param" -and -not (Test-FixParamReady -Policy $FixPolicy -Code $code -Title $title -Keys "$($meta.fix_params)" -Remediation "$($meta.remediation)")) {
             $nManual++
             continue
         }
@@ -212,6 +217,13 @@ try {
             Write-Host "[$code] $title"
             Write-Host "  적용 완료 — 재검증 결과: $($Global:CheckStatus) ($($Global:FixDetail))"
             "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`tAPPLIED`t$($Global:FixDetail) (recheck=$($Global:CheckStatus))" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
+            $nApplied++
+        } elseif ($grade -eq "param" -and $Global:FixStatus -eq "APPLIED" -and $Global:CheckStatus -eq "VULN") {
+            # 1.7.0 값 지정 조치는 운영자가 고른 대상만 바꾼다 - 고르지 않은 대상이 남아 재검증이 VULN 이어도 지정 대상은 조치된 것이라
+            # 원복하지 않고 "일부 적용(남은 부분 수동)"으로 남긴다(01_unix 의 PARTIAL_MANUAL 과 같은 상태)
+            Write-Host "[$code] $title"
+            Write-Host "  지정 대상 적용 완료 — 재검증 VULN(정책 값에 없는 대상이 남음, 원복하지 않음): $($Global:FixDetail)"
+            "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`tPARTIAL_MANUAL`t$($Global:FixDetail) (recheck=$($Global:CheckStatus))" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
             $nApplied++
         } else {
             Write-Host "[$code] $title"

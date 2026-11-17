@@ -21,6 +21,10 @@ $evidence = $tasks | ForEach-Object {
     "$($_.TaskPath)$($_.TaskName) [$($_.State)] -> $action"
 }
 
+# 1.7.0 값 지정 조치: W-37.tasks 후보(작업 전체 경로, 쉼표가 든 것 제외) - lib/policy_draft.py 가 읽는다
+$cand = @($tasks | ForEach-Object { "$($_.TaskPath)$($_.TaskName)" } | Where-Object { $_ -notmatch ',' })
+$candLine = if ($cand.Count -gt 0) { "`n`n[candidates] $($cand -join ',')" } else { "" }
+
 return New-CheckResult -Code "W-37" -Status "MANUAL" `
     -Detail "Microsoft 기본 경로 외의 활성 예약 작업이 $($tasks.Count)건 존재함 — 의심스러운 명령/파일 여부를 수동 검토 필요" `
-    -Evidence ($evidence -join "`n")
+    -Evidence (($evidence -join "`n") + $candLine)
