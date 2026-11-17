@@ -42,7 +42,8 @@ function Get-WinStateSnapshot {
     param([string]$Category = "", [string[]]$TempExclude = @("rs_*", "fs_*"))
     $s = [ordered]@{}
     $errs = @()
-    $s.services = (Get-CimInstance Win32_Service | Sort-Object Name | ForEach-Object { "$($_.Name)|$($_.StartMode)|$($_.State)" }) -join "`n"
+    # WerSvc(Windows 오류 보고)는 OS 가 오류 이벤트마다 트리거로 켜고 끈다 - 실행 상태는 비교하지 않고 시작 유형만 본다(1.7.0 CI Server 2022 PC-07 실측)
+    $s.services = (Get-CimInstance Win32_Service | Sort-Object Name | ForEach-Object { if ($_.Name -eq "WerSvc") { "$($_.Name)|$($_.StartMode)|-" } else { "$($_.Name)|$($_.StartMode)|$($_.State)" } }) -join "`n"
     $lines = foreach ($spec in $Script:WinStateRegKeys) {
         $mode = $spec.Substring(0, 1); $k = $spec.Substring(2)
         if (-not (Test-Path -LiteralPath $k)) { "$k <없음>"; continue }

@@ -61,7 +61,7 @@ $NoRbLines = @{ "W-42" = @('\\Services\\EventLog\\') }
 $AlwaysSoft = @("iis")
 $AlwaysSoftLines = @('^W\|')
 # 카테고리별 최소 적용 건수(러너 기본 상태 + 픽스처 기준). 0건이면 이후 비교가 모두 비어 PASS 하던 것을 막는다.
-$MinApplied = @{ "02_windows" = 1; "07_pc" = 1; "03_web" = 4 }
+$MinApplied = @{ "02_windows" = 1; "07_pc" = 1; "03_web" = 3 }
 # auto 등급인데 러너에서 적용되지 않는 것이 알려진 항목(사유와 함께 추가). 비어 있으면 "VULN 인 auto 항목은 전부 APPLIED" 가 기준.
 $KnownAutoNotApplied = @{
     # KNOWN_ISSUES L-06: 러너(Windows Server)의 Defender 실시간 감시는 Set-MpPreference 로 켜지지 않는다(정책/이미지 설정) -
@@ -159,7 +159,8 @@ $cmp.Notes | ForEach-Object { Write-Host "  · $_" }
 
 # ⑥ 반드시 적용돼야 하는 항목 - 03_web: workflow 가 apply_iis.ps1 -Mode vuln -FixCases 로 하위 application/vdir·사이트
 # 재정의까지 취약하게 만든다(F-R3). 루트·전역만 고치는 조치는 여기서 FAILED_ROLLED_BACK 으로 잡힌다.
-$MustApply = @{ "03_web" = @("WEB-04", "WEB-16", "WEB-18", "WEB-22") }
+# 1.7.0(R8): WEB-18·WEB-19 는 원복 불가·업무 영향 표기가 있어 confirm - 비대화형 -Yes 일괄 적용에서는 적용되지 않는다
+$MustApply = @{ "03_web" = @("WEB-04", "WEB-16", "WEB-22") }
 if ($MustApply.ContainsKey($Category)) {
     foreach ($c in $MustApply[$Category]) {
         if ($base.Map[$c] -ne "VULN") { $fail += "${c}: 조치 전 진단이 VULN 이 아님($($base.Map[$c])) - 픽스처가 재현 상태를 만들지 못함"; continue }
