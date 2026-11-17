@@ -50,7 +50,8 @@ function Get-WinStateSnapshot {
         if ($mode -eq "R") { $items += @(Get-ChildItem -LiteralPath $k -Recurse -ErrorAction SilentlyContinue) }
         foreach ($item in $items) {
             # DHCP 임대로 수시로 바뀌는 값(Tcpip\Parameters 의 Dhcp*)은 제외
-            foreach ($n in ($item.GetValueNames() | Where-Object { $_ -notlike "Dhcp*" } | Sort-Object)) { "$($item.Name)|$n|$(@($item.GetValue($n)) -join ',')" }
+            # PagefileUsage(Memory Management)는 OS 가 페이지 파일 사용량을 수시로 기록하는 값이라 조치와 무관하게 바뀐다(1.7.0 CI Server 2022 W-41 실측)
+            foreach ($n in ($item.GetValueNames() | Where-Object { $_ -notlike "Dhcp*" -and $_ -ne "PagefileUsage" } | Sort-Object)) { "$($item.Name)|$n|$(@($item.GetValue($n)) -join ',')" }
         }
     }
     $s.registry = $lines -join "`n"
