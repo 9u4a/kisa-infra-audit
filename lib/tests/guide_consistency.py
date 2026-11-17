@@ -23,6 +23,9 @@ WEB-05 confirm 인데 Apache/Nginx/Tomcat 조치 없음, WEB-17 auto 인데 조�
      머리말(앞 12줄)의 "# 값: <키>=<설명>" 키는 fix_params 의 부분집합이고, 계열(엔진)을 합친 키 집합은 fix_params 와 같아야 한다
      (WEB-20 처럼 엔진마다 받는 값이 다를 수 있음 - Apache/Nginx cert·key, IIS thumbprint)(정책 파서가 fix_params 로 키를 검증하고, 미리보기·
      문서가 머리말 설명을 보여 준다). fix_params 는 param 항목에만 둔다. param 도 R1 처럼 조치 스크립트가 있어야 한다.
+  R8 (1.7.0) "# 원복:"(완전 원복 불가) 또는 "# 영향:"(적용 순간 업무 영향)이 있는 조치는 auto 등급이 될 수 없다(confirm/param) -
+     위험한 조치는 대화형이면 항목마다 운영자 y/N, 정책 모드면 승인자가 정책 파일에 "코드:irreversible" 로 적은 경우에만 적용된다.
+     auto 는 일괄 실행(--yes/-Yes)에서 항목별 확인 없이 적용되므로 위험 조치가 섞이면 안 된다(docs/APPROVAL_REQUIRED.md).
   R6 "# 원복: ..."(F4)·"# 영향: ..."(F5, 1.6.0 G-02) 은 앞 12줄 안에 내용과 함께 있어야 한다 - 진입점이 앞 12줄만 읽어 정책 모드의
      :irreversible 요구와 docs/FIX_IMPACT.md(lib/tests/fix_impact.py)를 정하므로, 밖에 있으면 조용히 무시된다.
 
@@ -111,6 +114,8 @@ def main() -> int:
                 head = body[:12]
                 if not any(re.match(r"# 변경: \S", ln) for ln in head):
                     errors.append(f"{label} {code}: 조치 머리말(앞 12줄)에 '# 변경: ...' 이 없음(R5)")
+                if items.get(code, {}).get("fix") == "auto" and any(re.match(r"# (원복|영향): \S", ln) for ln in head):
+                    errors.append(f"{label} {code}: '# 원복:'/'# 영향:' 이 있는 위험 조치인데 fix=auto - confirm(운영자 확인)으로(R8)")
                 for tag in ("원복", "영향"):
                     if any(ln.startswith(f"# {tag}:") for ln in body[12:]):
                         errors.append(f"{label} {code}: '# {tag}:' 가 앞 12줄 밖에 있음 - 진입점이 읽지 못함(R6)")

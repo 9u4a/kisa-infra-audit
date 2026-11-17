@@ -1,4 +1,4 @@
-﻿# W-39 (상) 백신 프로그램 업데이트 [fix: auto]
+﻿# W-39 (상) 백신 프로그램 업데이트 [fix: confirm]
 # 변경: Windows Defender 서명 업데이트(Update-MpSignature) 실행 - 되돌리지 않음
 # 원복: 불가 — 백신 서명 업데이트는 되돌리지 않는다(이전 서명으로 되돌릴 이유·경로가 없음, 운영 안전 기준 F4 로 사전 고지)
 # checks/W-39.ps1: Windows Defender 서명이 7일 이상 오래됐거나(자동 갱신 가능) 백신 자체가

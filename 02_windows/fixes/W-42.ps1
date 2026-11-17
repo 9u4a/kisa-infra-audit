@@ -1,4 +1,4 @@
-﻿# W-42 (하) 이벤트 로그 관리 설정 [fix: auto]
+﻿# W-42 (하) 이벤트 로그 관리 설정 [fix: confirm]
 # 변경: Application/Security/System 이벤트 로그 중 최대 크기 10,240KB 미만인 로그를 10,240KB 로(자동 원복 불가)
 # 원복: 불가 — 이벤트 로그 최대 크기는 자동 원복 경로 없음(변경 전 값은 changes.log)
 # checks/W-42.ps1: 양호 = Application/Security/System 로그 최대 크기 10,240KB 이상.

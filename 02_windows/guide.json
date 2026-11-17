@@ -155,7 +155,7 @@
       "guide_page": 181,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -254,7 +254,7 @@
       "guide_page": 185,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -386,7 +386,7 @@
       "guide_page": 192,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -1108,7 +1108,7 @@
       "guide_page": 228,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -1260,7 +1260,7 @@
       "guide_page": 234,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -1293,7 +1293,7 @@
       "guide_page": 235,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -1359,7 +1359,7 @@
       "guide_page": 239,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -1590,7 +1590,7 @@
       "guide_page": 248,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",
@@ -2046,7 +2046,7 @@
       "guide_page": 269,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "server2012r2",
         "server2016",

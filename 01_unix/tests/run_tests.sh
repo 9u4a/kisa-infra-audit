@@ -79,7 +79,8 @@ done
 #    /etc/pam.d/su 가 심볼릭 링크여도 U-06 조치·원복 뒤 링크 유지. X-04 가짜 조치(백업 → 변경 → 미설정 변수)가 죽어도
 #    그 항목만 원복·FAILED_ROLLED_BACK(사유 기록) 후 다음 항목(U-18) 진행, fix_abort_item 은 종료코드 3·ABORTED·다음 항목
 #    미변경. X-06 다른 호스트·카테고리·7일 지난 result.json 은 exit 2·변경 없음, --force 면 진행.
-FIX_EXPECT_APPLIED='U-09,U-11,U-14,U-15,U-16,U-17,U-18,U-20,U-27,U-30,U-32,U-34,U-35,U-36,U-53,U-62,'
+# 1.7.0(R8): 원복 불가·업무 영향이 있는 U-11·U-34·U-36 은 confirm 이 되어 비대화형 --yes 에서는 적용되지 않는다(DECLINED)
+FIX_EXPECT_APPLIED='U-09,U-14,U-15,U-16,U-17,U-18,U-20,U-27,U-30,U-32,U-35,U-53,U-62,'
 FIX_EXPECT_SKIPPED='U-13,'
 out=$(docker run --rm "$IMAGE" sh 01_unix/tests/fixtures/fix_safety.sh)
 if printf '%s\n' "$out" | grep -qx 'FIX_RC=0' && printf '%s\n' "$out" | grep -qx 'CRASH=no' \

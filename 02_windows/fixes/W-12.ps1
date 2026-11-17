@@ -1,4 +1,4 @@
-﻿# W-12 (중) 익명 SID/이름 변환 허용 해제 [fix: auto]
+﻿# W-12 (중) 익명 SID/이름 변환 허용 해제 [fix: confirm]
 # 변경: 보안 정책 LSAAnonymousNameLookup=0 ("네트워크 액세스: 익명 SID/이름 변환 허용" 사용 안 함)
 # 원복: 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함
 # checks/W-12.ps1: 양호 = secedit [System Access] LSAAnonymousNameLookup=0.
