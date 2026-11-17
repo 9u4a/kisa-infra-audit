@@ -114,13 +114,14 @@ while [ "$i" -lt "$n" ]; do
             [ "$(kv BASE_SYNTAX_RC)" = 0 ] || why="$why 조치전문법실패"
             [ "$(kv FIX_SYNTAX_RC)" = 0 ] || why="$why 조치후문법실패"
             [ "$(kv FIX_STATE)" = diff ] || why="$why 조치가설정을바꾸지않음"
+            v=$(kv FIX_VERIFY); [ -z "$v" ] || [ "$v" = ok ] || why="$why 조치후상태확인실패($v)"
             [ "$(kv ROLLBACK)" = same ] || why="$why 원복후상태다름"
             fixinfo=" [조치 $(kv FIX_RESULT)→$(kv FIX_RECHECK), 원복 $(kv ROLLBACK)]" ;;
         NONE)
             [ -n "$(kv FIX_RESULT)" ] || why="$why 조치기록없음(fix.sh 가 이 항목을 처리하지 않음, FIX_RC=$(kv FIX_RC))"
             [ "$(kv FIX_RESULT)" != APPLIED ] || why="$why 조치가적용됨(기대: 미적용)"
             [ "$(kv FIX_STATE)" = same ] || why="$why 미적용조치가설정을바꿈"
-            [ "$(kv FIX_RECHECK)" = VULN ] || why="$why 미적용후재진단=$(kv FIX_RECHECK)"
+            [ "$(kv FIX_RECHECK)" = "$expect" ] || why="$why 미적용후재진단=$(kv FIX_RECHECK)(기대 $expect)"
             [ "$(kv ROLLBACK)" = same ] || why="$why 원복후상태다름"
             fixinfo=" [조치 미적용 기대: $(kv FIX_RESULT), 설정 $(kv FIX_STATE)]" ;;
         *) why="$why 알수없는FIX지시($fm)" ;;

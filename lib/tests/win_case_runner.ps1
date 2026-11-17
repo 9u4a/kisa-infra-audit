@@ -12,6 +12,7 @@
 #   NoRollback : 조치가 원복 불가로 설계된 항목(Register-FixNoRollback) - 원복 후 상태 비교를 참고로만 표시
 #   Params  : 1.7.0 값 지정 조치(fix=param) - @{ <키> = @('값', ...) }. 정책 값($Global:FixParamPolicy)으로 조치하며 expect 가 MANUAL 이어도 검증.
 #             Verify(조치 직후 Probe 출력이 맞아야 할 정규식 - 지정 대상만 바뀌었는지), RejectParams(값 검증 실패 → 조치 ERROR + Probe 그대로)
+#             값 자리에 @{ Expr = '<PowerShell 식>' } 를 두면 조치 직전에 그 식을 계산한다(케이스가 만든 인증서 지문 등)
 # 흐름: 진단(전) → Probe P0 → Setup → Probe P1(Want) → 진단 = expect → [조치 검증] → Cleanup → Probe = P0 → 진단 = 전
 # 선언된 케이스에 구현이 없거나, 예외로 끝나거나, 실행 건수가 선언 건수와 다르면 FAIL.
 
@@ -94,7 +95,7 @@ function Invoke-CaseSuite {
             if ($k.Params) {
                 $qv = { param($s) "'" + ("$s" -replace "'", "''") + "'" }
                 $pl = @("`$pp = New-Object 'System.Collections.Generic.Dictionary[string,string[]]'")
-                foreach ($pk in $k.Params.Keys) { $pl += "`$pp[$(& $qv $pk)] = [string[]]@($((@($k.Params[$pk]) | ForEach-Object { & $qv $_ }) -join ', '))" }
+                foreach ($pk in $k.Params.Keys) { $pl += "`$pp[$(& $qv $pk)] = [string[]]@($((@($k.Params[$pk]) | ForEach-Object { if ($_ -is [hashtable] -and $_.Expr) { "(" + $_.Expr + ")" } else { & $qv $_ } }) -join ', '))" }
                 $pl += "`$pd = New-Object 'System.Collections.Generic.Dictionary[string,object]'; `$pd['$($c.code)'] = `$pp"
                 $pl += "`$Global:FixParamPolicy = [PSCustomObject]@{ Params = `$pd; Approver = 'case-runner' }"
                 $paramScript = $pl -join "`n"
@@ -103,7 +104,7 @@ function Invoke-CaseSuite {
                 # 값 검증 실패: 조치가 ERROR 를 내고 아무것도 바꾸지 않아야 한다(Probe 그대로)
                 $qv = { param($s) "'" + ("$s" -replace "'", "''") + "'" }
                 $rl = @("`$pp = New-Object 'System.Collections.Generic.Dictionary[string,string[]]'")
-                foreach ($pk in $k.RejectParams.Keys) { $rl += "`$pp[$(& $qv $pk)] = [string[]]@($((@($k.RejectParams[$pk]) | ForEach-Object { & $qv $_ }) -join ', '))" }
+                foreach ($pk in $k.RejectParams.Keys) { $rl += "`$pp[$(& $qv $pk)] = [string[]]@($((@($k.RejectParams[$pk]) | ForEach-Object { if ($_ -is [hashtable] -and $_.Expr) { "(" + $_.Expr + ")" } else { & $qv $_ } }) -join ', '))" }
                 $rl += "`$pd = New-Object 'System.Collections.Generic.Dictionary[string,object]'; `$pd['$($c.code)'] = `$pp"
                 $rl += "`$Global:FixParamPolicy = [PSCustomObject]@{ Params = `$pd; Approver = 'case-runner' }"
                 $rOut = Join-Path $env:TEMP "case_rej_$tag"

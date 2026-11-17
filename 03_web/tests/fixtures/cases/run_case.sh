@@ -90,7 +90,16 @@ echo "DETAIL=$(tr -d '\n' < "$R" | grep -oE '"detail"[[:space:]]*:[[:space:]]*"(
 grade=$(. lib/common.sh >/dev/null 2>&1; guide_field 03_web/guide.json "$CODE" fix)
 mode=$(sed -n 's/^# FIX:[[:space:]]*\([A-Z]*\).*/\1/p' "$CASE" | head -n 1)
 why=$(sed -n 's/^# FIX:[[:space:]]*[A-Z]*[[:space:]]*//p' "$CASE" | head -n 1)
-if [ "$EXPECT" != VULN ] || [ "$grade" = manual ]; then
+# 1.7.0 값 지정 조치(fix=param): 케이스 머리의 "# PARAM: <코드>.<키> = <값>" 줄로 정책 파일을 만들어 정책 모드로 조치한다(진단이
+# MANUAL 이어도 검증). "# VERIFY: <명령>" 은 조치 직후(원복 전) 지정 대상만 바뀌었는지 확인하는 명령 → FIX_VERIFY=ok|fail
+params=$(sed -n 's/^# PARAM:[[:space:]]*//p' "$CASE")
+verify=$(sed -n 's/^# VERIFY:[[:space:]]*//p' "$CASE" | head -n 1)
+pol=""
+if [ -n "$params" ]; then
+    { printf 'category=03\nexpires=2099-12-31\napprover=case-runner\n%s:irreversible\n[host:*]\n' "$CODE"; printf '%s\n' "$params"; } > /tmp/case_policy
+    pol="--policy /tmp/case_policy --operator case-runner"
+fi
+if { [ "$EXPECT" != VULN ] && [ -z "$params" ]; } || [ "$grade" = manual ]; then
     echo "FIX_MODE=n/a"; exit 0
 fi
 # auto/confirm 등급인데 조치 스크립트가 없으면 케이스가 사유를 밝혀야 한다(조치 검증이 조용히 빠지지 않게 - 1.4.0 리뷰)
@@ -114,11 +123,14 @@ echo "BASE_SYNTAX_RC=$?"
 snap conf > /tmp/case.prefix
 # 먼저 FIX_INPUT 을 한 줄씩, 그 뒤로는 y 를 천천히 넣는다(fix_safety.sh 와 같은 방식 - 터미널 에코가 로그를 채우지 않게)
 ( IFS='|'; for a in $input; do echo "$a"; sleep 0.3; done; while echo y; do sleep 0.3; done ) 2>/dev/null | \
-    script -qec "sh 03_web/fix.sh -r /tmp/case.result.json -o '$OUT' -i '$CODE' --apply --yes" /dev/null > /tmp/case.fix.log 2>&1
+    script -qec "sh 03_web/fix.sh -r /tmp/case.result.json -o '$OUT' -i '$CODE' --apply --yes $pol" /dev/null > /tmp/case.fix.log 2>&1
 echo "FIX_RC=$?"
 echo "FIX_RESULT=$(awk -F '\t' -v c="$CODE" '$2 == c { r = $4 } END { print r }' "$OUT"/*_03_fix_*/changes.log 2>/dev/null)"
 awk -F '\t' -v c="$CODE" '$2 == c && $4 != "APPLIED" { print "  FIXDETAIL: " substr($5, 1, 300) }' "$OUT"/*_03_fix_*/changes.log 2>/dev/null
 echo "FIX_RECHECK=$(status_of "$CODE")"
+if [ -n "$verify" ]; then
+    if sh -c "$verify" >/tmp/case.verify.log 2>&1; then echo "FIX_VERIFY=ok"; else echo "FIX_VERIFY=fail($(head -c 200 /tmp/case.verify.log | tr '\n' ' '))"; fi
+fi
 $TEST >/dev/null 2>&1
 echo "FIX_SYNTAX_RC=$?"
 snap conf > /tmp/case.postfix

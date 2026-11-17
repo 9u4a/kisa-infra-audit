@@ -514,13 +514,14 @@
       "guide_page": 320,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "aliases",
       "envs": [
         "apache",
         "nginx",
         "tomcat"
       ],
-      "deviation": "1.4.1(Q-02): 가이드 판단기준이 '불필요한' 가상 디렉터리라 Alias/alias/Context path 가 있으면 업무 필요 여부를 판단할 수 없어 MANUAL(목록 제공), 없으면 GOOD 이다 - VULN 을 자동 판정하지 않으므로 자동 조치도 없다(fix auto→manual 정정, 이전 auto 표기는 실행 경로가 없는 등급이었음)."
+      "deviation": "조치(1.7.0 값 지정 조치): 가상 디렉터리의 필요 여부는 업무 판단이라 진단은 MANUAL 이다. 운영자가 정책 파일 WEB-17.aliases 로 준 URL 만 Apache Alias 줄·Nginx alias location 블록을 주석 처리한다(가리키던 파일은 지우지 않음, reload 없음). Tomcat <Context path> 는 XML 요소 삭제라 수동 조치. 1.4.1(Q-02) 기록: 예전 auto 표기는 실행 경로가 없는 등급이었다."
     },
     {
       "code": "WEB-18",
@@ -605,13 +606,14 @@
       "guide_page": 329,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "cert,key,thumbprint",
       "envs": [
         "apache",
         "nginx",
         "iis"
       ],
-      "deviation": "SSL/TLS 활성화에는 유효한 인증서가 필요한데, 스크립트가 신뢰할 수 있는 인증서를 스스로 발급/확보할 수 없어(자체 서명 인증서는 실제 신뢰 체계를 대체하지 못함) manual로 재분류함(백신 설치 W-45와 동일한 부류의 문제 - '설치/발급'류 조치는 자동화 대상이 아님)."
+      "deviation": "조치(1.7.0 값 지정 조치): 신뢰할 수 있는 인증서를 스크립트가 발급할 수 없어 manual 이었다. 운영자가 준비한 인증서를 정책 값으로 받는다 - Apache/Nginx 는 WEB-20.cert·key(PEM 파일 경로, 키·인증서 짝·만료 검증) 로 mod_ssl 로드·443 VirtualHost / listen 443 ssl 서버 블록을 추가(reload 없음, 문법 검사), IIS 는 WEB-20.thumbprint(LocalMachine\\My 인증서) 로 https 바인딩 추가·인증서 연결(원복 시 제거)."
     },
     {
       "code": "WEB-21",

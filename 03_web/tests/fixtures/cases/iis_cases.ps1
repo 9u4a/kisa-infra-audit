@@ -192,6 +192,17 @@ $IisCases = @{
         Want = '^global=True site=True$'
     }
     # WEB-20 양호: https 바인딩(SSL/TLS) 구성
+    # WEB-20 취약 + 1.7.0 값 지정 조치: https 바인딩 없음, 서버에 인증서는 설치돼 있음 → 정책 값 WEB-20.thumbprint 로 바인딩·인증서 연결
+    # (원복하면 바인딩과 0.0.0.0!443 인증서 연결이 사라진다). 없는 지문은 아무것도 바꾸지 않는다
+    "no-https-cert-ready" = @{
+        Probe = 'Write-Output ("https_bindings=" + @(Get-WebBinding -Name $site -Protocol https).Count + " ssl443=" + (Test-Path "IIS:\SslBindings\0.0.0.0!443"))'
+        Setup = 'Save-CaseConfig; foreach ($b in @(Get-WebBinding -Name $site -Protocol https)) { Remove-WebBinding -InputObject $b }; New-SelfSignedCertificate -DnsName "kisa-case.local" -CertStoreLocation "Cert:\LocalMachine\My" | Out-Null'
+        Cleanup = 'Restore-CaseConfig; Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -eq "CN=kisa-case.local" } | Remove-Item'
+        Want = '^https_bindings=0 ssl443=False$'; Fix = $true; FixExpect = @("GOOD")
+        Params = @{ thumbprint = @(@{ Expr = '(Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -eq "CN=kisa-case.local" } | Select-Object -First 1).Thumbprint' }) }
+        Verify = '^https_bindings=1 ssl443=True$'
+        RejectParams = @{ thumbprint = @("0000000000000000000000000000000000000000") }
+    }
     "https-binding" = @{
         Probe = 'Write-Output ("https_bindings=" + @(Get-WebBinding -Name $site -Protocol https).Count)'
         Setup = 'Save-CaseConfig; New-WebBinding -Name $site -Protocol https -Port 44300 -IPAddress "*"'

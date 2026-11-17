@@ -8,7 +8,7 @@
 - **:irreversible**: 둘 중 하나라도 있으면 정책 모드(`fix --policy`)에서 정책 파일에 `코드:irreversible` 로 적어야 적용된다(없으면 `POLICY_SKIPPED`). 대화형 실행에는 영향 없음.
 - **param(키)**: 값 지정 조치(1.7.0) - 정책 파일 호스트 구역의 `코드.키 = 값` 이 있을 때만 정책 모드로 적용한다(대화형·값 없음은 수동 안내).
 
-전체 조치 232개 중 정책에 `:irreversible` 이 필요한 조치 94개.
+전체 조치 235개 중 정책에 `:irreversible` 이 필요한 조치 97개.
 
 ## 01 Unix 서버 (63개 조치, :irreversible 필요 21개)
 
@@ -137,7 +137,7 @@
 | W-63 | Windows | 도메인 컨트롤러-사용자의 시간 동기화 | auto | 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함 | - | 필요 |
 | W-64 | Windows | 윈도우 방화벽 설정 | confirm | - | 방화벽 전 프로필 사용 — 허용 규칙이 없는 업무 포트(RDP/WinRM 외)로 들어오는 현재·이후 접속 차단 | 필요 |
 
-## 03 웹 서비스 (37개 조치, :irreversible 필요 8개)
+## 03 웹 서비스 (40개 조치, :irreversible 필요 11개)
 
 | 코드 | 대상 | 제목 | 등급 | 원복 불가 사유 | 업무 영향 | :irreversible |
 |---|---|---|---|---|---|---|
@@ -154,8 +154,10 @@
 | WEB-13 | Apache/Nginx/Tomcat(sh) | 웹 서비스 설정 파일 노출 제한 | confirm | - | - | - |
 | WEB-14 | Apache/Nginx/Tomcat(sh) | 웹 서비스 경로 내 파일의 접근 통제 | auto | - | - | - |
 | WEB-16 | Apache/Nginx/Tomcat(sh) | 웹 서비스 헤더 정보 노출 제한 | auto | - | - | - |
+| WEB-17 | Apache/Nginx/Tomcat(sh) | 웹 서비스 가상 디렉로리 삭제 | param(aliases) | - | 다음 reload·재시작부터 지정 URL 이 404(또는 문서 루트의 같은 경로)로 응답 — 그 경로를 쓰던 링크·앱 기능이 끊김 | 필요 |
 | WEB-18 | Apache/Nginx/Tomcat(sh) | 웹 서비스 WebDAV 비활성화 | auto | - | - | - |
 | WEB-19 | Apache/Nginx/Tomcat(sh) | 웹 서비스 SSI(Server Side Includes) 사용 제한 | auto | - | - | - |
+| WEB-20 | Apache/Nginx/Tomcat(sh) | SSL/TLS 활성화 | param(cert,key,thumbprint) | - | 다음 reload·재시작부터 443 포트로 HTTPS 를 받음 — 같은 포트를 쓰는 다른 프로그램이 있으면 웹 서버가 기동하지 못함(문법 검사로는 못 잡음) | 필요 |
 | WEB-21 | Apache/Nginx/Tomcat(sh) | HTTP 리디렉션 | confirm | - | - | - |
 | WEB-22 | Apache/Nginx/Tomcat(sh) | 에러 페이지 관리 | auto | - | - | - |
 | WEB-23 | Apache/Nginx/Tomcat(sh) | LDAP 알고리즘 적절하게 구성 | confirm | - | - | - |
@@ -175,6 +177,7 @@
 | WEB-16 | IIS | 웹 서비스 헤더 정보 노출 제한 | auto | - | - | - |
 | WEB-18 | IIS | 웹 서비스 WebDAV 비활성화 | auto | - | WebDAV 저작 끄기 — WebDAV 로 파일을 올리거나 고치던 사용자·도구 접속 거부 | 필요 |
 | WEB-19 | IIS | 웹 서비스 SSI(Server Side Includes) 사용 제한 | auto | 불가 — 제거한 SSI 핸들러 매핑은 자동으로 다시 등록하지 않음 | - | 필요 |
+| WEB-20 | IIS | SSL/TLS 활성화 | param(cert,key,thumbprint) | - | 즉시 443 포트로 HTTPS 를 받음 — 같은 포트를 쓰는 다른 프로그램·사이트와 충돌하면 그 사이트가 시작되지 않을 수 있음 | 필요 |
 | WEB-21 | IIS | HTTP 리디렉션 | confirm | - | SSL 필수 설정 — https 바인딩이 있는 사이트에 http 로 접속하던 사용자·연동 시스템 요청 거부(403.4) | 필요 |
 | WEB-22 | IIS | 에러 페이지 관리 | auto | - | - | - |
 | WEB-26 | IIS | 로그 디렉터리 및 파일 권한 설정 | auto | - | - | - |

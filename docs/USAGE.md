@@ -202,6 +202,8 @@ U-23.files = /usr/local/bin/oldtool
 | W-32 | `zones` | 지정 DNS 영역의 동적 업데이트를 없음(0)으로(원래 값 백업·원복) |
 | W-37 | `tasks` | 예약 작업 비활성화(`\경로\이름`, \Microsoft\Windows\ 아래 OS 작업은 거부) |
 | WEB-15 | `handlers` | IIS 스크립트 매핑 제거(사이트·하위 경로, 원복 불가 - 스크립트 매핑 아닌 처리기 거부) |
+| WEB-17 | `aliases` | Apache Alias 줄·Nginx alias location 블록 주석 처리(URL 경로, Tomcat Context 는 거부) |
+| WEB-20 | `cert`·`key` / `thumbprint` | Apache·Nginx: PEM 인증서·키(짝·만료 검증)로 443 SSL 설정 추가 / IIS: 인증서 지문으로 https 바인딩 |
 | W-62 | `entries` | 시작 프로그램의 레지스트리 Run 값 제거(시작 폴더 바로가기는 거부) |
 
 - 승인 줄과 값 줄이 둘 다 있어야 적용된다. 값이 있으면 진단이 MANUAL 이어도 대상에 넣는다(값이 곧 운영자의 판정). 대화형 실행이나
