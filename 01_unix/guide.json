@@ -315,7 +315,7 @@
       "guide_page": 35,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "rhel",
         "debian"
@@ -976,7 +976,7 @@
       "guide_page": 68,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "rhel",
         "debian"
@@ -1034,7 +1034,7 @@
       "guide_page": 77,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "rhel",
         "debian"
@@ -1092,7 +1092,7 @@
       "guide_page": 83,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "rhel",
         "debian"
@@ -1266,7 +1266,7 @@
       "guide_page": 102,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "rhel",
         "debian"
@@ -1582,7 +1582,7 @@
       "guide_page": 134,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "rhel",
         "debian"

@@ -545,7 +545,7 @@
       "guide_page": 322,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "apache",
         "nginx",
@@ -575,7 +575,7 @@
       "guide_page": 325,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "apache",
         "nginx",

@@ -1,4 +1,4 @@
-﻿# W-34 (중) Telnet 서비스 비활성화 [fix: auto]
+﻿# W-34 (중) Telnet 서비스 비활성화 [fix: confirm]
 # 변경: Telnet(TlntSvr) 구동 중이면 tlntadmn config sec /NTLM:yes 로 인증 방식을 NTLM 으로 설정(자동 원복 불가)
 # 원복: 불가 — Telnet 인증 방식(tlntadmn)은 자동 원복 경로 없음
 # checks/W-34.ps1: 취약 = Telnet 구동 중이며 NTLM 인증이 아님. tlntadmn 으로 인증 방식을

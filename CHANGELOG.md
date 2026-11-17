@@ -5,6 +5,8 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+
+## [1.7.0] - 2026-11-17
 ### Added
 - **값 지정 조치(fix=param)**: 판단을 사람이 해야 해 manual 이던 항목을 정책 파일의 값으로 자동 조치한다. 정책 파일 호스트 구역에
   `코드.키 = 값` 줄(sh·PowerShell·Python 파서 같은 규칙, 구역 밖·미승인 코드·미선언 키·중복·빈 값·제외한 코드의 값은 줄 번호와 함께 거부)을
@@ -28,8 +30,15 @@
     DSN 제거(레지스트리 키 백업 유형 regkey). 원복 SQL 은 변경 전에 큐에 넣는다. 기본 관리자·엔진 내장·도구 접속 계정은 값에 있어도 거부.
     DB 케이스 러너(db_cases.sh·db_case_runner.py)에 PARAM·REJECT, MySQL·PostgreSQL·Oracle·MSSQL 케이스 10건.
 ### Changed
-- **W-12 익명 SID/이름 변환 조치를 manual → auto**: "LSA 정책 객체라 secedit 로 바꿀 수 없다"던 1.0 판단이 틀렸다 - secedit [System Access]
-  LSAAnonymousNameLookup=0 으로 적용된다(케이스가 같은 경로로 취약 상태를 만듦). 원복은 다른 secedit 조치처럼 실행 단위 전체.
+- **위험 조치는 운영자 승인 없이 적용되지 않게(R8)**: 원복이 완전하지 않거나(`# 원복:`) 적용하는 순간 업무 영향이 있는(`# 영향:`) 조치 19개가
+  auto 등급이라 일괄 실행(`--yes`/`-Yes`)에서 항목별 확인 없이 적용되었다 - confirm 으로 바꿨다(U-11·34·36·38·44·55, W-05·08·12·34·39·40·42·
+  49·63, WEB-18·19, PC-02·13). 이제 위험 조치는 대화형이면 항목마다 운영자 `y`, 정책 모드면 승인자의 `코드:irreversible` 이 있어야만 적용되고,
+  비대화형 일괄 실행에서는 적용되지 않는다(DECLINED). guide_consistency R8 이 위험 조치의 auto 등급을 막는다.
+- **docs/APPROVAL_REQUIRED.md 신설**: 승인 원칙, 원복이 완전하지 않은 조치(원복 불가·일부·실행 단위)와 업무 영향 조치를 항목별 근거(조치 머리말
+  원문)와 함께, 자동 조치에서 제외한 항목(manual·보류: U-28·W-61·PC-07·PC-06 등)과 그 근거. fix_impact.py 가 FIX_IMPACT.md 와 함께 생성하고
+  CI 가 최신 여부를 확인한다.
+- **W-12 익명 SID/이름 변환 조치를 manual → confirm**: "LSA 정책 객체라 secedit 로 바꿀 수 없다"던 1.0 판단이 틀렸다 - secedit [System Access]
+  LSAAnonymousNameLookup=0 으로 적용된다(케이스가 같은 경로로 취약 상태를 만듦). 원복은 다른 secedit 조치처럼 실행 단위 전체라 위 규칙으로 confirm.
 
 ## [1.6.1] - 2026-11-17
 ### Fixed

@@ -1,4 +1,4 @@
-﻿# WEB-19 (중) 웹 서비스 SSI(Server Side Includes) 사용 제한 [IIS] — 조치 [fix: auto]
+﻿# WEB-19 (중) 웹 서비스 SSI(Server Side Includes) 사용 제한 [IIS] — 조치 [fix: confirm]
 # 변경: IIS 사이트·하위 application/virtual directory 별 system.webServer/handlers 에서 .stm/.shtm/.shtml 핸들러 매핑 제거(원복 불가)
 # 원복: 불가 — 제거한 SSI 핸들러 매핑은 자동으로 다시 등록하지 않음
 # checks/iis/WEB-19.ps1 이 찾아낸 .stm/.shtm/.shtml 핸들러 매핑을 제거한다. 컬렉션 원소

@@ -58,7 +58,7 @@
       "guide_page": 557,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "win10",
         "win11"
@@ -368,7 +368,7 @@
       "guide_page": 582,
       "guide_version": "2026",
       "automation": "partial",
-      "fix": "auto",
+      "fix": "confirm",
       "envs": [
         "win10",
         "win11"
