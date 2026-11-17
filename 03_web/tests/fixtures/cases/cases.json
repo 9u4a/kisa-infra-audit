@@ -70,6 +70,7 @@
   {"code": "WEB-14", "engine": "tomcat", "name": "webxml-640", "expect": "GOOD"},
   {"code": "WEB-15", "engine": "iis", "name": "app-ssi-handler", "expect": "VULN"},
   {"code": "WEB-15", "engine": "iis", "name": "no-ssi-handlers", "expect": "MANUAL"},
+  {"code": "WEB-15", "engine": "iis", "name": "app-ssi-handler-param", "expect": "VULN"},
   {"code": "WEB-16", "engine": "apache", "name": "servertokens-prod", "expect": "GOOD"},
   {"code": "WEB-16", "engine": "apache-debian", "name": "servertokens-prod", "expect": "GOOD"},
   {"code": "WEB-16", "engine": "iis", "name": "app-server-header-exposed", "expect": "VULN"},

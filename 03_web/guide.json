@@ -454,11 +454,12 @@
       "guide_page": 313,
       "guide_version": "2026",
       "automation": "manual",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "handlers",
       "envs": [
         "iis"
       ],
-      "deviation": "1.5.0: IIS 는 IIS 6.0 시절 대표 취약 확장자(.htr/.idc/.stm/.shtm/.shtml/.printer/.htw/.ida/.idq) 매핑이 사이트·하위 application/virtual directory 에 남아 있으면 취약으로 본다(불필요 매핑 존재가 분명한 경우). 그 외 스크립트 매핑(ISAPI/CGI/FastCGI/SSI 모듈·scriptProcessor)은 업무상 필요 여부를 판단할 수 없어 양호로 판정하지 않고 목록을 증적으로 남겨 수동점검(MANUAL)으로 둔다 - 예전에는 대표 확장자가 없으면 양호였다."
+      "deviation": "1.5.0: IIS 는 IIS 6.0 시절 대표 취약 확장자(.htr/.idc/.stm/.shtm/.shtml/.printer/.htw/.ida/.idq) 매핑이 사이트·하위 application/virtual directory 에 남아 있으면 취약으로 본다(불필요 매핑 존재가 분명한 경우). 그 외 스크립트 매핑(ISAPI/CGI/FastCGI/SSI 모듈·scriptProcessor)은 업무상 필요 여부를 판단할 수 없어 양호로 판정하지 않고 목록을 증적으로 남겨 수동점검(MANUAL)으로 둔다 - 예전에는 대표 확장자가 없으면 양호였다. 1.7.0 값 지정 조치: IIS 는 운영자가 정책 파일 WEB-15.handlers 로 준 스크립트 매핑 이름만 사이트·하위 경로에서 제거한다(원복 불가, 스크립트 매핑이 아닌 처리기는 거부). Apache/Nginx/Tomcat 은 매핑 개념이 달라 자동 조치하지 않는다(진단 MANUAL 유지)."
     },
     {
       "code": "WEB-16",

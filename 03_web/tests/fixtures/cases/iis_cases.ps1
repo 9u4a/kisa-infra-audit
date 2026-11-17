@@ -270,6 +270,17 @@ $IisCases = @{
         Setup = 'Save-CaseConfig; Remove-ServerSsiHandlers; New-CaseApp; Add-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/handlers" -Name "." -Value @{ name = "KISA-SSINC-shtml"; path = "*.shtml"; verb = "GET,HEAD,POST"; modules = "ServerSideIncludeModule"; resourceType = "File" }'
         Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
         Want = '^app=True root_danger=0 sub_danger=1$'
+        Note = 'WEB-15 조치(1.7.0 값 지정 조치)는 app-ssi-handler-param 케이스가 정책 값으로 검증한다'
+    }
+    # WEB-15 전용(1.7.0 값 지정 조치): 정책 값 WEB-15.handlers 에 적은 매핑만 지운다(원복 불가 항목). 스크립트 매핑이 아닌 것(정적 파일
+    # 처리기)을 값에 넣으면 아무것도 지우지 않는다. 대표 취약 확장자가 사라지면 재진단은 MANUAL(남은 스크립트 매핑 수동 확인)
+    "app-ssi-handler-param" = @{
+        Probe = 'if (Test-CaseApp) { Write-Output ("app=True root_danger=" + (Get-SsiHandlerCount) + " sub_danger=" + (Get-SsiHandlerCount $caseAppPath)) } else { Write-Output ("app=absent root_danger=" + (Get-SsiHandlerCount)) }'
+        Setup = 'Save-CaseConfig; Remove-ServerSsiHandlers; New-CaseApp; Add-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/handlers" -Name "." -Value @{ name = "KISA-SSINC-shtml"; path = "*.shtml"; verb = "GET,HEAD,POST"; modules = "ServerSideIncludeModule"; resourceType = "File" }'
+        Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
+        Want = '^app=True root_danger=0 sub_danger=1$'; Fix = $true; NoRollback = $true; FixExpect = @("MANUAL")
+        Params = @{ handlers = @("KISA-SSINC-shtml") }; Verify = '^app=True root_danger=0 sub_danger=0$'
+        RejectParams = @{ handlers = @("KISA-SSINC-shtml", "StaticFile") }
     }
     # WEB-19 전용(V-R1, 1.6.1): 위와 같은 상태에서 조치까지 검증한다 - WEB-15 는 guide fix=manual 이라 같은 케이스 이름에 Fix 를 걸 수 없음
     "app-ssi-handler-fix" = @{

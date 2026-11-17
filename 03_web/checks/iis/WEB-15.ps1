@@ -20,7 +20,7 @@ if (-not $sites -or $sites.Count -eq 0) {
 $dangerExt = @(".htr", ".idc", ".stm", ".shtm", ".shtml", ".printer", ".htw", ".ida", ".idq")
 $scriptModules = "IsapiModule|CgiModule|FastCgiModule|ServerSideIncludeModule"
 
-$vuln = @(); $evid = @(); $failed = $false; $mapCount = 0
+$vuln = @(); $evid = @(); $failed = $false; $mapCount = 0; $candNames = @()
 foreach ($site in $sites) {
     foreach ($cp in (Get-IisSiteConfigPaths -SiteName $site)) {
         try {
@@ -41,6 +41,7 @@ foreach ($site in $sites) {
             }
             if ("$($h.modules)" -match $scriptModules -or -not [string]::IsNullOrEmpty("$($h.scriptProcessor)")) {
                 $maps += "$($h.name)($($h.path) -> $($h.modules))"
+                $candNames += "$($h.name)"
             }
         }
         $mapCount += $maps.Count
@@ -49,6 +50,10 @@ foreach ($site in $sites) {
         if ($hit.Count -gt 0) { $vuln += $cp.Label }
     }
 }
+
+# 1.7.0 값 지정 조치: WEB-15.handlers 후보(스크립트 매핑 이름, 쉼표가 든 것 제외) - lib/policy_draft.py 가 읽는다
+$cand = @($candNames | Where-Object { $_ -notmatch ',' } | Sort-Object -Unique)
+if ($cand.Count -gt 0) { $evid += "`n[candidates] $($cand -join ',')" }
 
 if ($vuln.Count -gt 0) {
     return New-CheckResult -Code "WEB-15" -Status "VULN" -Detail "불필요한(대표 취약 확장자) 스크립트 매핑이 남아있는 사이트/경로: $($vuln -join ', ')" -Evidence ($evid -join "`n")

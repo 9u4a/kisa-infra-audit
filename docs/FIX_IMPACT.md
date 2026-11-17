@@ -8,7 +8,7 @@
 - **:irreversible**: 둘 중 하나라도 있으면 정책 모드(`fix --policy`)에서 정책 파일에 `코드:irreversible` 로 적어야 적용된다(없으면 `POLICY_SKIPPED`). 대화형 실행에는 영향 없음.
 - **param(키)**: 값 지정 조치(1.7.0) - 정책 파일 호스트 구역의 `코드.키 = 값` 이 있을 때만 정책 모드로 적용한다(대화형·값 없음은 수동 안내).
 
-전체 조치 230개 중 정책에 `:irreversible` 이 필요한 조치 92개.
+전체 조치 232개 중 정책에 `:irreversible` 이 필요한 조치 94개.
 
 ## 01 Unix 서버 (63개 조치, :irreversible 필요 21개)
 
@@ -78,7 +78,7 @@
 | U-66 | Unix(sh) | 정책에 따른 시스템 로깅 설정 | confirm | - | - | - |
 | U-67 | Unix(sh) | 로그 디렉터리 소유자 및 권한 설정 | confirm | - | - | - |
 
-## 02 Windows 서버 (53개 조치, :irreversible 필요 27개)
+## 02 Windows 서버 (54개 조치, :irreversible 필요 28개)
 
 | 코드 | 대상 | 제목 | 등급 | 원복 불가 사유 | 업무 영향 | :irreversible |
 |---|---|---|---|---|---|---|
@@ -102,6 +102,7 @@
 | W-21 | Windows | 암호화되지 않는 FTP 서비스 비활성화 | confirm | - | 실행 중인 FTP 서비스(FTPSVC) 중지·사용 안 함 — FTP 사용자 접속 끊김 | 필요 |
 | W-22 | Windows | FTP 디렉토리 접근권한 설정 | auto | - | - | - |
 | W-23 | Windows | 공유 서비스에 대한 익명 접근 제한 설정 | confirm | - | FTP 익명 인증 끄기(또는 SMB Null Session 차단) — 익명으로 FTP·공유에 접속하던 사용자·프로그램 접속 거부 | 필요 |
+| W-24 | Windows | FTP 접근 제어 설정 | param(allow) | - | 허용 목록에 없는 IP 의 FTP 접속이 즉시 거부됨(업무용 FTP 클라이언트 IP 가 빠지면 전송이 끊김) | 필요 |
 | W-25 | Windows | DNS Zone Transfer 설정 | confirm | 불가 — DNS 영역 전송 설정(WMI)은 자동 원복 경로 없음(변경 전 값은 changes.log) | DNS 영역 전송 차단 — 이 서버에서 영역을 받던 보조 DNS 서버의 영역 갱신 중단 | 필요 |
 | W-28 | Windows | 터미널 서비스 암호화 수준 설정 | confirm | - | - | - |
 | W-29 | Windows | 불필요한 SNMP 서비스 구동 점검 | confirm | - | 실행 중인 SNMP 서비스 중지·사용 안 함 — SNMP 모니터링 중단 | 필요 |
@@ -136,7 +137,7 @@
 | W-63 | Windows | 도메인 컨트롤러-사용자의 시간 동기화 | auto | 실행 단위 전체만 — 보안 정책(secedit)은 항목별로 되돌릴 수 없어 '-Rollback <실행 폴더>' 로 이번 실행 전체를 되돌려야 함 | - | 필요 |
 | W-64 | Windows | 윈도우 방화벽 설정 | confirm | - | 방화벽 전 프로필 사용 — 허용 규칙이 없는 업무 포트(RDP/WinRM 외)로 들어오는 현재·이후 접속 차단 | 필요 |
 
-## 03 웹 서비스 (36개 조치, :irreversible 필요 7개)
+## 03 웹 서비스 (37개 조치, :irreversible 필요 8개)
 
 | 코드 | 대상 | 제목 | 등급 | 원복 불가 사유 | 업무 영향 | :irreversible |
 |---|---|---|---|---|---|---|
@@ -170,6 +171,7 @@
 | WEB-12 | IIS | 웹 서비스 링크 사용 금지 | confirm | - | - | - |
 | WEB-13 | IIS | 웹 서비스 설정 파일 노출 제한 | confirm | 불가 — hiddenSegments 에 추가한 항목은 자동으로 제거하지 않음 | - | 필요 |
 | WEB-14 | IIS | 웹 서비스 경로 내 파일의 접근 통제 | auto | - | - | - |
+| WEB-15 | IIS | 웹 서비스의 불필요한 스크립트 매핑 제거 | param(handlers) | 불가 — 제거한 처리기 매핑은 자동으로 다시 등록하지 않음(필요 시 처리기 매핑에서 수동 재등록) | 지정 매핑이 처리하던 확장자 요청이 즉시 처리되지 않음(404·정적 파일로 응답) — 그 확장자를 쓰는 앱 기능이 멈춤 | 필요 |
 | WEB-16 | IIS | 웹 서비스 헤더 정보 노출 제한 | auto | - | - | - |
 | WEB-18 | IIS | 웹 서비스 WebDAV 비활성화 | auto | - | WebDAV 저작 끄기 — WebDAV 로 파일을 올리거나 고치던 사용자·도구 접속 거부 | 필요 |
 | WEB-19 | IIS | 웹 서비스 SSI(Server Side Includes) 사용 제한 | auto | 불가 — 제거한 SSI 핸들러 매핑은 자동으로 다시 등록하지 않음 | - | 필요 |
