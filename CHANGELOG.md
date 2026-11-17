@@ -18,6 +18,11 @@
     (원래 값 백업·원복 - 예전 manual 참조 구현은 원복이 없었다), W-37 예약 작업 비활성화, W-62 시작 프로그램 Run 값 제거. PowerShell 진입점
     4곳(02·03 IIS·07·08 MSSQL)이 값 줄을 받고(Initialize-FixPolicy -GuideItems), 일부 대상만 고른 VULN 항목은 원복 대신 PARTIAL_MANUAL.
     새 백업·원복 유형(로컬 그룹 구성원·예약 작업·DNS 영역), 02 케이스 러너 Fix.Params·Verify·FixReject.
+  - Web·FTP: W-24 FTP 허용 IP(마스터 추가 + 마스터·사이트 목록 외 거부, 추가한 IP 와 바꾼 속성 원복 - IIS 컬렉션 원소 백업 유형 webcoll 신설),
+    WEB-15 IIS 스크립트 매핑 제거(원복 불가). lib/tests/win_case_runner.ps1(03 IIS·08 MSSQL)에 Params·Verify·RejectParams.
+  - WEB-17 가상 디렉터리(Apache Alias·Nginx alias location 주석 처리), WEB-20 SSL/TLS 활성화(Apache mod_ssl·443 VirtualHost / Nginx listen 443 ssl
+    / IIS https 바인딩·인증서 연결 - 원복 시 제거, 백업 유형 binding). 웹 케이스 러너에 `# PARAM:`·`# VERIFY:`, 테스트 이미지 apache-debian 에 openssl.
+    guide_consistency R7 은 엔진별 머리말 키가 fix_params 의 부분집합이고 합집합이 같으면 통과(WEB-20 은 엔진마다 받는 값이 다름).
 ### Changed
 - **W-12 익명 SID/이름 변환 조치를 manual → auto**: "LSA 정책 객체라 secedit 로 바꿀 수 없다"던 1.0 판단이 틀렸다 - secedit [System Access]
   LSAAnonymousNameLookup=0 으로 적용된다(케이스가 같은 경로로 취약 상태를 만듦). 원복은 다른 secedit 조치처럼 실행 단위 전체.

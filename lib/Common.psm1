@@ -1731,6 +1731,57 @@ function Restore-FixDnsZoneBackup {
     } catch { Add-FixRollbackFailure "DNS 영역 동적 업데이트 원복 실패 $($o.Zone): $($_.Exception.Message)" }
 }
 
+function Add-FixWebCollectionItem {
+    <# IIS 설정 컬렉션(예: system.ftpServer/security/ipSecurity)에 원소를 추가하고, 원복 때 지울 수 있게 "이 조치가 추가함"을 기록한다.
+       -Key: 원소를 찾을 속성 이름(예: ipAddress). 이미 같은 키 값의 원소가 있으면 기록·변경 없이 $false. 기록 실패는 변경 전 throw #>
+    param([Parameter(Mandatory)][string]$Filter, [Parameter(Mandatory)][hashtable]$Value, [Parameter(Mandatory)][string]$Key,
+        [string]$PSPath = "IIS:\", [string]$Location = "")
+    $loc = @{}; if ($Location) { $loc.Location = $Location }
+    $cur = @((Get-WebConfiguration -Filter $Filter -PSPath $PSPath @loc -ErrorAction Stop).Collection | Where-Object { "$($_.$Key)" -eq "$($Value[$Key])" })
+    if ($cur.Count -gt 0) { return $false }
+    $dir = Get-FixItemBackupDir -Sub "webcoll"
+    $file = Join-Path $dir "$(Get-FixBackupFileName -Raw "$PSPath--$Location--$Filter--$($Value[$Key])").json"
+    Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Filter = $Filter; PSPath = $PSPath; Location = $Location; Key = $Key; KeyValue = "$($Value[$Key])" }) | Out-Null
+    Add-WebConfigurationProperty -Filter $Filter -PSPath $PSPath @loc -Name "." -Value $Value -ErrorAction Stop
+    return $true
+}
+
+function Restore-FixWebCollectionBackup {
+    param([Parameter(Mandatory)][string]$File)
+    $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
+    $loc = @{}; if ($o.Location) { $loc.Location = $o.Location }
+    try { Remove-WebConfigurationProperty -Filter $o.Filter -PSPath $o.PSPath @loc -Name "." -AtElement @{ $o.Key = $o.KeyValue } -ErrorAction Stop }
+    catch { Add-FixRollbackFailure "IIS 컬렉션 원소 원복 실패 $($o.PSPath) $($o.Location) [$($o.Filter)] $($o.Key)=$($o.KeyValue): $($_.Exception.Message)" }
+}
+
+function Add-FixIisHttpsBinding {
+    <# 사이트에 https 바인딩(*:<포트>:<호스트 헤더>)을 추가하고 인증서(LocalMachine\My 지문)를 연결한다. 원복 때 바인딩과
+       이 조치가 만든 http.sys 인증서 연결(0.0.0.0!포트)을 지울 수 있게 먼저 기록한다(실패 시 throw [백업 실패]) #>
+    param([Parameter(Mandatory)][string]$Site, [Parameter(Mandatory)][string]$Thumbprint, [int]$Port = 443, [string]$HostHeader = "")
+    $sslPath = "IIS:\SslBindings\0.0.0.0!$Port"
+    $hadSsl = Test-Path -LiteralPath $sslPath
+    $dir = Get-FixItemBackupDir -Sub "binding"
+    $file = Join-Path $dir "$(Get-FixBackupFileName -Raw "$Site--https--$Port--$HostHeader").json"
+    Save-FixBackupJson -File $file -Object ([PSCustomObject]@{ Site = $Site; Port = $Port; HostHeader = $HostHeader; AddedSsl = (-not $hadSsl) }) | Out-Null
+    New-WebBinding -Name $Site -Protocol https -Port $Port -IPAddress "*" -HostHeader $HostHeader -ErrorAction Stop
+    if (-not $hadSsl) {
+        $b = Get-WebBinding -Name $Site -Protocol https -Port $Port -HostHeader $HostHeader -ErrorAction Stop
+        $b.AddSslCertificate($Thumbprint, "My")
+    }
+}
+
+function Restore-FixIisBindingBackup {
+    param([Parameter(Mandatory)][string]$File)
+    $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
+    try {
+        if (Get-WebBinding -Name $o.Site -Protocol https -Port $o.Port -HostHeader "$($o.HostHeader)" -ErrorAction SilentlyContinue) {
+            Remove-WebBinding -Name $o.Site -Protocol https -Port $o.Port -HostHeader "$($o.HostHeader)" -ErrorAction Stop
+        }
+        $sslPath = "IIS:\SslBindings\0.0.0.0!$($o.Port)"
+        if ($o.AddedSsl -and (Test-Path -LiteralPath $sslPath)) { Remove-Item -LiteralPath $sslPath -ErrorAction Stop }
+    } catch { Add-FixRollbackFailure "https 바인딩 원복 실패 $($o.Site):$($o.Port): $($_.Exception.Message)" }
+}
+
 function Restore-FixScheduledTaskBackup {
     param([Parameter(Mandatory)][string]$File)
     $o = Get-Content -Raw -Encoding UTF8 -Path $File | ConvertFrom-Json
@@ -2392,6 +2443,11 @@ function Restore-FixItem {
         ForEach-Object { Restore-FixScheduledTaskBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "dnszone") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixDnsZoneBackup -File $_.FullName }
+    # 1.7.0: 조치가 IIS 컬렉션에 추가한 원소(W-24 허용 IP 등)를 지운다 - 속성 값(webconfig)은 위에서 이미 되돌렸다
+    Get-ChildItem -Path (Join-Path $dir "webcoll") -Filter *.json -ErrorAction SilentlyContinue |
+        ForEach-Object { Restore-FixWebCollectionBackup -File $_.FullName }
+    Get-ChildItem -Path (Join-Path $dir "binding") -Filter *.json -ErrorAction SilentlyContinue |
+        ForEach-Object { Restore-FixIisBindingBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "webconfig") -Filter *.json -ErrorAction SilentlyContinue |
         ForEach-Object { Restore-FixWebConfigPropertyBackup -File $_.FullName }
     Get-ChildItem -Path (Join-Path $dir "firewall") -Filter *.json -ErrorAction SilentlyContinue |
@@ -2454,4 +2510,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixParamSpec, Get-FixParam, Get-FixParamSummary, Test-FixParamReady, Add-FixLocalGroupMemberBySid, Restore-FixLocalGroupBackup, Disable-FixScheduledTask, Restore-FixScheduledTaskBackup, Set-FixDnsZoneAllowUpdate, Restore-FixDnsZoneBackup, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixParamSpec, Get-FixParam, Get-FixParamSummary, Test-FixParamReady, Add-FixLocalGroupMemberBySid, Restore-FixLocalGroupBackup, Disable-FixScheduledTask, Restore-FixScheduledTaskBackup, Set-FixDnsZoneAllowUpdate, Restore-FixDnsZoneBackup, Add-FixWebCollectionItem, Restore-FixWebCollectionBackup, Add-FixIisHttpsBinding, Restore-FixIisBindingBackup, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion

@@ -783,7 +783,8 @@
       "guide_page": 212,
       "guide_version": "2026",
       "automation": "auto",
-      "fix": "manual",
+      "fix": "param",
+      "fix_params": "allow",
       "envs": [
         "server2012r2",
         "server2016",
@@ -792,7 +793,7 @@
         "win10",
         "win11"
       ],
-      "deviation": "가이드 조치 방법이 \"특정 IP에서만 FTP 접속 허용\"으로, 어떤 IP를 허용할지 스크립트가 안전하게 결정할 수 없어(U-28과 동일한 구조의 문제) manual로 재분류함."
+      "deviation": "조치(1.7.0 값 지정 조치): 허용할 IP 를 스크립트가 정할 수 없어 manual 이었다. 운영자가 정책 파일 W-24.allow 로 준 IPv4 주소(·서브넷마스크)만 마스터 ipSecurity 에 허용으로 추가하고 마스터와 모든 FTP 사이트에서 목록 외 클라이언트를 거부한다(0.0.0.0 전체 허용은 거부)."
     },
     {
       "code": "W-25",

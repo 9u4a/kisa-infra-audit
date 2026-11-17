@@ -16,6 +16,7 @@
   },
   "03_web": {
     "": {
+      "WEB-15": {"reason": "engine-manual", "note": "1.7.0: IIS 만 값 지정 조치(fixes/iis/WEB-15.ps1). Apache/Nginx/Tomcat 은 스크립트 매핑 개념이 달라 진단 MANUAL·수동 조치, guide.json deviation"},
       "WEB-05": {"reason": "engine-manual", "note": "Apache/Nginx/Tomcat 은 CGI 를 지정 디렉터리로 옮기려면 스크립트 콘텐츠·URL 이전이 필요해 수동 조치(IIS 는 fixes/iis/WEB-05.ps1), guide.json deviation"}
     },
     "iis": {

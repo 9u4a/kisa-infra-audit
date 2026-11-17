@@ -49,4 +49,17 @@
         }
         'ftp-stopped'       = @{ Svc = @{ FTPSVC = 'Stopped' } }
     }
+    # 1.7.0 값 지정 조치: 정책 값 W-24.allow 의 IP 를 마스터에 추가하고 마스터·사이트 모두 목록 외 거부 → 양호. 원복하면 추가한 IP 를 빼고
+    # 사이트 location 의 allowUnlisted=true 로 돌아온다(마스터만 막고 사이트가 연 A9 상태 그대로)
+    Fix       = @{
+        From = 'site-override-open'; Expect = 'GOOD'; Params = @{ allow = @('10.20.30.40') }
+        Verify = {
+            $m = Get-WebConfiguration -Filter '/system.ftpServer/security/ipSecurity' -PSPath 'IIS:\'
+            $s = Get-WebConfiguration -Filter '/system.ftpServer/security/ipSecurity' -PSPath 'MACHINE/WEBROOT/APPHOST' -Location 'kisa_case_ftp'
+            $ips = @($m.Collection | ForEach-Object { $_.ipAddress })
+            if ("$($m.allowUnlisted)" -eq 'False' -and "$($s.allowUnlisted)" -eq 'False' -and $ips -contains '10.20.30.40') { $true } else { "master=$($m.allowUnlisted) site=$($s.allowUnlisted) ips=$($ips -join ',')" }
+        }
+    }
+    # 값 검증 거부: 0.0.0.0(전체 허용)이 섞이면 아무것도 바꾸지 않는다
+    FixReject = @{ From = 'site-override-open'; Params = @{ allow = @('10.20.30.40', '0.0.0.0') } }
 }

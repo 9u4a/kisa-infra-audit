@@ -192,6 +192,17 @@ $IisCases = @{
         Want = '^global=True site=True$'
     }
     # WEB-20 양호: https 바인딩(SSL/TLS) 구성
+    # WEB-20 취약 + 1.7.0 값 지정 조치: https 바인딩 없음, 서버에 인증서는 설치돼 있음 → 정책 값 WEB-20.thumbprint 로 바인딩·인증서 연결
+    # (원복하면 바인딩과 0.0.0.0!443 인증서 연결이 사라진다). 없는 지문은 아무것도 바꾸지 않는다
+    "no-https-cert-ready" = @{
+        Probe = 'Write-Output ("https_bindings=" + @(Get-WebBinding -Name $site -Protocol https).Count + " ssl443=" + (Test-Path "IIS:\SslBindings\0.0.0.0!443"))'
+        Setup = 'Save-CaseConfig; foreach ($b in @(Get-WebBinding -Name $site -Protocol https)) { Remove-WebBinding -InputObject $b }; New-SelfSignedCertificate -DnsName "kisa-case.local" -CertStoreLocation "Cert:\LocalMachine\My" | Out-Null'
+        Cleanup = 'Restore-CaseConfig; Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -eq "CN=kisa-case.local" } | Remove-Item'
+        Want = '^https_bindings=0 ssl443=False$'; Fix = $true; FixExpect = @("GOOD")
+        Params = @{ thumbprint = @(@{ Expr = '(Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -eq "CN=kisa-case.local" } | Select-Object -First 1).Thumbprint' }) }
+        Verify = '^https_bindings=1 ssl443=True$'
+        RejectParams = @{ thumbprint = @("0000000000000000000000000000000000000000") }
+    }
     "https-binding" = @{
         Probe = 'Write-Output ("https_bindings=" + @(Get-WebBinding -Name $site -Protocol https).Count)'
         Setup = 'Save-CaseConfig; New-WebBinding -Name $site -Protocol https -Port 44300 -IPAddress "*"'
@@ -270,6 +281,17 @@ $IisCases = @{
         Setup = 'Save-CaseConfig; Remove-ServerSsiHandlers; New-CaseApp; Add-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/handlers" -Name "." -Value @{ name = "KISA-SSINC-shtml"; path = "*.shtml"; verb = "GET,HEAD,POST"; modules = "ServerSideIncludeModule"; resourceType = "File" }'
         Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
         Want = '^app=True root_danger=0 sub_danger=1$'
+        Note = 'WEB-15 조치(1.7.0 값 지정 조치)는 app-ssi-handler-param 케이스가 정책 값으로 검증한다'
+    }
+    # WEB-15 전용(1.7.0 값 지정 조치): 정책 값 WEB-15.handlers 에 적은 매핑만 지운다(원복 불가 항목). 스크립트 매핑이 아닌 것(정적 파일
+    # 처리기)을 값에 넣으면 아무것도 지우지 않는다. 대표 취약 확장자가 사라지면 재진단은 MANUAL(남은 스크립트 매핑 수동 확인)
+    "app-ssi-handler-param" = @{
+        Probe = 'if (Test-CaseApp) { Write-Output ("app=True root_danger=" + (Get-SsiHandlerCount) + " sub_danger=" + (Get-SsiHandlerCount $caseAppPath)) } else { Write-Output ("app=absent root_danger=" + (Get-SsiHandlerCount)) }'
+        Setup = 'Save-CaseConfig; Remove-ServerSsiHandlers; New-CaseApp; Add-WebConfigurationProperty -PSPath $apphost -Location "$site/$caseApp" -Filter "system.webServer/handlers" -Name "." -Value @{ name = "KISA-SSINC-shtml"; path = "*.shtml"; verb = "GET,HEAD,POST"; modules = "ServerSideIncludeModule"; resourceType = "File" }'
+        Cleanup = 'Restore-CaseConfig; Remove-CaseApp'
+        Want = '^app=True root_danger=0 sub_danger=1$'; Fix = $true; NoRollback = $true; FixExpect = @("MANUAL")
+        Params = @{ handlers = @("KISA-SSINC-shtml") }; Verify = '^app=True root_danger=0 sub_danger=0$'
+        RejectParams = @{ handlers = @("KISA-SSINC-shtml", "StaticFile") }
     }
     # WEB-19 전용(V-R1, 1.6.1): 위와 같은 상태에서 조치까지 검증한다 - WEB-15 는 guide fix=manual 이라 같은 케이스 이름에 Fix 를 걸 수 없음
     "app-ssi-handler-fix" = @{
