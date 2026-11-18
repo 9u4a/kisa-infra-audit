@@ -1156,6 +1156,7 @@ fix_select_vuln_codes() {
 #   반환값 3(fix_abort_item, 백업 실패 등)이면 실행 전체를 exit 3 으로 끝낸다(F1).
 fix_items() {
     _fi_fdir=$1; _fi_cdir=$2; _fi_postfix=${3:-}; _fi_postcheck=${4:-}
+    FIX_REPORT_FDIR=$_fi_fdir   # 조치 결과 보고서(fix_report_write)가 항목별 변경·원복·영향 머리말을 읽는 폴더
     N_APPLIED=0; N_SKIPPED=0; N_DECLINED=0; N_FAILED=0; N_MANUAL=0; N_PREVIEW=0; N_PARTIAL=0; N_POLICY_SKIPPED=0
     FAILED_CODES=""
     for _fi_code in $VULN_CODES; do
@@ -1217,6 +1218,8 @@ fix_items() {
             _fi_chg=$(fix_change_note "$_fi_fix"); [ -n "$_fi_chg" ] && echo "  변경: $_fi_chg"
             _fi_rbn=$(fix_rollback_note "$_fi_fix"); [ -n "$_fi_rbn" ] && echo "  원복: $_fi_rbn"
             _fi_imp=$(fix_impact_note "$_fi_fix"); [ -n "$_fi_imp" ] && echo "  영향: $_fi_imp"
+            # 조치 결과 보고서(1.7.1)가 미리보기 항목도 보여 주도록 changes.log 에 남긴다(변경 없음)
+            printf '%s\t%s\tPREVIEW\t%s\n' "$_fi_code" "$_fi_grade" "dry-run 미리보기(변경 없음)$([ "$POLICY_SET" -eq 1 ] && echo ' - 정책 승인')" | fix_log_stamp >> "$FIX_LOG"
             N_PREVIEW=$((N_PREVIEW + 1))
             continue
         fi
@@ -1308,6 +1311,39 @@ _fi_policy_skip() {
     N_POLICY_SKIPPED=$((N_POLICY_SKIPPED + 1))
 }
 
+# fix_report_write <원복 명령> -- 조치 결과 보고서(fix_report.html, 1.7.1). 진단 보고서(render_report_html)와 같이 Python 없이
+# 템플릿(lib/report/fix_*.html) + guide.json + 보고서 데이터(JSON)를 이어 붙인다. 데이터는 changes.log(항목별 결과)·audit.txt(정책 모드
+# 승인 정보·정책 값)·조치 파일 머리말(변경·원복·영향)에서 만든다. 문자열은 json_escape 로(</ 포함) 이스케이프한다.
+fix_report_write() {
+    [ -n "${FIX_OUT_DIR:-}" ] && [ -f "${FIX_LOG:-}" ] && [ -f "${GUIDE_JSON:-}" ] || return 0
+    _fr_tab=$(printf '\t')
+    _fr_data="$FIX_OUT_DIR/.fix_report_data.json"
+    {
+        printf '{"meta":{"tool_version":"%s","category":"%s","category_num":"%s","host":"%s","mode":"%s","generated_at":"%s","out_dir":"%s","rollback_cmd":"%s"'             "$(json_escape "$TOOL_VERSION")" "$(json_escape "${CATEGORY_NAME:-}")" "$(json_escape "${CATEGORY_NUM:-}")" "$(json_escape "$(host_name)")"             "$([ "${APPLY:-0}" -eq 1 ] && echo apply || echo dry-run)" "$(fix_iso_now)" "$(json_escape "$FIX_OUT_DIR")" "$(json_escape "$1 --rollback $FIX_OUT_DIR")"
+        if [ "${POLICY_SET:-0}" -eq 1 ] && [ -f "${AUDIT_FILE:-}" ]; then
+            printf ',"policy":{'
+            _fr_sep=""
+            while IFS= read -r _fr_l; do
+                case "$_fr_l" in *=*) ;; *) continue ;; esac
+                printf '%s"%s":"%s"' "$_fr_sep" "$(json_escape "${_fr_l%%=*}")" "$(json_escape "${_fr_l#*=}")"; _fr_sep=","
+            done < "$AUDIT_FILE"
+            printf '}'
+        fi
+        printf '},"items":['
+        _fr_sep=""
+        while IFS="$_fr_tab" read -r _fr_t _fr_c _fr_g _fr_r _fr_d; do
+            case "$_fr_t" in '#'*|'') continue ;; esac
+            _fr_f="${FIX_REPORT_FDIR:-.}/$_fr_c.sh"
+            printf '%s{"time":"%s","code":"%s","grade":"%s","result":"%s","detail":"%s","chg":"%s","rb":"%s","im":"%s"}' "$_fr_sep"                 "$(json_escape "$_fr_t")" "$(json_escape "$_fr_c")" "$(json_escape "$_fr_g")" "$(json_escape "$_fr_r")" "$(json_escape "$_fr_d")"                 "$(json_escape "$(fix_change_note "$_fr_f" 2>/dev/null)")" "$(json_escape "$(fix_rollback_note "$_fr_f" 2>/dev/null)")" "$(json_escape "$(fix_impact_note "$_fr_f" 2>/dev/null)")"
+            _fr_sep=","
+        done < "$FIX_LOG"
+        printf ']}\n'
+    } > "$_fr_data" 2>/dev/null || return 0
+    cat "$LIB_DIR/report/fix_head.html" "$GUIDE_JSON" "$LIB_DIR/report/fix_mid.html" "$_fr_data" "$LIB_DIR/report/fix_tail.html" > "$FIX_OUT_DIR/fix_report.html" 2>/dev/null
+    rm -f "$_fr_data"
+    [ -s "$FIX_OUT_DIR/fix_report.html" ] && echo "보고서: $FIX_OUT_DIR/fix_report.html"
+}
+
 # fix_print_summary <원복 명령> -- 건수·백업 위치·원복 방법·로그 경로 출력
 fix_print_summary() {
     echo "------------------------------------------------------------------------"
@@ -1326,4 +1362,5 @@ fix_print_summary() {
         fix_audit_finish
     fi
     echo "로그: $FIX_LOG"
+    fix_report_write "$1"
 }

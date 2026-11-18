@@ -175,6 +175,11 @@ python 05_network/fix.py -f running-config.txt -r <result.json> --policy policy.
 - `--force` 는 결과 파일 확인(X-06)만 무시하고 정책 검사는 무시하지 않는다. 비밀번호 직접 입력 조치는 비대화형이면 건너뛴다.
 - 출력 폴더 `audit.txt` 에 실행자·로그인 계정·승인자·정책 SHA-256·시각·건수·실패 코드가 남는다.
 
+### 조치 결과 보고서 (1.7.1)
+조치(`fix.sh`/`fix.ps1`)를 실행하면 출력 폴더(`output/<host>_<카테고리>_fix_<시각>/`)에 `fix_report.html` 이 생긴다 - 브라우저로 연다.
+적용·일부 적용·실패(원복됨/원복 못 함)·승인 안 됨·정책 제외·수동·미리보기(dry-run)를 항목별로, 재진단 결과·정책 값·원복 제한·업무 영향과
+함께 보여 주고, 맨 위에 즉시 확인할 항목과 실행 전체 원복 명령을 둔다. 진단 결과 전·후 비교는 `merge.py --diff`.
+
 ### 승인이 필요한 조치 (1.7.0)
 원복이 완전하지 않거나 적용 순간 업무 영향이 있는 조치는 모두 confirm(또는 param)이라 운영자 승인 없이는 적용되지 않는다 - 대화형은 항목마다 `y`,
 정책 모드는 `코드:irreversible`. 항목별 근거와 자동 조치에서 제외한 항목은 [docs/APPROVAL_REQUIRED.md](APPROVAL_REQUIRED.md).

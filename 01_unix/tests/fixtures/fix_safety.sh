@@ -31,6 +31,9 @@ echo "APPLIED_CODES=$(awk -F'\t' '$4 == "APPLIED" { printf "%s,", $2 }' "$LOG")"
 echo "FAILED_CODES=$(awk -F'\t' '$4 ~ /^FAILED|^ABORTED/ { printf "%s:%s,", $2, $4 }' "$LOG")"
 echo "SKIPPED_CODES=$(awk -F'\t' '$4 == "SKIPPED" { printf "%s,", $2 }' "$LOG")"
 echo "U01=$(awk -F'\t' '$2 == "U-01" { print $4 }' "$LOG")"
+# 1.7.1 조치 결과 보고서: 출력 폴더에 fix_report.html 이 있고 적용 항목(U-18)이 데이터에 들어 있어야 한다
+RPT=$(dirname "$LOG")/fix_report.html
+if [ -s "$RPT" ] && grep -q '<script id="fix-data"' "$RPT" && grep -q '"code":"U-18","grade":"auto","result":"APPLIED"' "$RPT"; then echo "REPORT=ok"; else echo "REPORT=missing"; fi
 
 # U-01 안전장치: root 외 관리자(sudo/wheel 구성원)가 없으면 sshd_config 를 바꾸지 않아야 한다 -
 # 확인 단계를 거치지 않도록 조치 함수를 직접 호출해 검증한다.

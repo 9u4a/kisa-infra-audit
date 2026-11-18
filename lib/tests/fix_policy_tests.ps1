@@ -200,6 +200,11 @@ try {
             $rows2 = @(Get-Content -Encoding UTF8 (Join-Path $runDir2 "changes.log") | Where-Object { $_ -and -not $_.StartsWith("#") } | ForEach-Object { $c = $_ -split "`t"; [PSCustomObject]@{ Code = $c[1]; Grade = $c[2]; Result = $c[3] } })
             $w14 = @($rows2 | Where-Object { $_.Code -eq "W-14" })
             Assert-True "param: 값 없는 W-14 는 수동 안내(MANUAL)" ($w14.Count -eq 1 -and $w14[0].Result -eq "MANUAL" -and $w14[0].Grade -eq "param") (($rows2 | ForEach-Object { "$($_.Code)=$($_.Result)" }) -join ",")
+            # 1.7.1 조치 결과 보고서: dry-run 미리보기 항목(W-03 PREVIEW)·정책 값이 보고서 데이터에 들어 있어야 한다
+            $rpt = Join-Path $runDir2 "fix_report.html"
+            $rtext = if (Test-Path $rpt) { [System.IO.File]::ReadAllText($rpt) } else { "" }
+            Assert-True "보고서: fix_report.html 생성" ($rtext -match '<script id="fix-data"') $log2
+            Assert-True "보고서: 미리보기 항목·정책 값" ($rtext -match '"code":"W-03","grade":"param","result":"PREVIEW"' -and $rtext -match 'param\.W-03') "len=$($rtext.Length)"
             $audit2 = @(Get-Content -Encoding UTF8 (Join-Path $runDir2 "audit.txt"))
             Assert-True "param: audit.txt 에 값 기록" (@($audit2 | Where-Object { $_ -ceq "param.W-03=accounts=kisa_none_a,kisa_none_b" }).Count -eq 1) ($audit2 -join "`n")
         } else { Assert-True "param dry-run 출력 폴더" $false $log2 }

@@ -5,6 +5,11 @@
 일반적인 SemVer 관례대로 기능 추가=MINOR, 버그 수정=PATCH 로 올립니다.
 
 ## [Unreleased]
+### Added
+- **조치 결과 보고서(fix_report.html)**: 조치 실행마다 출력 폴더에 진단 보고서와 같은 방식(Python 없이 템플릿 + guide.json + 데이터
+  이어 붙이기, lib/report/fix_*.html)으로 만든다. 실행 정보(호스트·모드·정책 승인자·실행자·정책 지문), 결과별 요약, 항목별 결과(실패·원복
+  못 함·중단을 맨 위로), 재진단, 정책 값, 변경·원복 제한·업무 영향(조치 머리말), 가이드 조치 방법, 실행 전체 원복 명령. sh(fix_report_write)·
+  PowerShell(New-FixReportHtml) 같은 형식. dry-run 도 만들 수 있게 미리보기 항목을 changes.log 에 PREVIEW 로 남긴다(변경 없음).
 
 ## [1.7.0] - 2026-11-17
 ### Added
