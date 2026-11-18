@@ -87,7 +87,7 @@ if printf '%s\n' "$out" | grep -qx 'FIX_RC=0' && printf '%s\n' "$out" | grep -qx
    && printf '%s\n' "$out" | grep -qx "APPLIED_CODES=$FIX_EXPECT_APPLIED" \
    && printf '%s\n' "$out" | grep -qx "SKIPPED_CODES=$FIX_EXPECT_SKIPPED" \
    && printf '%s\n' "$out" | grep -qx 'FAILED_CODES=' && printf '%s\n' "$out" | grep -qx 'CHANGED=yes' \
-   && printf '%s\n' "$out" | grep -qx 'U01=DECLINED' \
+   && printf '%s\n' "$out" | grep -qx 'U01=DECLINED' && printf '%s\n' "$out" | grep -qx 'REPORT=ok' \
    && printf '%s\n' "$out" | grep -qx 'U01_GUARD=ERROR/unchanged' \
    && printf '%s\n' "$out" | grep -qx 'ROLLBACK=same' \
    && printf '%s\n' "$out" | grep -qx 'U32=APPLIED' && printf '%s\n' "$out" | grep -qx 'U32_RB=absent' \

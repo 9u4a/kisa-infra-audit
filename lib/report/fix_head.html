@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>조치 결과 보고서</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --text:#1a1d23; --muted:#6b7280; --border:#e3e5e9;
+    --bad:#dc2626; --warn:#d97706; --err:#c026d3; --skip:#9ca3af; --good:#16a34a; --accent:#2563eb;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14161a; --panel:#1c1f26; --text:#e8eaed; --muted:#9aa1ab; --border:#2c313a;
+      --bad:#f87171; --warn:#fbbf24; --err:#e879f9; --skip:#6b7280; --good:#4ade80; --accent:#60a5fa;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14161a; --panel:#1c1f26; --text:#e8eaed; --muted:#9aa1ab; --border:#2c313a;
+    --bad:#f87171; --warn:#fbbf24; --err:#e879f9; --skip:#6b7280; --good:#4ade80; --accent:#60a5fa;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Malgun Gothic,sans-serif;font-size:14px;}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px 16px 60px;}
+  header.top h1{font-size:20px;margin:0 0 4px;}
+  .meta{color:var(--muted);font-size:12.5px;line-height:1.7;}
+  .meta b{color:var(--text);font-weight:600;}
+  .notice{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:10px 14px;margin:14px 0;font-size:13px;line-height:1.7;}
+  .notice.warn{border-left-color:var(--bad);}
+  .notice code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;word-break:break-all;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin:16px 0;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
+  .card .num{font-size:24px;font-weight:700;}
+  .card .lbl{color:var(--muted);font-size:12px;margin-top:2px;}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:18px 0 10px;}
+  .toolbar select,.toolbar input{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;}
+  .toolbar .spacer{flex:1;}
+  .tablebox{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  thead th{text-align:left;font-size:12px;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  tbody td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr.item-row{cursor:pointer;}
+  tbody tr.item-row:hover{background:color-mix(in srgb, var(--accent) 6%, transparent);}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;color:#fff;white-space:nowrap;}
+  .tag{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;font-size:11px;border:1px solid var(--border);color:var(--muted);white-space:nowrap;}
+  .tag.risk{border-color:var(--bad);color:var(--bad);}
+  .code{font-family:ui-monospace,Consolas,monospace;font-weight:600;}
+  .sev{font-size:12px;color:var(--muted);}
+  tr.detail-row td{background:color-mix(in srgb, var(--accent) 4%, var(--panel));padding:0;}
+  .detail{padding:14px 18px 18px 40px;font-size:13px;line-height:1.7;}
+  .detail h4{margin:10px 0 4px;font-size:12.5px;color:var(--muted);}
+  .detail pre{white-space:pre-wrap;word-break:break-all;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;margin:4px 0;}
+  footer{color:var(--muted);font-size:12px;margin-top:24px;text-align:center;}
+  @media print{ .toolbar{display:none;} body{background:#fff;} .card,table,.notice{border-color:#ccc;} tr.detail-row{display:table-row !important;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <h1 id="hdr-title">조치 결과 보고서</h1>
+  <div class="meta" id="hdr-meta"></div>
+</header>
+
+<div id="notices"></div>
+<div class="cards" id="cards"></div>
+
+<div class="toolbar">
+  <select id="f-result"><option value="">전체 결과</option></select>
+  <input id="f-text" type="text" placeholder="코드/항목명 검색">
+  <span class="spacer"></span>
+  <span class="meta" id="f-count"></span>
+</div>
+
+<div class="tablebox">
+<table>
+  <thead><tr><th style="width:74px">코드</th><th style="width:46px">중요도</th><th>항목명</th><th style="width:70px">등급</th><th style="width:120px">결과</th><th style="width:84px">재진단</th></tr></thead>
+  <tbody id="tbody"></tbody>
+</table>
+</div>
+
+<footer id="footer"></footer>
+</div>
+<script id="guide-data" type="application/json">

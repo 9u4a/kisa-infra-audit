@@ -1372,6 +1372,47 @@ function Write-FixRunSummary {
     Write-Host "로그: $Global:FixLog"
 }
 
+function New-FixReportHtml {
+    <# 조치 결과 보고서(fix_report.html, 1.7.1) - sh 의 fix_report_write 와 같은 템플릿(lib/report/fix_*.html)·같은 데이터 형식.
+       changes.log(항목별 결과)·audit.txt(정책 모드 승인 정보·값)·조치 파일 머리말(변경·원복·영향)로 만든다. 실패해도 조치 결과에는 영향 없음 #>
+    param([Parameter(Mandatory)][string]$GuideJsonPath, [Parameter(Mandatory)][string]$FixDir, [string]$CategoryName = "",
+        [string]$CategoryNum = "", [switch]$Apply)
+    if (-not $Global:FixOutDir -or -not $Global:FixLog -or -not (Test-Path -LiteralPath $Global:FixLog)) { return }
+    try {
+        $items = @(Get-Content -Encoding UTF8 -Path $Global:FixLog | Where-Object { $_ -and -not $_.StartsWith("#") } | ForEach-Object {
+                $c = $_.TrimStart([char]0xFEFF) -split "`t", 5
+                if ($c.Count -lt 4) { return }
+                $f = Join-Path $FixDir "$($c[1]).ps1"
+                $has = Test-Path -LiteralPath $f
+                [ordered]@{
+                    time = $c[0]; code = $c[1]; grade = $c[2]; result = $c[3]; detail = $(if ($c.Count -ge 5) { $c[4] } else { "" })
+                    chg = $(if ($has) { "$(Get-FixRollbackNote -File $f -Label '변경')" } else { "" })
+                    rb = $(if ($has) { "$(Get-FixRollbackNote -File $f)" } else { "" })
+                    im = $(if ($has) { "$(Get-FixRollbackNote -File $f -Label '영향')" } else { "" })
+                }
+            })
+        $meta = [ordered]@{
+            tool_version = $Script:ToolVersion; category = $CategoryName; category_num = $CategoryNum; host = (Get-FixHostName)
+            mode = $(if ($Apply) { "apply" } else { "dry-run" }); generated_at = (Get-Date).ToString("yyyy-MM-dd'T'HH:mm:sszzz")
+            out_dir = $Global:FixOutDir; rollback_cmd = ".\fix.ps1 -Rollback $($Global:FixOutDir)"
+        }
+        if ($Global:FixAuditFile -and (Test-Path -LiteralPath $Global:FixAuditFile)) {
+            $pol = [ordered]@{}
+            foreach ($l in (Get-Content -Encoding UTF8 -Path $Global:FixAuditFile)) { $i = $l.IndexOf("="); if ($i -gt 0) { $pol[$l.Substring(0, $i)] = $l.Substring($i + 1) } }
+            $meta.policy = $pol
+        }
+        # ConvertTo-Json 은 < > & 를 < 등으로 바꾼다 - 그래도 </script> 가 남지 않게 한 번 더 막는다
+        $json = ([ordered]@{ meta = $meta; items = $items } | ConvertTo-Json -Depth 6 -Compress) -replace '</', '<\/'
+        $rd = Join-Path $PSScriptRoot "report"
+        $enc = New-Object System.Text.UTF8Encoding($false)
+        $html = [System.IO.File]::ReadAllText((Join-Path $rd "fix_head.html"), $enc) + [System.IO.File]::ReadAllText($GuideJsonPath, $enc) +
+            [System.IO.File]::ReadAllText((Join-Path $rd "fix_mid.html"), $enc) + $json + "`n" + [System.IO.File]::ReadAllText((Join-Path $rd "fix_tail.html"), $enc)
+        $out = Join-Path $Global:FixOutDir "fix_report.html"
+        [System.IO.File]::WriteAllText($out, $html, $enc)
+        Write-Host "보고서: $out"
+    } catch { Write-Warning "조치 결과 보고서를 만들지 못함(조치 결과에는 영향 없음): $($_.Exception.Message)" }
+}
+
 function Enter-FixLock {
     <# 같은 카테고리 조치의 동시 실행 방지(서로의 백업을 덮어쓰고 같은 설정을 번갈아 바꾸는 것 방지).
        획득하면 Mutex 객체, 다른 실행이 잡고 있으면 $null. 비정상 종료로 버려진 잠금은 인수한다 #>
@@ -2541,4 +2582,4 @@ function Invoke-FixRollbackAll {
     }
 }
 
-Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixParamSpec, Get-FixParam, Get-FixParamSummary, Test-FixParamReady, Add-FixLocalGroupMemberBySid, Restore-FixLocalGroupBackup, Disable-FixScheduledTask, Restore-FixScheduledTaskBackup, Set-FixDnsZoneAllowUpdate, Restore-FixDnsZoneBackup, Add-FixWebCollectionItem, Restore-FixWebCollectionBackup, Add-FixIisHttpsBinding, Restore-FixIisBindingBackup, Remove-FixRegistryKeyWithBackup, Restore-FixRegistryKeyBackup, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary -Variable ToolVersion, GuideVersion
+Export-ModuleMember -Function Remove-FixDefaultShares, Write-Log, Get-OsFamily, Show-Banner, Show-Progress, New-PrivateDirectory, New-PrivateTempFile, Invoke-NativeCommand, Invoke-CimCmdletWithTimeout, Test-SmbDefaultShare, Select-KnownItemCodes, ConvertFrom-AuditPolBackup, Get-BcdEditEntryCount, ConvertFrom-TlntadmnConfig, Get-AclAllowRulesForSids, ConvertTo-SidString, Get-LocalGroupMembersBySid, Get-SecurityCenterProducts, Get-AntivirusInstallVerdict, Get-DefenderSignatureAgeText, Invoke-DefenderSignatureUpdate, New-OutputDir, Test-IsElevatedAdmin, Get-ServiceChecked, Test-IisInstalled, Test-IsDomainController, Protect-SecretText, Test-IisInstalledButUnreadable,New-CheckResult, Save-ResultJson, New-ReportHtml, Test-RegistryValue, Get-SecEditExport, Clear-SecEditCache, Get-SecPolicyValue, ConvertFrom-Sid, Get-SecPrivilegeAccounts, Get-SecPrivilegeSids, Invoke-MssqlQuery, Test-MssqlPreflight, Test-MssqlRemoteTarget,Test-IisAvailable, Get-IisSiteNames, Get-IisSitePhysicalPath, Get-IisSiteConfigPaths, Get-IisConfigValue, New-FixOutputDir, Get-ResultVulnCodes, Test-FixResultTarget, Test-FixIsAdmin, Test-FixInteractive, Read-FixConfirm, Get-FixRollbackNote, Confirm-FixPlan,Enter-FixLock, Enter-RunLock,Exit-FixLock, Save-FixBackupJson, Get-FixBackupFileName, Get-FixItemBackupDir,Backup-FixRegistryValue, Restore-FixRegistryBackup, Set-FixRegistryValue, Remove-FixRegistryValue, Backup-FixServiceState, Restore-FixServiceBackup, Disable-FixService, Backup-FixLocalAccountState, Restore-FixLocalAccountBackup, Set-FixLocalAccountDisabled, Backup-FixWebConfigProperty, ConvertTo-FixPlainValue, Restore-FixWebConfigPropertyBackup, Set-FixWebConfigProperty, Invoke-FixIisRemoveServerHeader, Invoke-FixIisConfigPaths,Backup-FixFirewallProfiles, Restore-FixFirewallProfilesBackup, Test-FixFirewallPortAllowed, Enable-FixFirewallSafely,Backup-FixPathAndRemove, Restore-FixPathRemoveBackup, Backup-FixAppPoolIdentity, Restore-FixAppPoolIdentityBackup, Set-FixAppPoolIdentity, Add-FixDbRollback, Restore-FixDbSqlBackup, Backup-FixAcl, Restore-FixAclBackup, Remove-FixAclIdentity, Backup-FixShareAccess, Restore-FixShareBackup, Revoke-FixShareEveryone, Backup-FixSecPolicy, Set-FixSecPolicyValue, Set-FixSecPrivilege, Get-FixSecPolicyRestoreLines, Restore-FixSecPolicyBackup, Add-FixRollbackFailure, Register-FixNoRollback, Restore-FixItem, Invoke-FixRollbackAll, Show-FixItemNotes, Get-FixHostName, Get-FixLoginUser, Test-FixPolicyArgs, Read-FixPolicy, Get-FixParamSpec, Get-FixParam, Get-FixParamSummary, Test-FixParamReady, Add-FixLocalGroupMemberBySid, Restore-FixLocalGroupBackup, Disable-FixScheduledTask, Restore-FixScheduledTaskBackup, Set-FixDnsZoneAllowUpdate, Restore-FixDnsZoneBackup, Add-FixWebCollectionItem, Restore-FixWebCollectionBackup, Add-FixIisHttpsBinding, Restore-FixIisBindingBackup, Remove-FixRegistryKeyWithBackup, Restore-FixRegistryKeyBackup, Get-FixPolicyDecision, Test-FixPolicyItem, Initialize-FixPolicy, Write-FixAuditLine, Start-FixAudit, Write-FixRunSummary, New-FixReportHtml -Variable ToolVersion, GuideVersion

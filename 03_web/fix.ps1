@@ -162,6 +162,8 @@ try {
             Write-Host "[$code] $title"
             Write-Host "  등급: $grade (dry-run — 실제 적용하려면 -Apply 추가)"
             Show-FixItemNotes -File $fixFile -Policy $FixPolicy -Code $code
+            # 조치 결과 보고서(1.7.1)가 미리보기 항목도 보여 주도록 changes.log 에 남긴다(변경 없음)
+            "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$code`t$grade`tPREVIEW`tdry-run 미리보기(변경 없음)$(if ($FixPolicy) { ' - 정책 승인' })" | Out-File -FilePath $Global:FixLog -Append -Encoding utf8
             $nPreview++
             continue
         }
@@ -235,6 +237,7 @@ try {
     Write-FixRunSummary -Apply:$Apply -PolicyMode:([bool]$FixPolicy) -FailedCodes $failedCodes -Counts @{
         Applied = $nApplied; Failed = $nFailed; Declined = $nDeclined; Skipped = $nSkipped; Manual = $nManual; Preview = $nPreview; PolicySkipped = $nPolicySkipped
     }
+    New-FixReportHtml -GuideJsonPath $GuideJsonPath -FixDir (Join-Path $ScriptDir "fixes\iis") -CategoryName $CategoryName -CategoryNum $CategoryNum -Apply:$Apply
 } finally {
     Exit-FixLock -Mutex $FixLock
 }
